@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schemas } from "@/api/client";
 import { CustomScanView } from "@/features/CustomScanView";
-import { ScannerView } from "@/features/ScannerView";
+import { readFilters, ScannerView } from "@/features/ScannerView";
 import { StockView } from "@/features/StockView";
 import type { ScanApi } from "@/hooks/useScanJob";
 import { SessionProvider } from "@/session/SessionProvider";
@@ -24,7 +24,9 @@ beforeEach(() => {
   search = new URLSearchParams();
   replace.mockReset();
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", (request: Request) => new URL(request.url).pathname.endsWith("/v1/me/research-preferences")
+    ? Promise.resolve(jsonResponse({ scanner_views: [], custom_views: [], table: { columns: ["setup", "spark", "last", "change", "gap", "rvol", "prob"], compact: false }, quiet_hours: { enabled: false, start: "22:00", end: "07:00", timezone: "America/New_York" } }))
+    : fetchMock(request));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -43,7 +45,7 @@ describe("Scanner", () => {
     fetchMock.mockResolvedValue(jsonResponse(latest()));
     render(<SessionProvider initialMe={me("basic")}><ScannerView /></SessionProvider>);
     expect(await screen.findAllByRole("link", { name: "AAA" })).not.toHaveLength(0);
-    expect(screen.getByRole("heading", { name: "AAA leads the latest HSF-ranked scan." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review AAA" })).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getByText("More filters")).toBeInTheDocument();
     expect(screen.getAllByRole("group", { name: "Setup type" })).toHaveLength(1); // chips sit outside the folded filters
     expect(screen.queryByRole("columnheader", { name: "PreBreakout" })).not.toBeInTheDocument();
@@ -70,7 +72,7 @@ describe("Scanner", () => {
     fetchMock.mockResolvedValue(jsonResponse(latest({ total: 0, scan_total: 100, limited: false, max_results: 200, setups: [] })));
     render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
     expect(await screen.findByText(/100 setups ranked · 0 PreBreakout/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "0 PreBreakout setups of 100 ranked" })).toBeInTheDocument();
+    expect(screen.getByText(/No setups/)).toBeInTheDocument();
   });
 
   it("locks PreBreakout below Premium without asking the API", async () => {
@@ -96,8 +98,11 @@ describe("Scanner", () => {
       setup("AAA", 88, { prob: 13.1, prob_rank: 5 }), setup("BBB", 70, { prob: 13.1, prob_rank: 60 }),
     ] })));
     render(<SessionProvider initialMe={me("premium")}><ScannerView /></SessionProvider>);
-    expect((await screen.findAllByText("13% · top 5%")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("13% · top 60%").length).toBeGreaterThan(0);
+    expect((await screen.findAllByLabelText("PreBreakout 13%. Model score in the top 5% of this scan's setups")).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("PreBreakout 13%. Model score in the top 60% of this scan's setups").length).toBeGreaterThan(0);
+    // Only top-10% names get a "top N%" label next to the bar.
+    expect(screen.getAllByText("top 5%").length).toBeGreaterThan(0);
+    expect(screen.queryByText("top 60%")).not.toBeInTheDocument();
   });
 
   it("shows a service outage with the support code and a retry", async () => {
@@ -141,6 +146,30 @@ describe("Custom scan controls follow server entitlements", () => {
     screen.getByRole("button", { name: "Start scan" }).click();
     expect(await screen.findByText("US market scans are part of Premium.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
+  });
+});
+
+describe("Custom scan of earnings reporters", () => {
+  const started = (body: unknown) => ({ ...(body as object) });
+  it("starts from the Earnings tab's link with the window and every reporter scored", async () => {
+    search = new URLSearchParams("universe=earnings&when=week&start=1");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ max_results: 100 })));
+    const create = vi.fn(async (body: unknown): Promise<never> => { throw new Error(`stop ${typeof body}`); });
+    render(<SessionProvider initialMe={me("pro")}><CustomScanView client={{ ...idle, create }} /></SessionProvider>);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(started(create.mock.calls[0]![0])).toMatchObject({ universe: "earnings", earnings_window: "week", score_all: true });
+    expect(screen.getByRole("radio", { name: "Stocks reporting earnings" })).toBeChecked();
+  });
+
+  it("locks tomorrow and the week on Starter and never auto-starts them", async () => {
+    search = new URLSearchParams("universe=earnings&when=week&start=1");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ max_results: 25 })));
+    const create = vi.fn();
+    render(<SessionProvider initialMe={me("basic")}><CustomScanView client={{ ...idle, create }} /></SessionProvider>);
+    expect(screen.getByRole("radio", { name: /Next 7 days · Pro/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Today" })).toBeEnabled();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
@@ -197,17 +226,29 @@ describe("Stock Intelligence", () => {
   });
 
   it("explains the historical fallback when the ticker isn't in the latest scan", () => {
-    render(<StockView s={stock({ in_latest_scan: false, from_history: true })} premium={false} />);
-    expect(screen.getByRole("status")).toHaveTextContent("wasn't in the latest market scan");
-    expect(screen.getByRole("status")).toHaveTextContent("last recorded HSF observation");
+    render(<StockView s={stock({ in_latest_scan: false, from_history: true, status: "CAUTION", hsf_score: 5, reasons: [], risks: ["CAUTION status"] })} premium={false} />);
+    expect(screen.getByRole("heading", { name: "Not in today's ranked setups" })).toBeInTheDocument();
+    expect(screen.getByText(/wasn't among the ranked setups in the latest market scan/)).toHaveTextContent("last recorded HSF reading was 5 (Caution)");
     expect(screen.getByText(/from the last recorded observation/)).toBeInTheDocument();
+    // No empty decision fields, risk boxes or score-band lookups for an unranked name.
+    expect(screen.queryByText("No reason recorded.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Risks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Decision snapshot" })).not.toBeInTheDocument();
+  });
+
+  it("shows price facts from daily bars for an unranked name", () => {
+    const bars = Array.from({ length: 60 }, (_, i) => ({ date: `2026-08-${String((i % 28) + 1).padStart(2, "0")}`, close: 100 + i, high: 101 + i }));
+    bars[59] = { ...bars[59]!, close: 150, high: 150 };
+    render(<StockView s={stock({ in_latest_scan: false, from_history: false, hsf_score: null, status: null, bars, earnings_days: 3 })} premium={false} />);
+    expect(screen.getByText("Last session")).toBeInTheDocument();
+    expect(screen.getByText("vs 50-day average")).toBeInTheDocument();
+    expect(screen.getByText("From 60-day high")).toBeInTheDocument();
+    expect(screen.getByText("In 3 days")).toBeInTheDocument();
   });
 
   it("shows a plain state when HSF has no score at all", () => {
     render(<StockView s={stock({ in_latest_scan: false, has_setup: false, hsf_score: null, status: null, price: null, signals: [], score_components: null })} premium={false} />);
-    expect(screen.getByRole("status")).toHaveTextContent("HSF has no recorded score");
-    expect(screen.getAllByText("Not ranked").length).toBeGreaterThan(0);
-    expect(screen.getByText(/watch AAA, set a price alert/)).toBeInTheDocument();
+    expect(screen.getByText(/HSF has no recorded score/)).toBeInTheDocument();
     expect(screen.getByText("No HSF Score")).toBeInTheDocument();
   });
 
@@ -279,4 +320,22 @@ describe("Stock Intelligence", () => {
       vi.useRealTimers();
     }
   });
+});
+
+
+it("bounds malformed scanner pages before building an API request", () => {
+  expect(readFilters(new URLSearchParams("page=Infinity")).page).toBe(1);
+  expect(readFilters(new URLSearchParams("page=99999999&size=100")).page).toBe(101);
+  expect(readFilters(new URLSearchParams("page=-3")).page).toBe(1);
+});
+
+it("resets scanner filters and recovers a page that disappeared", async () => {
+  search = new URLSearchParams("signal=breakout&min=60&sort=rvol&size=50&page=3");
+  fetchMock.mockResolvedValue(jsonResponse(latest({ total: 2, max_results: 100, setups: [] })));
+  render(<SessionProvider initialMe={me("pro")}><ScannerView /></SessionProvider>);
+  await screen.findByText("This page is no longer available.");
+  fireEvent.click(screen.getByText("Back to first page"));
+  expect(replace).toHaveBeenLastCalledWith("/scanner?signal=breakout&min=60&sort=rvol&size=50", { scroll: false });
+  fireEvent.click(screen.getByText("Reset view"));
+  expect(replace).toHaveBeenLastCalledWith("/scanner", { scroll: false });
 });

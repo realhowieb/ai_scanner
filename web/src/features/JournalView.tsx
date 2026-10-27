@@ -9,11 +9,15 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, RefreshStatus, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
+
+import { JournalCoach } from "./JournalCoach";
+import { JournalInsightsCard } from "./JournalInsights";
 
 type Trade = Schemas["JournalTrade"];
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
@@ -33,7 +37,7 @@ function LogTrade({ onDone }: { onDone: () => void }) {
     ev.preventDefault();
     if (!valid) return;
     const ok = await act.run(async () => { await unwrap(api.POST("/v1/journal", { body: { ticker: t, entry_price: e, shares: n } })); return true; });
-    if (ok) { setTicker(""); setEntry(""); setShares(""); onDone(); }
+    if (ok) { captureUsage("journal_trade_logged"); setTicker(""); setEntry(""); setShares(""); onDone(); }
   };
   return (
     <form className="inline-form" onSubmit={submit} aria-label="Log a trade">
@@ -68,7 +72,7 @@ function Row({ t, pro, onChanged }: { t: Trade; pro: boolean; onChanged: () => v
           </div>
         )}
         <Dialog open={closing} title={`Close ${t.ticker}`} onClose={() => setClosing(false)}>
-          <form className="stack-sm" onSubmit={(e) => { e.preventDefault(); if (Number(exit) > 0) void close.run(async () => { await unwrap(api.POST("/v1/journal/{trade_id}/close", { ...tid(t.id), body: { exit_price: Number(exit) } })); setClosing(false); onChanged(); return true; }); }}>
+          <form className="stack-sm" onSubmit={(e) => { e.preventDefault(); if (Number(exit) > 0) void close.run(async () => { await unwrap(api.POST("/v1/journal/{trade_id}/close", { ...tid(t.id), body: { exit_price: Number(exit) } })); captureUsage("journal_trade_closed"); setClosing(false); onChanged(); return true; }); }}>
             <label className="field"><span>Exit price ($)</span><input inputMode="decimal" value={exit} onChange={(e) => setExit(e.target.value)} data-autofocus /></label>
             <ErrorLine error={close.error} />
             <div className="row-actions end"><button type="button" className="btn" onClick={() => setClosing(false)}>Cancel</button>
@@ -87,30 +91,37 @@ function Row({ t, pro, onChanged }: { t: Trade; pro: boolean; onChanged: () => v
 export function JournalView() {
   const { me } = useSession();
   const pro = me?.plan === "pro" || me?.plan === "premium" || me?.plan === "admin";
-  const j = useApi("journal", (signal) => unwrap(api.GET("/v1/journal", { signal })));
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+  const j = useApi(`journal:${page}`, (signal) => unwrap(api.GET("/v1/journal", {
+    params: { query: { limit: pageSize, offset: page * pageSize } }, signal,
+  })));
+  const logged = () => { if (page) setPage(0); else j.reload(); };
   const stats = j.data?.stats as { closed?: number; wins?: number; avg_return_pct?: number | null } | null | undefined;
   return (
     <div className="stack">
       <section className="page-head">
         <div>
           <h1 className="h1">Journal</h1>
-          <p className="cap">Trades you log yourself. HSF doesn&apos;t place orders. Open trades are marked to live quotes.</p>
+          <p className="cap">Your logged trades and imported paper fills. Open trades are marked to available quotes. Last checked is the request time; quote times are not supplied by this response.</p>
         </div>
       </section>
+      <div className="row-actions">{j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={j.reload} />}<button type="button" className="btn" onClick={j.reload} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
       <Card title="Log a trade" id="log">
-        {pro ? <LogTrade onDone={j.reload} /> : <Locked title="Logging trades is part of Pro" plan="pro">Keep a record of your entries and exits with live marks and win rate.</Locked>}
+        {pro ? <LogTrade onDone={logged} /> : <Locked title="Logging trades is part of Pro" plan="pro">Keep a record of your entries and exits with live marks and win rate.</Locked>}
       </Card>
       {j.error && !j.data ? <ErrorState error={j.error} onRetry={j.reload} what="your journal" />
         : !j.data ? <Skeleton rows={5} label="Loading your journal" />
-        : j.data.trades.length === 0 ? <Card><Empty title="No trades logged yet.">Log your first trade above, or paper trade from a stock page.</Empty></Card>
+        : j.data.trades.length === 0 ? <Card><Empty title={page ? "No trades on this page." : "No trades logged yet."}>{page ? "Go back to an earlier page to see your trades." : "Log your first trade above, or paper trade from a stock page."}</Empty></Card>
         : (
           <Card title="Trades" id="trades" aside={stats?.closed ? `${stats.closed} closed · ${stats.wins ?? 0} wins · avg ${pct(stats.avg_return_pct)}` : undefined}>
             <div className="metric-strip" aria-label="Journal summary">
-              <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open</span>
-              <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed</span>
-              <span><strong>{pct(metric(j.data.summary?.avg_return_pct, stats?.avg_return_pct ?? 0))}</strong> avg return</span>
-              <span><strong>{pct(metric(j.data.summary?.win_rate, 0))}</strong> win rate</span>
+              <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open on this page</span>
+              <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed on this page</span>
+              <span><strong>{pct(stats?.closed ? (typeof j.data.summary?.avg_return_pct === "number" ? j.data.summary.avg_return_pct : stats.avg_return_pct) : null)}</strong> avg return (all closed trades)</span>
+              <span><strong>{pct(stats?.closed ? metric(j.data.summary?.win_rate, (stats.wins ?? 0) / stats.closed * 100) : null)}</strong> win rate (all closed trades)</span>
             </div>
+            {!stats?.closed && <p className="cap">No closed trades yet; return and win-rate statistics are unavailable.</p>}
             <div className="table-wrap">
               <table className="table">
                 <thead><tr><th scope="col">Ticker</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Entry</th>
@@ -121,6 +132,13 @@ export function JournalView() {
             <p className="cap">Your own records, not HSF results. Not financial advice.</p>
           </Card>
         )}
+      <JournalInsightsCard pro={pro} version={j.updatedAt ?? 0} />
+      <JournalCoach />
+      {(page > 0 || j.data?.has_more) && <nav className="pager" aria-label="Journal pages">
+        <button type="button" className="btn" disabled={page === 0 || j.loading || j.refreshing} onClick={() => setPage((p) => p - 1)}>Previous page</button>
+        <span className="cap">Page {page + 1}</span>
+        <button type="button" className="btn" disabled={!j.data?.has_more || j.loading || j.refreshing} onClick={() => setPage((p) => p + 1)}>Next page</button>
+      </nav>}
     </div>
   );
 }

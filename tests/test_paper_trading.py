@@ -117,9 +117,9 @@ class OrderClientTests(unittest.TestCase):
         import data.alpaca_trading as at
 
         req = mock.MagicMock()
-        req.post.return_value = self._resp(200, {"id": "ord_1", "status": "accepted"})
+        req.post.return_value = self._resp(200, {"id": "ord_1", "status": "accepted", "client_order_id": "confirmation-1"})
         with mock.patch.object(at, "requests", req):
-            out = at.submit_market_order("K", "S", "cnta", 20, "buy")
+            out = at.submit_market_order("K", "S", "cnta", 20, "buy", client_order_id="confirmation-1")
         self.assertTrue(out["ok"])
         self.assertEqual(out["order_id"], "ord_1")
         # sent a whole-share market DAY order for the upper-cased symbol
@@ -127,6 +127,20 @@ class OrderClientTests(unittest.TestCase):
         self.assertEqual(payload["symbol"], "CNTA")
         self.assertEqual(payload["type"], "market")
         self.assertEqual(payload["qty"], "20")
+        self.assertEqual(payload["client_order_id"], "confirmation-1")
+
+    def test_order_lookup_distinguishes_absence_from_unavailable_service(self):
+        import data.alpaca_trading as at
+
+        req = mock.MagicMock()
+        with mock.patch.object(at, "requests", req):
+            req.get.return_value = self._resp(404, {})
+            self.assertTrue(at.get_order_by_client_id("K", "S", "confirmation-1")["not_found"])
+            self.assertEqual(req.get.call_args.kwargs["params"], {"client_order_id": "confirmation-1"})
+            req.get.return_value = self._resp(503, {})
+            self.assertNotIn("not_found", at.get_order_by_client_id("K", "S", "confirmation-1"))
+            req.get.side_effect = TimeoutError("response lost")
+            self.assertNotIn("not_found", at.get_order_by_client_id("K", "S", "confirmation-1"))
 
     def test_bad_qty_rejected_before_request(self):
         import data.alpaca_trading as at
@@ -178,48 +192,45 @@ class SubmitAndImportTests(unittest.TestCase):
         return {"Ticker": "cnta", "Last": 12.45, "BreakoutScore": 58.0,
                 "AI Confidence": 71.5}
 
-    def test_success_imports_with_score_and_ai(self):
-        import data.alpaca_trading as at
-        import db.paper_trading as pt
-        import db.trades as tr
-        import ui.paper_trade as ptui
-
-        logged = {}
-        plan = {"stop": 11.90, "targets": [13.80, 15.0]}
-        with mock.patch.object(ptui, "st", _FakeSt()), \
-             mock.patch.object(pt, "get_paper_account",
-                               return_value={"api_key": "K", "api_secret": "S"}), \
-             mock.patch.object(at, "submit_market_order",
-                               return_value={"ok": True, "order_id": "o1",
-                                             "status": "filled",
-                                             "filled_avg_price": 12.50}), \
-             mock.patch.object(tr, "log_trade",
-                               side_effect=lambda *a, **k: logged.update(
-                                   {"args": a, "kw": k})):
-            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, plan)
-
-        self.assertEqual(logged["args"][1], "CNTA")
-        self.assertEqual(logged["args"][3], 20)                    # qty
-        self.assertEqual(logged["args"][2], 12.50)                 # filled entry
-        self.assertEqual(logged["kw"]["alpaca_order_id"], "o1")
-        self.assertEqual(logged["kw"]["breakout_score"], 58.0)
-        self.assertEqual(logged["kw"]["ai_confidence"], 71.5)
-        self.assertEqual(logged["kw"]["stop_price"], 11.90)
-        self.assertEqual(logged["kw"]["target_price"], 13.80)
-
-    def test_rejected_order_does_not_import(self):
-        import data.alpaca_trading as at
-        import db.paper_trading as pt
-        import db.trades as tr
+    def test_success_uses_shared_service_with_captured_context(self):
         import ui.paper_trade as ptui
 
         fake = _FakeSt()
         with mock.patch.object(ptui, "st", fake), \
-             mock.patch.object(pt, "get_paper_account",
-                               return_value={"api_key": "K", "api_secret": "S"}), \
-             mock.patch.object(at, "submit_market_order",
-                               return_value={"ok": False, "error": "boom"}), \
-             mock.patch.object(tr, "log_trade",
-                               side_effect=AssertionError("must not import")):
+             mock.patch("db.paper_trading.get_paper_account", return_value={"api_key": "K", "api_secret": "S"}), \
+             mock.patch("services.paper_orders.submit", return_value={"status": "accepted", "journal_synced": False}) as submit:
+            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {"stop": 11.90, "targets": [13.8]})
+        args = submit.call_args.args
+        self.assertEqual(args[:3], ("u@x.com", "CNTA", 20))
+        self.assertEqual(args[4], {"stop_price": 11.90, "target_price": 13.8, "breakout_score": 58.0, "ai_confidence": 71.5})
+        self.assertIn("pending", fake.successes[0])
+
+    def test_uncertain_order_reuses_confirmation_but_rejection_clears_it(self):
+        import ui.paper_trade as ptui
+        from services.paper_orders import PaperRejected, PaperUnavailable
+
+        fake = _FakeSt()
+        with mock.patch.object(ptui, "st", fake), \
+             mock.patch("db.paper_trading.get_paper_account", return_value={"api_key": "K", "api_secret": "S"}), \
+             mock.patch("services.paper_orders.submit", side_effect=PaperUnavailable("uncertain")) as submit:
             ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {})
-        self.assertTrue(any("boom" in e for e in fake.errors))
+            first = submit.call_args.args[3]
+            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {})
+            self.assertEqual(submit.call_args.args[3], first)
+            submit.side_effect = PaperRejected("rejected")
+            ptui._submit_and_import("u@x.com", self._row(), "CNTA", 20, {})
+        self.assertEqual(fake.session_state, {})
+
+
+@unittest.skipUnless(importlib.util.find_spec("urllib3"), "urllib3 required for total HTTP budgets")
+class RecoveryTimeoutTests(unittest.TestCase):
+    def test_order_lookup_uses_the_callers_total_http_budget(self):
+        from data import alpaca_trading as broker
+
+        with mock.patch.object(broker, "requests") as http:
+            http.get.return_value.status_code = 404
+            broker.get_order_by_client_id("key", "secret", "confirmation-123", timeout_s=0.5)
+            self.assertEqual(http.get.call_args.kwargs["timeout"].total, 0.5)
+            http.reset_mock()
+            broker.get_order_by_client_id("key", "secret", "confirmation-123", timeout_s=0)
+            http.get.assert_not_called()

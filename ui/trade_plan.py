@@ -14,7 +14,7 @@ import math
 from typing import Any, Dict, Mapping, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - headless envs; pure math still works
     st = None  # type: ignore[assignment]
 

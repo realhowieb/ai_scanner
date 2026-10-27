@@ -21,14 +21,14 @@ def _get_database_url() -> str:
     )
     if not dsn:
         try:
-            import streamlit as st  # type: ignore
+            from utils.st_compat import st
 
             dsn = st.secrets["neon"]["database_url"]  # type: ignore[index]
         except Exception:
             dsn = None
     if not dsn:
         try:
-            import streamlit as st  # type: ignore
+            from utils.st_compat import st
 
             for key in ("NEON_DATABASE_URL", "DATABASE_URL", "neon_database_url", "database_url"):
                 candidate = st.secrets[key]  # type: ignore[index]

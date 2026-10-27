@@ -9,8 +9,25 @@ from fastapi import FastAPI
 
 
 def register_all(app: FastAPI) -> None:
-    from api.routes import account, ai, auth, data, devices, history, market, outcomes, public, research, scans, trading
+    from api.routes import (
+        account,
+        admin,
+        ai,
+        auth,
+        data,
+        devices,
+        history,
+        market,
+        onboarding,
+        outcomes,
+        public,
+        research,
+        scans,
+        trading,
+        workspace,
+    )
 
+    workspace.register(app)
     auth.register(app)
     data.register(app)
     account.register(app)
@@ -24,4 +41,6 @@ def register_all(app: FastAPI) -> None:
     public.register(app)
     research.register(app)
     research.register_ml(app)
+    admin.register(app)
+    onboarding.register(app)
     account.register_delete(app)

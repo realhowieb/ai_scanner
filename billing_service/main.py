@@ -12,6 +12,7 @@ import psycopg2
 import stripe
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _log = logging.getLogger("billing_service")
@@ -76,11 +77,22 @@ APP_SUCCESS_URL = os.getenv("APP_SUCCESS_URL", "").strip()  # e.g. https://youra
 APP_CANCEL_URL = os.getenv("APP_CANCEL_URL", "").strip()    # e.g. https://yourapp.com
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()        # Neon Postgres URL
 APP_PORTAL_RETURN_URL = os.getenv("APP_PORTAL_RETURN_URL", "").strip()  # e.g. https://hsfinestai.streamlit.app/billing
+# Other apps that may send return links (success_url / return_url overrides):
+# the web app. Comma-separated hosts; links to them must be https. The host of
+# APP_SUCCESS_URL (Streamlit) is always allowed.
+APP_RETURN_HOSTS = frozenset(
+    h.strip().lower()
+    for h in os.getenv("APP_RETURN_HOSTS", "app.hsfinest.com,hsf-web-v1.onrender.com").split(",")
+    if h.strip()
+)
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Missing STRIPE_SECRET_KEY env var")
 
 stripe.api_key = STRIPE_SECRET_KEY
+stripe.max_network_retries = 1
+if hasattr(stripe, "RequestsClient"):
+    stripe.default_http_client = stripe.RequestsClient(timeout=15)
 print(
     "[billing_service] starting | "
     f"prices: pro={'set' if bool(STRIPE_PRICE_PRO) else 'missing'}, "
@@ -104,6 +116,33 @@ def _append_qp(url: str, key: str, value: str) -> str:
         return base
     sep = "&" if "?" in base else "?"
     return f"{base}{sep}{key}={value}"
+
+
+def _allowed_return_url(candidate: str) -> str | None:
+    """A caller-supplied return link, if it points at one of our apps: the host of
+    APP_SUCCESS_URL, or an https link to a host in APP_RETURN_HOSTS. Anything
+    else is ignored so this never becomes an open redirect."""
+    try:
+        url = urlparse(candidate or "")
+        base_host = urlparse(APP_SUCCESS_URL or "").netloc
+        if not url.netloc:
+            return None
+        if base_host and url.netloc == base_host:
+            return candidate
+        if url.scheme == "https" and url.netloc.lower() in APP_RETURN_HOSTS:
+            return candidate
+    except Exception:
+        pass
+    return None
+
+
+def _cancel_url_for(success_url: str) -> str:
+    """Checkout cancel link: back to the app the customer came from. APP_CANCEL_URL
+    unless the success link points at another allowed app (the web app)."""
+    url = urlparse(success_url or "")
+    if url.netloc and url.netloc != urlparse(APP_SUCCESS_URL or "").netloc:
+        return f"{url.scheme}://{url.netloc}/?checkout=cancel"
+    return _append_qp(APP_CANCEL_URL, "checkout", "cancel")
 
 
 def _required_env_missing(*names: str) -> list[str]:
@@ -139,43 +178,6 @@ def _db_status() -> dict:
     except Exception as e:
         status["error"] = str(e)[:200]
     return status
-
-
-def _ensure_processed_events_table(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS stripe_processed_events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT,
-                processed_at TIMESTAMPTZ DEFAULT NOW()
-            )
-            """
-        )
-    conn.commit()
-
-
-def _is_event_processed(conn, event_id: str) -> bool:
-    """Return True if this Stripe event_id was already handled (idempotency guard)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM stripe_processed_events WHERE event_id = %s LIMIT 1",
-            (event_id,),
-        )
-        return cur.fetchone() is not None
-
-
-def _mark_event_processed(conn, event_id: str, event_type: str) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO stripe_processed_events (event_id, event_type)
-            VALUES (%s, %s)
-            ON CONFLICT (event_id) DO NOTHING
-            """,
-            (event_id, event_type),
-        )
-    conn.commit()
 
 
 def _record_paid_conversion(email: str, plan: str, *, stripe_event_id: str | None = None) -> None:
@@ -362,6 +364,58 @@ def _price_to_plan(price_id: str) -> str:
     return "basic"
 
 
+_billing_engine = None
+_reconciliation_thread = None
+
+
+def start_reconciliation_worker():
+    """Hourly recovery for missed deliveries. DB leases prevent duplicate work."""
+    import threading
+
+    global _reconciliation_thread
+    if os.getenv("BILLING_MODE", "external").strip().lower() != "embedded":
+        return
+    if os.getenv("BILLING_RECONCILIATION_ENABLED", "1").strip() == "0":
+        return
+    if _reconciliation_thread and _reconciliation_thread.is_alive():
+        return
+
+    def run():
+        wake = threading.Event()
+        while True:
+            try:
+                result = billing_engine().reconcile_due()
+                _log.info("billing reconciliation: checked=%s failed=%s", result["checked"], result["failed"])
+            except Exception as exc:
+                _log.warning("billing reconciliation unavailable: %s", type(exc).__name__)
+            wake.wait(3600)
+
+    _reconciliation_thread = threading.Thread(target=run, name="billing-reconciliation", daemon=True)
+    _reconciliation_thread.start()
+
+
+def billing_engine():
+    global _billing_engine
+    if _billing_engine is None:
+        import sys
+        try:
+            from billing_service.engine import Engine
+            from billing_service.state import PostgresStore
+        except ImportError:  # standalone billing service with a flat Render root
+            from engine import Engine
+            from state import PostgresStore
+        _billing_engine = Engine(sys.modules[__name__], PostgresStore(_db_conn))
+    return _billing_engine
+
+
+def sync_account_subscription(email: str) -> dict:
+    return billing_engine().sync(_validate_email(email))
+
+
+def billing_status(email: str) -> dict:
+    return billing_engine().status(_validate_email(email))
+
+
 def _is_legacy_price(price_id: str) -> bool:
     price_id = (price_id or "").strip()
     return bool(price_id) and (price_id in STRIPE_PRICE_PRO_LEGACY or price_id in STRIPE_PRICE_PREMIUM_LEGACY)
@@ -521,6 +575,8 @@ _WEBHOOK_EVENTS = (
     "checkout.session.completed",
     "customer.subscription.updated",
     "customer.subscription.deleted",
+    "invoice.paid",
+    "invoice.payment_failed",
 )
 
 
@@ -555,18 +611,21 @@ def _check_price(price_id: str, mode: str, interval: Optional[str], amount: Opti
 
 
 def _check_webhooks() -> dict:
-    """Is a Stripe webhook endpoint pointed at this service's /webhook with the
+    """Is a Stripe webhook endpoint pointed at this service with the
     three events? Restricted keys may not list endpoints; that's reported, not fatal."""
     try:
         endpoints = list(stripe.WebhookEndpoint.list(limit=100).auto_paging_iter())
     except Exception as e:
         return {"checked": False, "problems": [f"could not list endpoints ({type(e).__name__})"]}
+    expected_url = os.getenv("BILLING_WEBHOOK_URL", "").strip().rstrip("/")
+    expected_path = "/billing/webhook" if os.getenv("BILLING_MODE", "").strip().lower() == "embedded" else "/webhook"
     matching = [ep for ep in endpoints
-                if urlparse(str(ep.get("url") or "")).path.rstrip("/") == "/webhook"
+                if urlparse(str(ep.get("url") or "")).path.rstrip("/") == expected_path
+                and (not expected_url or str(ep.get("url") or "").rstrip("/") == expected_url)
                 and ep.get("status") == "enabled"]
     if not matching:
         urls = sorted({str(ep.get("url") or "") for ep in endpoints})
-        return {"checked": True, "problems": ["no enabled endpoint at path /webhook"], "urls": urls}
+        return {"checked": True, "problems": [f"no enabled endpoint at {expected_url or expected_path}"], "urls": urls}
     events = set()
     for ep in matching:
         events.update(ep.get("enabled_events") or [])
@@ -654,8 +713,31 @@ def _subscription_cancel_flow(subscription_id: str, return_url: str) -> Optional
 
 
 @app.post("/create-checkout-session")
-async def create_checkout_session(payload: dict, request: Request):
+def create_checkout_session(payload: dict, request: Request):
+    _require_env("STRIPE_PRICE_PRO", "STRIPE_PRICE_PREMIUM", "APP_SUCCESS_URL", "APP_CANCEL_URL", "DATABASE_URL")
+    return checkout_for_account(_authenticated_user(request, payload), payload)
+
+
+def checkout_for_account(email: str, payload: dict):
+    _require_env("STRIPE_PRICE_PRO", "STRIPE_PRICE_PREMIUM", "APP_SUCCESS_URL", "APP_CANCEL_URL", "DATABASE_URL")
+    if payload.get("interval") == "year" and not (
+        STRIPE_PRICE_PRO_YEARLY if payload.get("plan") == "pro" else STRIPE_PRICE_PREMIUM_YEARLY
+    ):
+        raise HTTPException(400, "Yearly billing isn't available yet.")
+    try:
+        return billing_engine().checkout(_validate_email(email), payload)
+    except LookupError as exc:
+        raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "Checkout is temporarily unavailable. Please try again.") from exc
+
+
+def _create_checkout_for_account(email: str, payload: dict, *, user=None, idempotency_key=None, expires_at=None):
     """
+    Called only after the HTTP adapter or API has authenticated the account.
+
     Payload example:
     {
       "email": "user@email.com",
@@ -671,7 +753,7 @@ async def create_checkout_session(payload: dict, request: Request):
         "DATABASE_URL",
     )
 
-    email = _authenticated_user(request, payload)
+    email = _validate_email(email)
     plan = (payload.get("plan") or "").strip().lower()
 
     if not email or "@" not in email:
@@ -685,24 +767,14 @@ async def create_checkout_session(payload: dict, request: Request):
         raise HTTPException(400, "Interval must be 'month' or 'year'")
 
     # Optional success_url / return_url overrides — only honored if they point at
-    # the same host as APP_SUCCESS_URL (prevents this becoming an open redirect).
-    def _validate_same_host(candidate: str) -> str | None:
-        try:
-            from urllib.parse import urlparse
-            base_host = urlparse(APP_SUCCESS_URL or "").netloc
-            if base_host and urlparse(candidate).netloc == base_host:
-                return candidate
-        except Exception:
-            pass
-        return None
-
+    # one of our apps (see _allowed_return_url; prevents an open redirect).
     success_url = _append_qp(APP_SUCCESS_URL, "checkout", "success")
-    success_override = _validate_same_host((payload.get("success_url") or "").strip())
+    success_override = _allowed_return_url((payload.get("success_url") or "").strip())
     if success_override:
         success_url = success_override
 
     portal_return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
-    return_override = _validate_same_host((payload.get("return_url") or "").strip())
+    return_override = _allowed_return_url((payload.get("return_url") or "").strip())
     if return_override:
         portal_return_url = return_override
 
@@ -713,11 +785,12 @@ async def create_checkout_session(payload: dict, request: Request):
     else:
         price_id = STRIPE_PRICE_PRO if plan == "pro" else STRIPE_PRICE_PREMIUM
 
-    try:
-        user = _get_user_by_email(email)
-    except Exception as e:
-        _log.warning("checkout user lookup failed: %s", type(e).__name__)
-        raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
+    if user is None:
+        try:
+            user = _get_user_by_email(email)
+        except Exception as e:
+            _log.warning("checkout user lookup failed: %s", type(e).__name__)
+            raise HTTPException(503, "Account lookup is temporarily unavailable. Please try again.")
     if not user:
         raise HTTPException(404, "No app user exists for this email. Please sign up before upgrading.")
     customer_id = user.get("stripe_customer_id") if user else None
@@ -726,14 +799,17 @@ async def create_checkout_session(payload: dict, request: Request):
     # Send them to Stripe Billing Portal to upgrade/downgrade/cancel on the existing subscription.
     if customer_id:
         try:
-            subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
-            if subs and subs.get("data"):
+            subs = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+            if subs.get("has_more"):
+                raise HTTPException(409, "Subscription history needs review before changing plans.")
+            current = [sub for sub in subs.get("data", []) if sub.get("status") not in {"canceled", "incomplete_expired"}]
+            if current:
                 # P2-48: open Stripe's "confirm this plan change" screen for the
                 # requested plan and send the customer straight back to the app
                 # when they confirm (no "Return to site" click). Any problem ->
                 # the plain portal, exactly as before.
                 portal = None
-                flow = _plan_change_flow(subs["data"][0], price_id, portal_return_url, interval=interval)
+                flow = _plan_change_flow(current[0], price_id, portal_return_url, interval=interval)
                 if flow:
                     try:
                         portal = stripe.billing_portal.Session.create(
@@ -751,25 +827,34 @@ async def create_checkout_session(payload: dict, request: Request):
                     )
                 return {"portal_url": portal.url, "mode": "portal"}
         except Exception as e:
-            # If portal creation fails for any reason, fall back to Checkout (but only if needed)
-            print(f"[billing_service] portal redirect failed (falling back to checkout): {e}")
+            # A failed lookup or portal must never create a second subscription.
+            _log.warning("existing subscription check/portal failed: %s", type(e).__name__)
+            raise HTTPException(502, "Subscription management is temporarily unavailable. Please try again.")
 
     try:
+        options = {}
+        if idempotency_key:
+            options["idempotency_key"] = idempotency_key
+        if expires_at:
+            options["expires_at"] = expires_at
         session = stripe.checkout.Session.create(
+            **options,
             mode="subscription",
+            client_reference_id=hashlib.sha256(email.encode()).hexdigest(),
             customer=customer_id or None,
             customer_email=None if customer_id else email,
             line_items=[{"price": price_id, "quantity": 1}],
             allow_promotion_codes=True,
             success_url=success_url,
-            cancel_url=_append_qp(APP_CANCEL_URL, "checkout", "cancel"),
+            cancel_url=_cancel_url_for(success_url),
             metadata={
                 "user_email": email,
                 "requested_plan": plan,
                 "interval": interval,
             },
         )
-        return {"checkout_url": session.url, "mode": "checkout"}
+        session_id = getattr(session, "id", None)
+        return {"checkout_url": session.url, "mode": "checkout", "session_id": session_id if isinstance(session_id, str) else None}
     except Exception as e:
         # Surface the message so curl shows something useful.
         _log.warning("create-checkout-session failed: %s", type(e).__name__)
@@ -777,15 +862,19 @@ async def create_checkout_session(payload: dict, request: Request):
 
 
 @app.post("/create-portal-session")
-async def create_portal_session(payload: dict, request: Request):
+def create_portal_session(payload: dict, request: Request):
+    return portal_for_account(_authenticated_user(request, payload), payload)
+
+
+def portal_for_account(email: str, payload: dict):
     """
-    Requires the X-HSF-Auth billing token of the signed-in account (Run 83).
-    Optional payload: { "return_url": "<same-host URL>", "flow": "cancel" }.
+    Called only after the HTTP adapter or API has authenticated the account.
+    Optional payload: { "return_url": "<URL on one of our apps>", "flow": "cancel" }.
     Any "email" must match the authenticated account; the Stripe customer
     always comes from that account's own users row, never from the request.
     """
     _require_env("APP_SUCCESS_URL", "DATABASE_URL")
-    email = _authenticated_user(request, payload)
+    email = _validate_email(email)
     try:
         user = _get_user_by_email(email)
     except Exception as e:
@@ -800,15 +889,9 @@ async def create_portal_session(payload: dict, request: Request):
         raise HTTPException(400, "Unsupported billing portal flow.")
 
     return_url = _append_qp(APP_PORTAL_RETURN_URL or APP_SUCCESS_URL, "portal", "return")
-    override = (payload.get("return_url") or "").strip()
+    override = _allowed_return_url((payload.get("return_url") or "").strip())
     if override:
-        try:
-            from urllib.parse import urlparse
-            base_host = urlparse(APP_SUCCESS_URL or "").netloc
-            if base_host and urlparse(override).netloc == base_host:
-                return_url = override
-        except Exception:
-            pass
+        return_url = override
 
     try:
         portal_kwargs = {"customer": customer_id, "return_url": return_url}
@@ -831,145 +914,11 @@ async def create_portal_session(payload: dict, request: Request):
 
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
-    if not STRIPE_WEBHOOK_SECRET:
-        raise HTTPException(500, "Missing STRIPE_WEBHOOK_SECRET env var")
-    _require_env("DATABASE_URL")
-
+    # Stripe and psycopg2 are synchronous; keep them off the shared API event loop.
     payload = await request.body()
-    sig = request.headers.get("stripe-signature")
+    return await run_in_threadpool(process_webhook, payload, request.headers.get("stripe-signature"))
 
-    try:
-        event = stripe.Webhook.construct_event(payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET)
-    except Exception as e:
-        raise HTTPException(400, f"Webhook signature verification failed: {e}")
 
-    etype = event.get("type")
-    event_id = event.get("id", "")
-    data = event.get("data", {}).get("object", {})
-
-    # Idempotency: skip already-processed events (Stripe retries on non-2xx).
-    if DATABASE_URL and event_id:
-        try:
-            with _db_conn() as conn:
-                _ensure_processed_events_table(conn)
-                if _is_event_processed(conn, event_id):
-                    _log.info("Skipping already-processed event %s (%s)", event_id, etype)
-                    return JSONResponse({"received": True, "type": etype, "note": "already_processed"})
-        except Exception as _idem_err:
-            _log.warning("Idempotency check failed for %s: %s", event_id, _idem_err)
-
-    # 1) Initial checkout completion
-    if etype == "checkout.session.completed":
-        raw_email = (
-            (data.get("metadata", {}) or {}).get("user_email")
-            or (data.get("customer_details") or {}).get("email")
-            or data.get("customer_email")
-            or ""
-        )
-        try:
-            email = _validate_email(raw_email)
-        except ValueError as exc:
-            _log.warning("checkout.session.completed: %s", exc)
-            raise HTTPException(500, str(exc))
-        customer_id = data.get("customer")
-        subscription_id = data.get("subscription")
-
-        # Find the price from the subscription
-        try:
-            sub = stripe.Subscription.retrieve(subscription_id, expand=["items.data.price"])
-            price_id = sub["items"]["data"][0]["price"]["id"]
-            plan = _price_to_plan(price_id)
-        except Exception:
-            price_id = None
-            plan = (data.get("metadata", {}) or {}).get("requested_plan") or "basic"
-            plan = plan.strip().lower()
-        if plan not in {"pro", "premium"}:
-            raise HTTPException(500, f"Could not determine paid plan for checkout session {data.get('id')}")
-
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier=plan,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                stripe_price_id=price_id,
-            )
-            _record_paid_conversion(email, plan, stripe_event_id=event_id)
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # 2) Subscription updates (upgrade/downgrade, cancellation scheduling, etc.)
-    elif etype == "customer.subscription.updated":
-        subscription_id = data.get("id")
-        customer_id = data.get("customer")
-
-        status = (data.get("status") or "").strip().lower()
-        cancel_at_period_end = bool(data.get("cancel_at_period_end"))
-
-        # The account that pays: matched by Stripe customer id, not by email (P1-53).
-        email = _account_for_customer(customer_id, "subscription update")
-
-        # Immediate cancellation -> downgrade to basic now
-        if status == "canceled":
-            try:
-                _set_user_plan_by_email(
-                    email=email,
-                    tier="basic",
-                    stripe_customer_id=customer_id,
-                    stripe_subscription_id=subscription_id,
-                    stripe_price_id=None,
-                )
-            except Exception as e:
-                raise HTTPException(500, f"DB update failed: {e}")
-            return JSONResponse({"received": True, "type": etype, "action": "downgraded_basic_immediate_cancel"})
-
-        # Cancel scheduled at period end -> keep current tier until Stripe sends subscription.deleted
-        if cancel_at_period_end:
-            return JSONResponse({"received": True, "type": etype, "action": "cancel_scheduled_keep_tier"})
-
-        # Otherwise: active subscription update -> map price to plan
-        price_id = None
-        try:
-            items = data.get("items", {}).get("data", [])
-            if items:
-                price_id = items[0].get("price", {}).get("id")
-        except Exception:
-            price_id = None
-
-        plan = _price_to_plan(price_id or "")
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier=plan,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                stripe_price_id=price_id,
-            )
-            _record_paid_conversion(email, plan, stripe_event_id=event_id)
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # 3) Subscription cancelled → downgrade to Basic (unless admin)
-    elif etype == "customer.subscription.deleted":
-        customer_id = data.get("customer")
-        email = _account_for_customer(customer_id, "subscription deletion")
-        try:
-            _set_user_plan_by_email(
-                email=email,
-                tier="basic",
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=data.get("id"),
-                stripe_price_id=None,
-            )
-        except Exception as e:
-            raise HTTPException(500, f"DB update failed: {e}")
-
-    # Mark the event processed so retries are skipped.
-    if DATABASE_URL and event_id:
-        try:
-            with _db_conn() as conn:
-                _mark_event_processed(conn, event_id, etype or "")
-        except Exception as _mark_err:
-            _log.warning("Failed to mark event %s processed: %s", event_id, _mark_err)
-
-    return JSONResponse({"received": True, "type": etype})
+def process_webhook(payload: bytes, sig: Optional[str]):
+    _require_env("STRIPE_WEBHOOK_SECRET", "DATABASE_URL")
+    return billing_engine().webhook(payload, sig)

@@ -11,7 +11,7 @@ backward-compatible (an opt-in `coverage_sink` and a best-effort report).
 
 | Stage | Where | Notes |
 | --- | --- | --- |
-| Source | `sp500.txt`, `nasdaq.txt` (+ `sp600.txt`, `otc.txt`) | refreshed weekly |
+| Source | `sp500.txt`, `nasdaq.txt` (+ `otc.txt`) | refreshed weekly |
 | Scheduled refresh | `.github/workflows/refresh-universe.yml` | **Sundays 10:30 UTC**; `scripts/refresh_sp500.py` (SPDR holdings), `scripts/refresh_nasdaq.py` (nasdaqtrader) |
 | Load | `scheduler.cron_runner._load_universe` | SP500 = full; NASDAQ = first `CRON_NASDAQ_LIMIT` (2000); COMBO = SP500 + NASDAQ[:2000], deduped |
 | Normalize | `data.symbols.normalize_ticker` / `sanitize_ticker_list` | class-share separators → dash, collapse, provider-specific |

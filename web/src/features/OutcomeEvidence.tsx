@@ -5,7 +5,7 @@
 // included), and nothing is picked as "best". Returns are fractions from the API.
 import { outcomes } from "@/api/account";
 import type { OutcomeGroups, OutcomeHorizons, OutcomeMetrics, OutcomeScores, OutcomeSummary, OutcomeSymbol } from "@/api/account";
-import { Card, Empty, ErrorState, Pill, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorState, Pill, Skeleton, Stat, StatGrid } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { etDate } from "@/lib/format";
 
@@ -24,7 +24,7 @@ const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : 
 const QUALITY: Record<string, string> = { INSUFFICIENT: "Insufficient", LIMITED: "Limited", MODERATE: "Moderate", STRONG: "Strong" };
 
 export function Quality({ q }: { q: string }) {
-  return <Pill tone={q === "INSUFFICIENT" || q === "LIMITED" ? "warn" : undefined}>{QUALITY[q] ?? q} evidence</Pill>;
+  return <Pill tone={q === "INSUFFICIENT" || q === "LIMITED" ? "warn" : undefined}>{QUALITY[q] ?? q} sample coverage</Pill>;
 }
 
 function range(r: { start?: string | null; end?: string | null }): string {
@@ -55,10 +55,16 @@ function MetricHead({ first }: { first: string }) {
         <th scope="col" className="num">Median vs SPY</th>
         <th scope="col" className="num">Beat SPY</th>
         <th scope="col" className="num hide-narrow">Up</th>
-        <th scope="col" className="num hide-narrow">Avg MFE / MAE</th>
+        <th scope="col" className="num hide-narrow">Avg best / worst move</th>
       </tr>
     </thead>
   );
+}
+
+/** "1.0" or "1.0, 1.1" from {version: count}. */
+function versions(v: Record<string, number> | undefined): string {
+  const keys = Object.keys(v ?? {});
+  return keys.length ? keys.sort().join(", ") : "—";
 }
 
 function SummaryCard({ s }: { s: OutcomeSummary }) {
@@ -71,6 +77,13 @@ function SummaryCard({ s }: { s: OutcomeSummary }) {
         {" "}{s.matured_observations} have a {s.horizon}-trading-day outcome, {s.pending_observations} are still pending
         {s.unavailable_observations ? ` and ${s.unavailable_observations} had no price data` : ""}. No filters applied.
       </p>
+      <StatGrid label="Signal counts">
+        <Stat label="Signals observed" value={s.total_observations.toLocaleString("en-US")} note={range(s.date_range)} />
+        <Stat label="Outcome measured" value={s.matured_observations.toLocaleString("en-US")} note={`after ${s.horizon} trading days`} />
+        <Stat label="Still pending" value={s.pending_observations.toLocaleString("en-US")} note="not counted as wins or losses" />
+        <Stat label="Score version" value={versions(s.score_versions)} note={Object.keys(s.score_versions ?? {}).length > 1 ? "mixed: compare with care" : "one scoring method"} />
+      </StatGrid>
+      <p className="cap">Sample coverage describes the number of observations, not performance or predictive reliability. Best / worst move (MFE / MAE) measures the largest rise and drawdown during the holding period, not a realized trade result.</p>
       <dl className="kv">
         <div><dt>Median return</dt><dd className={`mono ${tone(m.median_return)}`}>{signed(m.median_return)}</dd></div>
         <div><dt>Median vs SPY</dt><dd className={`mono ${tone(m.median_excess_return)}`}>{signed(m.median_excess_return)}</dd></div>
@@ -129,7 +142,7 @@ function ScoresCard({ d }: { d: OutcomeScores }) {
     <Card title="By HSF score" id="scores">
       <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes.</p>
       <ScoreLadder buckets={d.buckets} />
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by HSF score table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="HSF score" />
           <tbody>
@@ -152,7 +165,7 @@ function ScoresCard({ d }: { d: OutcomeScores }) {
 function HorizonsCard({ d }: { d: OutcomeHorizons }) {
   return (
     <Card title="By holding period" id="horizons">
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by holding period table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="Held for" />
           <tbody>
@@ -173,7 +186,7 @@ function HorizonsCard({ d }: { d: OutcomeHorizons }) {
 function SetupsCard({ d }: { d: OutcomeGroups }) {
   return (
     <Card title="By setup" id="setups">
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by setup table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="Setup" />
           <tbody>
@@ -217,6 +230,51 @@ export function OutcomeEvidence() {
 }
 
 /** Stock page: how earlier HSF signals for this ticker turned out (5-day window). */
+/** Stock page (Pro): how past HSF signals like this one did at 1, 3 and 5 trading days.
+ * "Like this one" = same primary setup and an HSF Score within 5 points. Descriptive only. */
+export function similarRange(score: number): { min_score: number; max_score: number } {
+  return { min_score: Math.max(0, Math.round(score) - 5), max_score: Math.min(100, Math.round(score) + 5) };
+}
+
+export function SimilarSetups({ score, setup, setupName }: { score: number; setup?: string | null; setupName?: string }) {
+  const range = similarRange(score);
+  const key = `outcomes:similar:${setup ?? ""}:${range.min_score}-${range.max_score}`;
+  const r = useApi(key, (signal) => outcomes.similar({ setup, ...range }, signal));
+  if (r.error && !r.data) return null;
+  if (!r.data) return <p className="cap">Loading similar past setups…</p>;
+  return <SimilarTable d={r.data} what={`${setup ? `${setupName ?? setup} setups` : "HSF signals"} scoring ${range.min_score}–${range.max_score}`} />;
+}
+
+export function SimilarTable({ d, what }: { d: OutcomeHorizons; what: string }) {
+  const matured = Math.max(0, ...d.horizons.map((h) => h.matured_count));
+  if (matured === 0) return <p className="body-sm">No matured past {what} yet.</p>;
+  return (
+    <div className="stack-sm similar-setups">
+      <p className="body-sm"><strong>Similar past setups:</strong> how earlier {what} moved afterwards.</p>
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Similar past setups table; scroll sideways for more columns">
+        <table className="table">
+          <thead><tr>
+            <th scope="col">Held for</th><th scope="col" className="num">Matured</th><th scope="col" className="num">Median return</th>
+            <th scope="col" className="num">Median vs SPY</th><th scope="col" className="num">Finished up</th>
+          </tr></thead>
+          <tbody>
+            {d.horizons.map((h) => (
+              <tr key={h.horizon} className={h.evidence_quality === "INSUFFICIENT" ? "row-muted" : undefined}>
+                <th scope="row" className="row-h">{h.horizon} day{h.horizon === 1 ? "" : "s"}</th>
+                <td className="num mono">{h.matured_count}</td>
+                <td className={`num mono ${tone(h.median_return)}`}>{signed(h.median_return)}</td>
+                <td className={`num mono ${tone(h.median_excess_return)}`}>{signed(h.median_excess_return)}</td>
+                <td className="num mono">{share(h.win_rate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="cap">Past signals only, before costs; greyed rows have too few to read as evidence. Not a forecast.</p>
+    </div>
+  );
+}
+
 export function SymbolEvidence({ ticker }: { ticker: string }) {
   const r = useApi(`outcomes:symbol:${ticker}`, (signal) => outcomes.symbol(ticker, signal));
   if (r.error && !r.data) return null;   // the older context above still renders
@@ -228,13 +286,13 @@ export function SymbolEvidence({ ticker }: { ticker: string }) {
 export function SymbolLine({ d }: { d: OutcomeSymbol }) {
   const h = d.horizons.find((x) => x.horizon === 5) ?? d.horizons[d.horizons.length - 1];
   if (!h || h.sample_size === 0) return <p className="body-sm">No earlier HSF signals for {d.ticker}.</p>;
-  if (h.matured_count === 0) return <p className="body-sm">{d.ticker}: {h.sample_size} earlier HSF signal{h.sample_size === 1 ? "" : "s"}, none matured yet.</p>;
+  if (h.matured_count === 0) return <p className="body-sm">{d.ticker}: {h.sample_size} earlier HSF signal{h.sample_size === 1 ? "" : "s"}, none matured yet (waiting for {h.horizon}-trading-day outcomes).</p>;
   return (
     <div className="stack-sm">
       <p className="body-sm">
         <strong>Historical HSF evidence:</strong> {h.matured_count} matured signal{h.matured_count === 1 ? "" : "s"} for {d.ticker} ({range(d.date_range)}).
-        {h.benchmark_count > 0 && <> {h.benchmark_beat_count} of {h.benchmark_count} beat SPY over 5 trading days.</>}
-        {" "}Median return {signed(h.median_return)}{h.benchmark_count > 0 && <>, median vs SPY {signed(h.median_excess_return)}</>}.
+        {h.benchmark_count > 0 && <> {h.benchmark_beat_count} of {h.benchmark_count} beat SPY over {h.horizon} trading days.</>}
+        {" "}Median {h.horizon}-trading-day return {signed(h.median_return)}{h.benchmark_count > 0 && <>, median vs SPY {signed(h.median_excess_return)}</>}.
         {h.pending_count > 0 && <> {h.pending_count} still pending.</>}
       </p>
       <p className="cap"><Quality q={h.evidence_quality} /> Past signals only; not a forecast.</p>

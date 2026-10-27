@@ -36,6 +36,58 @@ class ScanRadarTest(unittest.TestCase):
             self.assertIsNone(_scan_radar())
 
 
+
+class LatestQuotesTest(unittest.TestCase):
+    def setUp(self):
+        api.scans.quote_cache.clear()
+
+    @staticmethod
+    def _snap(price, trade_t, day_c, day_t, prev_c):
+        return {"latestTrade": {"p": price, "t": trade_t}, "dailyBar": {"c": day_c, "t": day_t},
+                "prevDailyBar": {"c": prev_c, "t": "2026-10-16T04:00:00Z"}}
+
+    def test_one_call_per_set_change_vs_previous_close(self):
+        snaps = {"AAA": self._snap(110.0, "2026-10-19T19:59:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps) as fetch, \
+                mock.patch("market_data._get_alpaca_data_feed", return_value="iex"):
+            out = api.scans.latest_quotes(["aaa", "ZZZ"])
+            api.scans.latest_quotes(["ZZZ", "AAA"])
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(fetch.call_args.args[0], ["AAA", "ZZZ"])
+        self.assertEqual(out["quotes"]["AAA"]["chg_pct"], 10.0)
+        self.assertEqual(out["quotes"]["AAA"]["at"], "2026-10-19T19:59:00Z")
+        self.assertNotIn("ZZZ", out["quotes"])
+        self.assertEqual(out["feed"], "iex")
+
+    def test_premarket_trade_is_measured_from_the_last_finished_session(self):
+        # 8:30 ET on Oct 20; the daily bar is still Oct 19's (close 110).
+        snaps = {"AAA": self._snap(121.0, "2026-10-20T12:30:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["prev_close"], 110.0)
+        self.assertEqual(out["quotes"]["AAA"]["chg_pct"], 10.0)
+        self.assertIsNone(out["quotes"]["AAA"]["gap_pct"])          # not open yet: no gap
+
+    def test_gap_is_todays_open_vs_previous_close(self):
+        snap = self._snap(110.0, "2026-10-19T19:59:00Z", 110.0, "2026-10-19T04:00:00Z", 100.0)
+        snap["dailyBar"]["o"] = 104.0
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value={"AAA": snap}):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["gap_pct"], 4.0)
+
+    def test_late_evening_trade_stays_on_its_new_york_day(self):
+        # 7:30 PM ET in winter is the next day in UTC; still the Dec 1 session.
+        snaps = {"AAA": self._snap(105.0, "2026-12-02T00:30:00Z", 104.0, "2026-12-01T05:00:00Z", 100.0)}
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value=snaps):
+            out = api.scans.latest_quotes(["AAA"])
+        self.assertEqual(out["quotes"]["AAA"]["prev_close"], 100.0)
+
+    def test_empty_answer_is_not_cached(self):
+        with mock.patch("market_data.fetch_alpaca_snapshots", return_value={}) as fetch:
+            self.assertEqual(api.scans.latest_quotes(["AAA"])["quotes"], {})
+            api.scans.latest_quotes(["AAA"])
+        self.assertEqual(fetch.call_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -72,3 +124,44 @@ class SparklineAndScoreHistoryTest(unittest.TestCase):
         self.assertEqual(pro["points"][2]["signals_added"], ["gapper", "golden_cross"])  # not ranked in the scan before
         self.assertNotIn("prebreakout", pro["points"][2]["signals"])
         self.assertIn("prebreakout", prem["points"][2]["signals_added"])
+
+    def test_daily_bar_value_keeps_its_actual_session_when_newest_close_is_missing(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"Close": [10.0, 11.0, float("nan")]},
+                          index=pd.date_range("2026-10-13", periods=3))
+        with mock.patch("data.prices.fetch_price_data_batch", return_value=({"AAA": df}, [])) as fetch:
+            out = api.scans.daily_closes(["AAA"])
+            cached = api.scans.daily_closes(["AAA"])
+        self.assertEqual(out["last_bar"]["AAA"], {"close": 11.0, "session": "2026-10-14"})
+        self.assertEqual(out, cached)
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_daily_bar_never_invents_a_date_for_undated_data(self):
+        import pandas as pd
+
+        with mock.patch("data.prices.fetch_price_data_batch", return_value=({"AAA": pd.DataFrame({"Close": [10.0, 11.0]})}, [])):
+            out = api.scans.daily_closes(["AAA"])
+        self.assertEqual(out["series"]["AAA"], [10.0, 11.0])
+        self.assertEqual(out["last_bar"], {})
+
+
+class BriefFreshnessTest(unittest.TestCase):
+    def test_uses_the_matching_runs_market_data_time(self):
+        from api.market import _brief_freshness
+
+        run = {"id": 7, "created_at": "2026-10-21T13:39:55+00:00"}
+        info = {"state": "fresh", "market_data_at": "2026-10-21T13:36:12+00:00"}
+        with mock.patch("api.today.market_runs", return_value=[run]), \
+                mock.patch("api.today.run_freshness", return_value=info) as rf:
+            self.assertEqual(_brief_freshness("2026-10-21T13:39:55Z"), info)
+        rf.assert_called_once_with(run)
+
+    def test_no_matching_run_leaves_market_data_unknown(self):
+        from api.market import _brief_freshness
+
+        with mock.patch("api.today.market_runs", return_value=[{"id": 1, "created_at": "2026-10-20T20:39:00Z"}]):
+            info = _brief_freshness("2026-10-21T13:39:55Z")
+        self.assertIsNone(info["market_data_at"])
+        with mock.patch("api.today.market_runs", side_effect=RuntimeError("db down")):
+            self.assertEqual(_brief_freshness(None)["state"], "unavailable")

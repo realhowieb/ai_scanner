@@ -49,14 +49,6 @@ class ParseSymbolsTests(unittest.TestCase):
     def test_parse_dedupes_and_uppercases(self):
         self.assertEqual(_parse_symbols("aapl, TSLA,aapl\nnvda"), ["AAPL", "TSLA", "NVDA"])
 
-    def test_day_trader_page_does_not_load_watchlists_before_render(self):
-        from pathlib import Path
-
-        source = Path("pages/day_trader.py").read_text()
-        self.assertIn("_session_watch_tickers()", source)
-        self.assertNotIn("from db.watchlists import", source)
-        self.assertNotIn("list_watchlists(", source)
-        self.assertNotIn("get_watchlist_tickers(", source)
 
     def test_day_trader_panel_renders_header_before_market_data_import(self):
         from pathlib import Path
@@ -319,7 +311,8 @@ class SymbolSourceTests(unittest.TestCase):
             return [{"ticker": "AAA", "last": 10.0, "volume": 1_000_000,
                      "chg_pct": 5.0, "gap_pct": 1.0, "rvol": 2.0, "vs_vwap_pct": 1.0}]
 
-        with mock.patch("market_data.build_day_trader_metrics", side_effect=fake_metrics):
+        with mock.patch("market_data.build_day_trader_metrics", side_effect=fake_metrics), \
+             mock.patch("market_data.premarket_session_date", return_value=None):
             out = d._top_movers_symbols(universe=["AAA", "BBB"])
         self.assertEqual(captured["universe"], ["AAA", "BBB"])
         self.assertIn("AAA", out)
@@ -380,7 +373,8 @@ class SymbolSourceTests(unittest.TestCase):
             {"ticker": "QMMM", "last": 116.0, "volume": 5_000_000, "chg_pct": 17.0,
              "gap_pct": 5.0, "rvol": 0.0, "vs_vwap_pct": 1.0, "trade_ts": old},
         ]
-        with mock.patch("market_data.build_day_trader_metrics", return_value=metrics):
+        with mock.patch("market_data.build_day_trader_metrics", return_value=metrics), \
+             mock.patch("market_data.premarket_session_date", return_value=None):
             out = d._top_movers_symbols(universe=["LIVE", "QMMM"])
         self.assertIn("LIVE", out)
         self.assertNotIn("QMMM", out)          # stale → filtered
@@ -465,7 +459,8 @@ class DayTradeMoversTests(unittest.TestCase):
         ]
         with mock.patch.object(dt, "_movers_universe",
                                return_value=["MOVE", "MILD", "DEAD", "THIN"]), \
-             mock.patch("market_data.build_day_trader_metrics", return_value=rows):
+             mock.patch("market_data.build_day_trader_metrics", return_value=rows), \
+             mock.patch("market_data.premarket_session_date", return_value=None):
             out = dt._top_movers_symbols(limit=10)
         # Ranked by score desc; flat and illiquid names dropped.
         self.assertEqual(out, ["MOVE", "MILD"])

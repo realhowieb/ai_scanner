@@ -1,6 +1,6 @@
 // Browser notifications for fired alerts: registers /sw.js, subscribes with the API's
 // VAPID key and hands the subscription to the API (POST /v1/me/web-push).
-import { api, unwrap } from "@/api/client";
+import { api, ApiError, unwrap } from "@/api/client";
 import { currentNativePushState, disableNativePush, enableNativePush, nativePushAvailable } from "@/lib/nativePush";
 
 export type PushState = "unsupported" | "denied" | "off" | "on";
@@ -42,11 +42,12 @@ function browserName(): string {
 export async function enablePush(publicKey: string): Promise<PushState> {
   if (nativePushAvailable()) return enableNativePush();
   if (!pushSupported()) return "unsupported";
-  const permission = await Notification.requestPermission();
+  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (permission !== "granted") return permission === "denied" ? "denied" : "off";
   const reg = await registration();
   await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription())
+  const existing = await reg.pushManager.getSubscription();
+  const sub = existing
     ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }));
   const json = sub.toJSON();
   try {
@@ -54,7 +55,9 @@ export async function enablePush(publicKey: string): Promise<PushState> {
       body: { endpoint: sub.endpoint, keys: { p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "" }, device_name: browserName() },
     }));
   } catch (e) {
-    await sub.unsubscribe().catch(() => undefined); // don't leave a subscription the API doesn't know
+    // Roll back only a new subscription; a failed refresh must not discard an
+    // existing subscription that may still be registered and delivering alerts.
+    if (!existing) await sub.unsubscribe().catch(() => undefined);
     throw e;
   }
   return "on";
@@ -68,6 +71,11 @@ export async function disablePush(): Promise<void> {
   const sub = reg ? await reg.pushManager.getSubscription() : null;
   if (!sub) return;
   const endpoint = sub.endpoint;
-  await sub.unsubscribe().catch(() => undefined);
+  try {
+    await sub.unsubscribe();
+    if (await reg!.pushManager.getSubscription()) throw new Error("Still subscribed");
+  } catch {
+    throw new ApiError(0, "Couldn’t turn off browser notifications. Try again or use your browser’s site settings.", null, null, null);
+  }
   await unwrap(api.DELETE("/v1/me/web-push", { body: { endpoint } })).catch(() => undefined);
 }

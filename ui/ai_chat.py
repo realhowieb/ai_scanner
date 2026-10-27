@@ -28,7 +28,7 @@ def _table(df: pd.DataFrame) -> str:
 
 def _current_user():
     try:
-        import streamlit as st
+        from utils.st_compat import st
         return st.session_state.get("username")
     except Exception:
         return None
@@ -36,7 +36,7 @@ def _current_user():
 
 def render_results_chat(df: pd.DataFrame) -> None:
     """Mini chat scoped to the current scan. History lives in session_state."""
-    import streamlit as st
+    from utils.st_compat import st
 
     st.markdown("#### 💬 Ask about these results")
     st.caption("Claude (AI) answers questions about the results shown — research commentary, not investment advice.")

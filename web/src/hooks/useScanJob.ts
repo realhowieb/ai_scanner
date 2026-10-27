@@ -49,7 +49,8 @@ export type ScanJobState = {
   starting: boolean;
   /** Seconds until a refused start may be retried (429/503 Retry-After). */
   retryInS: number | null;
-  start: (body: ScanCreate) => Promise<void>;
+  /** True when the API accepts a new scan; false when it rejects the request. */
+  start: (body: ScanCreate) => Promise<boolean>;
   cancel: () => Promise<void>;
   cancelling: boolean;
   dismiss: () => void;
@@ -142,6 +143,7 @@ export function useScanJob({ enabled = true, intervalMs = 3000, client = default
       const j = await client.create(body);
       setJob(j);
       poll(j.scan_id, every);
+      return true;
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError(0, "Couldn't start the scan.", null, null, null);
       const running = (err.body as { scan_id?: unknown } | null)?.scan_id;
@@ -150,6 +152,7 @@ export function useScanJob({ enabled = true, intervalMs = 3000, client = default
       }
       if ((err.status === 429 || err.status === 503) && err.retryAfterS) setRetryInS(err.retryAfterS);
       setError(err);
+      return false;
     } finally {
       if (alive.current) setStarting(false);
     }

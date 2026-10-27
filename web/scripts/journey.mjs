@@ -51,11 +51,13 @@ async function signIn(ctx, who, pw) {
   await page.goto(`${BASE}/today`);
   await page.waitForURL(/\/login/);
   await page.getByLabel("Email").fill(who);
-  await page.getByLabel("Password").fill(pw);
+  await page.getByLabel("Password", { exact: true }).fill(pw);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/today/, { timeout: 90_000 });
   return page;
 }
+// The Alerts page opens on Activity; saved alerts live under the Rules tab.
+const rulesTab = (p) => p.getByRole("tab", { name: "Rules" }).click();
 const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -89,7 +91,7 @@ await step("find a setup and save it to a new watchlist from the Scanner", async
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
   await page.locator("table").getByRole("link", { name: ticker, exact: true }).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));
-  await page.getByRole("heading", { name: "HSF Score" }).waitFor();
+  await page.getByRole("heading", { name: "HSF Score", exact: true }).waitFor();
   await page.getByRole("link", { name: RUN }).waitFor();
   await page.getByRole("button", { name: SAVE_BTN }).click();
   const dlg = page.getByRole("dialog");
@@ -133,6 +135,7 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
   await page.getByLabel(`Note for ${ticker}`).fill("e2e note: watch the breakout level");
   await page.getByRole("button", { name: "Save note" }).click();
   await page.getByText("e2e note: watch the breakout level").waitFor();
+  await page.getByRole("button", { name: "Add tickers" }).click(); // the add form opens from a button once the list has tickers
   await page.getByLabel("Add tickers").fill(`${ticker} NOT_A_TICKER!!`);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const status = await page.getByRole("status").filter({ hasText: /Already in the list|Not valid/ }).first().textContent();
@@ -142,10 +145,11 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
 });
 
 await step("alerts page: capacity, turn off", async () => {
-  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Alerts", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Alerts(, \d+ new)?$/ }).click();
   await page.waitForURL(/\/alerts/);
+  await rulesTab(page);
   await page.getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
-  const capacity = await page.getByText(/Using \d+ of \d+ on your/).textContent();
+  const capacity = await page.getByLabel("Alert summary").textContent();
   await page.getByRole("button", { name: `Turn off: ${ticker} price rises above $${SHOWN}` }).click();
   await page.getByRole("button", { name: `Turn on: ${ticker} price rises above $${SHOWN}` }).waitFor();
   await shot(page, "journey-5-alerts");
@@ -163,6 +167,7 @@ await step("return later: sign out, sign in, everything is still there", async (
   await page.goto(watchlistUrl);
   await page.getByText("e2e note: watch the breakout level").waitFor();
   await page.goto(`${BASE}/alerts`);
+  await rulesTab(page);
   await page.getByRole("button", { name: `Turn on: ${ticker} price rises above $${SHOWN}` }).waitFor();
   check("return later: sign out, sign in, everything is still there", true);
 });
@@ -174,6 +179,7 @@ await step("phone layout: watchlist, alerts and the save dialog", async () => {
   await mp.getByText("e2e note: watch the breakout level").waitFor();
   await shot(mp, "journey-m-watchlist");
   await mp.goto(`${BASE}/alerts`);
+  await rulesTab(mp);
   await mp.getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
   await shot(mp, "journey-m-alerts");
   await mp.goto(`${BASE}/stocks/${ticker}`);
@@ -194,6 +200,7 @@ if (email2) {
     await op.waitForTimeout(1500);
     const sawList = await op.getByText(RUN).count();
     await op.goto(`${BASE}/alerts`);
+    await rulesTab(op);
     await op.getByRole("heading", { name: "Your alerts" }).waitFor();
     const sawAlert = await op.getByText(`$${SHOWN}`).count();
     await other.close();
@@ -203,11 +210,13 @@ if (email2) {
 
 await step("clean up: delete the alert and the watchlist (confirmed)", async () => {
   await page.goto(`${BASE}/alerts`);
+  await rulesTab(page);
   await page.getByRole("button", { name: `Delete: ${ticker} price rises above $${SHOWN}` }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete alert" }).click();
   await page.getByRole("button", { name: `Delete: ${ticker} price rises above $${SHOWN}` }).waitFor({ state: "detached" });
   await page.goto(watchlistUrl);
   await page.getByRole("heading", { name: new RegExp(RUN) }).waitFor();
+  await page.getByText("Manage list").click(); // Delete sits under the Manage list disclosure
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete watchlist" }).click();
   await page.getByText(RUN).first().waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});

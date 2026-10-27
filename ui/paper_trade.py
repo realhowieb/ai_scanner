@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
@@ -255,40 +255,26 @@ def _submit_and_import(user: str, row: Mapping[str, Any], ticker: str, qty: int,
         st.error("Paper account not available. Reconnect it in Account settings.")
         return
 
-    with st.spinner(f"Submitting paper order for {ticker}…"):
-        try:
-            from data.alpaca_trading import submit_market_order
+    import uuid
 
-            res = submit_market_order(
-                acct["api_key"], acct["api_secret"], ticker, qty, side="buy"
-            )
-        except Exception:
-            res = {"ok": False, "error": "Unexpected error submitting order."}
+    from services.paper_orders import PaperRejected, submit
 
-    if not res.get("ok"):
-        st.error(f"Order rejected: {res.get('error') or 'unknown error'}")
-        return
-
-    # Import the fill into the journal with score + AI confidence attached.
-    filled = _num(res, "filled_avg_price")
-    entry = filled if filled else _num(row, "Last", "Close")
-    breakout_score = _num(row, "BreakoutScore")
-    ai_conf = _num(row, "AI Confidence", "AIConfidence", "ai_confidence")
-    stop = plan.get("stop") if hasattr(plan, "get") else None
-    targets = plan.get("targets") if hasattr(plan, "get") else None
-    tgt = targets[0] if isinstance(targets, (list, tuple)) and targets else None
+    slot = f"paper_confirmation:{user}:{ticker}:{qty}"
+    key = st.session_state.setdefault(slot, uuid.uuid4().hex)
+    context = {"stop_price": plan.get("stop"), "target_price": (plan.get("targets") or [None])[0],
+               "breakout_score": _num(row, "BreakoutScore"),
+               "ai_confidence": _num(row, "AI Confidence", "AIConfidence", "ai_confidence")}
     try:
-        from db.trades import log_trade
-
-        log_trade(
-            user, ticker, float(entry or 0.0), int(qty), source="paper",
-            alpaca_order_id=res.get("order_id"),
-            stop_price=stop, target_price=tgt,
-            breakout_score=breakout_score, ai_confidence=ai_conf,
-        )
+        with st.spinner(f"Submitting paper order for {ticker}…"):
+            res = submit(user, ticker, qty, key, context)
+    except PaperRejected as exc:
+        st.session_state.pop(slot, None)
+        st.error(str(exc))
+        return
     except Exception:
-        pass
-
-    status = res.get("status") or "submitted"
-    st.success(f"Paper order {status} for {qty} {ticker} — imported to your journal.")
+        st.error("Order status couldn't be confirmed. Retry this confirmation; don't start another order.")
+        return
+    st.session_state.pop(slot, None)
+    note = "imported to your journal" if res["journal_synced"] else "journal sync pending until fill confirmation"
+    st.success(f"Paper order {res['status']} for {qty} {ticker} — {note}.")
     st.rerun()

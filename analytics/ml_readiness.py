@@ -49,7 +49,10 @@ DATASET_START = _dt.date(2026, 9, 1)
 PRIMARY_HORIZON = 5
 HORIZONS = (1, 3, 5)
 UNCOLLECTED_HORIZONS = (10, 15, 20)
-TOP_N_PER_SNAPSHOT = 5          # ui.opportunities.build_opportunities(top_n=5): rows frozen per snapshot
+BRIEF_TOP_N_PER_SNAPSHOT = 5    # ui.opportunities.build_opportunities(top_n=5): Brief freezes until 2026-10-13
+SCANNER_TOP_N_PER_SNAPSHOT = 25 # analytics.opportunity_freeze.FREEZE_TOP_N: Scanner freezes since 2026-10-13
+TOP_N_PER_SNAPSHOT = SCANNER_TOP_N_PER_SNAPSHOT  # rows frozen per snapshot now
+SCANNER_SIGNAL_TYPE = "hsf_scanner"  # db.signal_outcomes.SCANNER_SIGNAL_TYPE
 
 # ---- Maturation timing (mirrors the outcome cron, analytics.signal_outcomes) ---------------------------
 CRON_MIN_AGE = _dt.timedelta(days=8)       # db.signal_outcomes.list_pending_outcomes(min_age_days=8)
@@ -83,7 +86,9 @@ RECOVERABLE = (PREMATURE_LABEL_WRITE, DATA_PROVIDER_FAILURE, MATURATION_JOB_MISS
 CATEGORIES = (TRAINING_ELIGIBLE, NOT_CERTIFIED) + NOT_YET + FAILED
 
 # raw_signal keys a freeze must write for the served-model provenance gate (none is written today).
-MODEL_VERSION_KEYS = ("prebreakout_model_version", "model_version")
+# Top-level keys first; then the version the scan's own inference recorded in
+# raw_signal.models.prebreakout.loaded_artifact (flattened by the slim readiness read).
+MODEL_VERSION_KEYS = ("prebreakout_model_version", "model_version", "models_prebreakout_version")
 
 # ---- States --------------------------------------------------------------------------------------------
 NOT_READY, COLLECTING, NEAR_READY, READY = "NOT_READY", "COLLECTING", "NEAR_READY", "READY"
@@ -204,6 +209,10 @@ def model_version_of(row: Mapping[str, Any]) -> Optional[str]:
     for k in MODEL_VERSION_KEYS:
         if raw.get(k):
             return str(raw[k])
+    pb = (raw.get("models") or {}).get("prebreakout") if isinstance(raw.get("models"), dict) else None
+    art = pb.get("loaded_artifact") if isinstance(pb, dict) and pb.get("status") == "captured" else None
+    if isinstance(art, dict) and art.get("version"):
+        return str(art["version"])
     return None
 
 
@@ -333,6 +342,13 @@ def _slot_of(ts: _dt.datetime) -> Optional[str]:
     return None
 
 
+def _snapshot_size(members: Sequence[Mapping[str, Any]]) -> int:
+    """Rows a complete snapshot holds: Scanner top 25, or the older Brief top 5."""
+    if any(m.get("signal_type") == SCANNER_SIGNAL_TYPE for m in members):
+        return SCANNER_TOP_N_PER_SNAPSHOT
+    return BRIEF_TOP_N_PER_SNAPSHOT
+
+
 def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *,
                      stages: Mapping[int, str]) -> Dict[str, Any]:
     """Expected vs actual collection per trading day, missing scan windows,
@@ -364,13 +380,19 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
             off_slot += 1
     days = [d for d in mc.trading_days_between(start_day, today)
             if d < today or now >= _day_close_utc(d)]
-    expected_per_day = len(mc.SCAN_SLOTS_UTC) * TOP_N_PER_SNAPSHOT
+    # Only regular-hours slots save a snapshot (pre/post-market scans freeze
+    # nothing), so those are the windows a snapshot is expected in.
+    snap_slots = {d: [s.strftime("%H:%M") for s in mc.snapshot_scan_slots(d)] for d in days}
+    expected_slot_days = sum(len(v) for v in snap_slots.values())
+    expected_per_day = (_rate(expected_slot_days * TOP_N_PER_SNAPSHOT, len(days)) if days
+                        else len(mc.snapshot_scan_slots(today)) * TOP_N_PER_SNAPSHOT)
     slot_names = [f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_UTC]
-    missing = [(d, s) for d in days for s in slot_names if (d, s) not in slot_hits]
-    per_slot = {s: {"expected": len(days), "with_snapshot": sum(1 for d in days if (d, s) in slot_hits)}
+    missing = [(d, s) for d in days for s in snap_slots[d] if (d, s) not in slot_hits]
+    per_slot = {s: {"expected": sum(1 for d in days if s in snap_slots[d]),
+                    "with_snapshot": sum(1 for d in days if (d, s) in slot_hits)}
                 for s in slot_names}
     non_trading = sum(n for d, n in by_day_obs.items() if not mc.is_trading_day(d))
-    partial = sum(1 for m in snaps.values() if len(m) < TOP_N_PER_SNAPSHOT)
+    partial = sum(1 for m in snaps.values() if len(m) < _snapshot_size(m))
     exact_dups = sum(c - 1 for c in Counter((str(r["ticker"]).upper(), rd.iso(r["fired_at"]))
                                             for r in rows).values() if c > 1)
     signal_days = sum(len(v) for v in by_day_signal.values())
@@ -390,8 +412,10 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
         "trading_days_in_range": len(days),
         "trading_days_with_observations": sum(1 for d in days if by_day_obs.get(d)),
         "expected_observations_per_trading_day": expected_per_day,
-        "expected_basis": f"{len(mc.SCAN_SLOTS_UTC)} scheduled slots x top {TOP_N_PER_SNAPSHOT} opportunities "
-                          "(an upper bound: a slot whose snapshot is unchanged freezes nothing new)",
+        "expected_basis": f"regular-hours scan slots (of {len(mc.SCAN_SLOTS_UTC)} scheduled) x top "
+                          f"{TOP_N_PER_SNAPSHOT} Scanner setups "
+                          "(an upper bound: a slot whose snapshot is unchanged freezes nothing new; "
+                          f"snapshots before 2026-10-13 froze the Brief's top {BRIEF_TOP_N_PER_SNAPSHOT})",
         "actual_observations_per_trading_day": _rate(sum(by_day_obs.get(d, 0) for d in days), len(days)),
         "actual_signal_days_per_trading_day": _rate(sum(len(by_day_signal.get(d, ())) for d in days), len(days)),
         "recent_trading_days": len(recent),
@@ -401,7 +425,7 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
         "per_trading_day": [{"day": d.isoformat(), "observations": by_day_obs.get(d, 0),
                              "signal_days": len(by_day_signal.get(d, ())), "snapshots": len(by_day_snaps.get(d, ()))}
                             for d in days],
-        "missing_scan_windows": {"count": len(missing), "of": len(days) * len(slot_names), "per_slot": per_slot,
+        "missing_scan_windows": {"count": len(missing), "of": expected_slot_days, "per_slot": per_slot,
                                  "recent": [f"{d.isoformat()} {s}" for d, s in missing[-12:]]},
         "snapshots_off_schedule": off_slot,
         "partial_snapshots": partial,
@@ -890,7 +914,7 @@ def render_markdown(report: Mapping[str, Any], *, alerts: Sequence[Mapping[str, 
     msw = col.get("missing_scan_windows") or {}
     L += ["", f"Expected basis: {col.get('expected_basis')}.", "",
           f"Missing scan windows: {msw.get('count')} of {msw.get('of')} slot-days.", "",
-          "| SLOT (UTC) | TRADING DAYS | WITH SNAPSHOT |", "|---|---|---|"]
+          "| SLOT (UTC) | EXPECTED (REGULAR HOURS) | WITH SNAPSHOT |", "|---|---|---|"]
     for s, v in (msw.get("per_slot") or {}).items():
         L.append(f"| {s} | {v['expected']} | {v['with_snapshot']} |")
     if col.get("symbols_repeatedly_without_labels"):

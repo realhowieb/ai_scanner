@@ -65,7 +65,7 @@ describe("health check", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const res = healthz();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toEqual({ ok: true, build: null });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });

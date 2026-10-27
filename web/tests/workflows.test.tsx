@@ -37,7 +37,7 @@ describe("Watchlists", () => {
   it("empty state → create the first list; a duplicate name is refused inside the dialog", async () => {
     const u = user();
     wrap(<WatchlistsView />);
-    await u.click(await screen.findByRole("button", { name: "Create your first watchlist" }));
+    await u.click(await screen.findByRole("button", { name: "Create an empty watchlist" }));
     const dlg = screen.getByRole("dialog", { name: "New watchlist" });
     expect(within(dlg).getByLabelText("Name")).toHaveFocus();
     await u.type(within(dlg).getByLabelText("Name"), "Breakouts");
@@ -103,6 +103,7 @@ describe("Watchlists", () => {
     const u = user();
     wrap(<WatchlistsView />);
     await screen.findByRole("heading", { name: /Main/ });
+    await u.click(screen.getByRole("button", { name: "Add tickers" }));
     await u.type(screen.getByLabelText("Add tickers"), "msft, aapl BAD$$");
     await u.click(screen.getByRole("button", { name: "Add" }));
     expect(await screen.findByText(/Added MSFT\. Already in the list: AAPL\. Not valid ticker symbols \(not saved\): BAD\$\$/)).toBeInTheDocument();
@@ -144,6 +145,42 @@ describe("Watchlists", () => {
     expect(order()).toEqual(["AAPL", "NVDA", "ZZZ"]);
     await u.click(screen.getByLabelText("HSF Score"));
     expect(order()).toEqual(["NVDA", "AAPL", "ZZZ"]);
+  });
+
+  it("Refresh re-reads the list, its scores and daily bars in place", async () => {
+    const scan = [{ ticker: "AAPL", score: 81, last: 201.5 }];
+    api = fakeApi({ scanState: true, scan });
+    api.seedList("Main", ["AAPL", "ZZZ"]);
+    const u = user();
+    wrap(<WatchlistsView />);
+    expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
+    const lists = api.count("GET", /^\/v1\/watchlists\/\d+$/);
+    const bars = api.count("GET", /^\/v1\/sparklines/);
+    scan[0]!.score = 88;                       // a new scan has run since the page loaded
+    await u.click(screen.getByRole("button", { name: "Refresh prices and scores for Main" }));
+    expect(await screen.findByLabelText("HSF Score 88")).toBeInTheDocument();
+    expect(api.count("GET", /^\/v1\/watchlists\/\d+$/)).toBe(lists + 1);
+    expect(api.count("GET", /^\/v1\/sparklines/)).toBe(bars + 1);
+    expect(screen.getByRole("heading", { name: /Main/ })).toBeInTheDocument(); // no full reload
+    expect(screen.getByText(/Last checked .*Live prices aren't available right now/)).toBeInTheDocument();
+  });
+
+  it("shows the latest trade for ranked and unranked tickers, and Refresh re-reads it", async () => {
+    const quotes = { AAPL: { last: 205.25, chg_pct: 1.86, at: "2026-10-19T19:59:00Z" }, ZZZ: { last: 4.2, chg_pct: -3.1, at: "2026-10-19T19:58:00Z" } };
+    api = fakeApi({ scanState: true, scan: [{ ticker: "AAPL", score: 81, last: 201.5 }], quotes });
+    api.seedList("Main", ["AAPL", "ZZZ"]);
+    const u = user();
+    wrap(<WatchlistsView />);
+    expect(await screen.findByText("$205.25")).toBeInTheDocument();
+    expect(screen.queryByText("$201.50")).not.toBeInTheDocument();       // the scan price gives way to the trade
+    expect(screen.getByText("$4.20")).toBeInTheDocument();
+    expect(screen.getByText("last trade Oct 19, 3:59 PM ET")).toBeInTheDocument();
+    expect(screen.getByText(/Prices are the latest trade, up to a minute old\. Prices come from one exchange \(IEX\)/)).toBeInTheDocument();
+    quotes.AAPL = { last: 206, chg_pct: 2.23, at: "2026-10-19T20:00:00Z" };
+    const before = api.count("GET", /^\/v1\/quotes/);
+    await u.click(screen.getByRole("button", { name: "Refresh prices and scores for Main" }));
+    expect(await screen.findByText("$206.00")).toBeInTheDocument();
+    expect(api.count("GET", /^\/v1\/quotes/)).toBe(before + 1);
   });
 });
 
@@ -272,8 +309,9 @@ describe("Alerts", () => {
   it("validates with the server's rules before sending; shows duplicates and server 422s", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(screen.getByRole("button", { name: "New alert" }));
     const form = await screen.findByRole("button", { name: "Create alert" });
-    await u.selectOptions(screen.getByLabelText("Alert type"), "price");
+    await u.selectOptions(screen.getByLabelText("Alert type"), "legacy:price");
     await u.type(screen.getByLabelText("Ticker"), "NVDA");
     await u.type(screen.getByLabelText("Price ($)"), "0");
     await u.click(form);
@@ -284,9 +322,10 @@ describe("Alerts", () => {
     await u.type(screen.getByLabelText("Price ($)"), "999999");
     await u.click(form);
     expect(await screen.findByText("NVDA price rises above $999,999")).toBeInTheDocument();
-    expect(screen.getByText("Using 1 of 5 on your Pro plan")).toBeInTheDocument();
+    expect(screen.getByText("1 saved price/technical · 0 HSF rules")).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "New alert" }));
 
-    await u.selectOptions(screen.getByLabelText("Alert type"), "price");
+    await u.selectOptions(screen.getByLabelText("Alert type"), "legacy:price");
     await u.type(screen.getByLabelText("Ticker"), "NVDA");
     await u.type(screen.getByLabelText("Price ($)"), "999999");
     await u.click(screen.getByRole("button", { name: "Create alert" }));
@@ -297,11 +336,14 @@ describe("Alerts", () => {
   it("starts each type with the web's default threshold (breakout 8, move 5)", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(screen.getByRole("button", { name: "New alert" }));
     await screen.findByRole("button", { name: "Create alert" });
+    await u.selectOptions(screen.getByLabelText("Monitor"), "market");
     expect(screen.getByLabelText("Breakout Score at or above")).toHaveValue("8");
-    await u.selectOptions(screen.getByLabelText("Alert type"), "move");
+    await u.selectOptions(screen.getByLabelText("Monitor"), "stock");
+    await u.selectOptions(screen.getByLabelText("Alert type"), "legacy:move");
     expect(screen.getByLabelText("Move at least (%)")).toHaveValue("5");
-    await u.selectOptions(screen.getByLabelText("Alert type"), "watchlist");
+    await u.selectOptions(screen.getByLabelText("Monitor"), "watchlist");
     expect(screen.queryByLabelText(/Threshold|at least|Price/)).not.toBeInTheDocument();
   });
 
@@ -309,6 +351,7 @@ describe("Alerts", () => {
     api.alertRows.push({ id: 7, type: "rvol", ticker: "TSLA", threshold: 2, direction: null, watchlist_only: false, enabled: true, last_fired_at: null, created_at: new Date().toISOString() });
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: "Turn off: TSLA trades at 2× its average volume" }));
     expect(await screen.findByRole("button", { name: "Turn on: TSLA trades at 2× its average volume" })).toBeInTheDocument();
     expect(api.alertRows[0]!.enabled).toBe(false);
@@ -322,6 +365,7 @@ describe("Alerts", () => {
     api.fail("PATCH", /^\/v1\/alerts\/8$/, 503);
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: /Turn off: AMD/ }));
     expect(await screen.findByText(/unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Turn off: AMD/ })).toBeInTheDocument();
@@ -332,22 +376,27 @@ describe("Alerts", () => {
     api = fakeApi({ alertLimit: 1, emailEnabled: false });
     api.alertRows.push({ id: 1, type: "watchlist", ticker: null, threshold: null, direction: null, watchlist_only: false, enabled: true, last_fired_at: null, created_at: "" });
     wrap(<AlertsView />, "basic");
+    await user().click(screen.getByRole("button", { name: "New alert" }));
     expect(await screen.findByText("You're using all 1 alert on your plan.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create alert" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Upgrade to Pro" }).length).toBeGreaterThan(0);
-    expect(screen.getByText("Email alerts are part of Pro.")).toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "Close" }));
+    await user().click(screen.getByRole("tab", { name: "Delivery" }));
+    expect(screen.getByText("Email alerts are part of Pro.")).toBeVisible();
   });
 
   it("email delivery toggle saves the preference; push is not promised; empty history", async () => {
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Delivery" }));
     const box = await screen.findByRole("checkbox", { name: /Email me when an alert fires/ });
     expect(box).toBeChecked();
     await u.click(box);
     await waitFor(() => expect(api.prefs.alerts).toBe(false));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: /Email me when an alert fires/ })).not.toBeChecked());
-    expect(screen.getByText("Phone push notifications aren't available yet.")).toBeInTheDocument();
-    expect(screen.getByText("Nothing has fired yet.")).toBeInTheDocument();
+    expect(screen.getByText("Browser notifications depend on this device’s permissions.")).toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Activity" }));
+    expect(screen.getByText("No recent triggers.")).toBeVisible();
   });
 
   it("a mutation that finds the session expired hands over to sign-in once", async () => {
@@ -357,6 +406,7 @@ describe("Alerts", () => {
     api.fail("PATCH", /^\/v1\/alerts\/9$/, 401, { detail: "Your session has ended. Sign in again.", code: "session_expired" });
     const u = user();
     wrap(<AlertsView />);
+    await u.click(await screen.findByRole("tab", { name: "Rules" }));
     await u.click(await screen.findByRole("button", { name: /Turn off: AMD/ }));
     await waitFor(() => expect(expired).toHaveBeenCalledTimes(1));
   });
@@ -366,6 +416,7 @@ describe("before the matching API is deployed", () => {
   it("explains instead of breaking when GET /v1/alerts/types doesn't exist yet", async () => {
     api.fail("GET", /^\/v1\/alerts\/types$/, 404, { detail: "Not Found" });
     wrap(<AlertsView />);
+    await user().click(screen.getByRole("button", { name: "New alert" }));
     expect(await screen.findByRole("note")).toHaveTextContent("needs the latest HSF API");
     expect(screen.getByText("No alerts yet.")).toBeInTheDocument();
   });

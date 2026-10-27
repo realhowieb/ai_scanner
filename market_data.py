@@ -16,10 +16,12 @@ It is intentionally written to be:
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any, Dict, List, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except ImportError:  # pragma: no cover - exercised by lean CI/test environments
     class _StreamlitFallback:
         @staticmethod
@@ -267,7 +269,73 @@ def day_trader_metric_timeframes() -> List[Dict[str, str]]:
     ]
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+# ---- Per-symbol cache for the slow-moving daily lookups (Day Trader enrichments) ----
+# Average volume, EMA crosses and ATR/Donchian/Bollinger come from daily bars, so they
+# barely move during a session. They are cached per symbol for DAILY_ENRICH_TTL_S, so a
+# change in the movers list only fetches the new names, and the table's 10-second quote
+# refresh never re-downloads daily history. A symbol the provider returned nothing for
+# is retried after DAILY_ENRICH_MISS_TTL_S.
+DAILY_ENRICH_TTL_S = 1800.0
+DAILY_ENRICH_MISS_TTL_S = 300.0
+_DAILY_ENRICH_MAX_ENTRIES = 6000
+_daily_enrich_cache: Dict[Any, Any] = {}  # (kind, params, SYMBOL) -> (expires at, value or None)
+_daily_enrich_lock = threading.Lock()
+
+
+def clear_daily_enrich_cache() -> None:
+    with _daily_enrich_lock:
+        _daily_enrich_cache.clear()
+
+
+def _per_symbol_cached(kind: Any, symbols: List[str], fetch) -> Dict[str, Any]:
+    """{SYMBOL: value} for `symbols`, calling fetch(missing) only for symbols not cached.
+    fetch returns {SYMBOL: value or None}: None means "fetched, nothing to show" (cached
+    like a value); a symbol absent from its answer wasn't fetched and is retried sooner.
+    An empty answer (provider down) caches nothing."""
+    syms = [str(s).upper() for s in dict.fromkeys(symbols) if str(s).strip()]
+    now = time.monotonic()
+    out: Dict[str, Any] = {}
+    missing: List[str] = []
+    with _daily_enrich_lock:
+        for sym in syms:
+            hit = _daily_enrich_cache.get((kind, sym))
+            if hit and now < hit[0]:
+                if hit[1] is not None:
+                    out[sym] = hit[1]
+            else:
+                missing.append(sym)
+    if not missing:
+        return out
+    fetched = fetch(missing) or {}
+    now = time.monotonic()
+    with _daily_enrich_lock:
+        if len(_daily_enrich_cache) > _DAILY_ENRICH_MAX_ENTRIES:
+            for k in [k for k, (exp, _) in _daily_enrich_cache.items() if now >= exp]:
+                _daily_enrich_cache.pop(k, None)
+            if len(_daily_enrich_cache) > _DAILY_ENRICH_MAX_ENTRIES:
+                _daily_enrich_cache.clear()
+        for sym in missing:
+            if sym in fetched:
+                _daily_enrich_cache[(kind, sym)] = (now + DAILY_ENRICH_TTL_S, fetched[sym])
+            elif fetched:
+                _daily_enrich_cache[(kind, sym)] = (now + DAILY_ENRICH_MISS_TTL_S, None)
+    for sym in missing:
+        if fetched.get(sym) is not None:
+            out[sym] = fetched[sym]
+    return out
+
+
+def _daily_frames(symbols: List[str], period: str) -> Dict[str, Any]:
+    from data.prices import fetch_price_data_parallel
+
+    frames, _skipped = fetch_price_data_parallel(
+        [s.upper() for s in symbols],
+        period=period, interval="1d", max_workers=4, chunk_size=25,
+        timeout_s=10.0, rescue_missing=False, use_cache=True,
+    )
+    return {str(k).upper(): v for k, v in (frames or {}).items()}
+
+
 def fetch_avg_daily_volume(
     symbols: List[str],
     lookback: int = 20,
@@ -275,8 +343,8 @@ def fetch_avg_daily_volume(
 ) -> Dict[str, float]:
     """Average daily share volume over `lookback` sessions (for RVOL).
 
-    Cached for 30 minutes because the denominator moves slowly. Returns an empty
-    dict when Alpaca isn't configured — callers should treat missing keys as
+    Cached per symbol for 30 minutes because the denominator moves slowly. Returns an
+    empty dict when Alpaca isn't configured — callers should treat missing keys as
     "RVOL unavailable" rather than an error.
     """
     if not symbols:
@@ -285,28 +353,31 @@ def fetch_avg_daily_volume(
         from data.price_alpaca import download_multi_alpaca
     except Exception:
         return {}
-    try:
-        frames = download_multi_alpaca(
-            [s.upper() for s in symbols],
-            period=f"{max(lookback + 5, 25)}d",
-            interval="1d",
-            prepost=False,
-            timeout_s=15.0,
-            feed=feed or _get_alpaca_data_feed(),
-        )
-    except Exception:
-        return {}
+    feed = feed or _get_alpaca_data_feed()
 
-    out: Dict[str, float] = {}
-    for sym, frame in (frames or {}).items():
+    def fetch(syms: List[str]) -> Dict[str, Optional[float]]:
         try:
-            vol = frame["Volume"].tail(lookback)
-            avg = float(vol.mean())
-            if avg > 0:
-                out[str(sym).upper()] = avg
+            frames = download_multi_alpaca(
+                syms,
+                period=f"{max(lookback + 5, 25)}d",
+                interval="1d",
+                prepost=False,
+                timeout_s=15.0,
+                feed=feed,
+            )
         except Exception:
-            continue
-    return out
+            return {}
+        got: Dict[str, Optional[float]] = {}
+        for sym, frame in (frames or {}).items():
+            avg: Optional[float] = None
+            try:
+                avg = float(frame["Volume"].tail(lookback).mean())
+            except Exception:
+                pass
+            got[str(sym).upper()] = avg if (avg is not None and avg > 0) else None
+        return got
+
+    return _per_symbol_cached(("avg_volume", lookback, feed), symbols, fetch)
 
 
 def ema_cross_label(frame: Any) -> Optional[str]:
@@ -325,39 +396,26 @@ def ema_cross_label(frame: Any) -> Optional[str]:
 _DAILY_ENRICH_MAX = 200
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ema_crosses(symbols: List[str]) -> Dict[str, str]:
     """Detect fresh daily EMA 9/21 crosses for a symbol list.
 
-    Cached separately from live snapshots because this only needs daily bars and
-    should not add repeated API pressure to the intraday monitor.
+    Cached per symbol for 30 minutes, separately from live snapshots, because this
+    only needs daily bars and should not add repeated API pressure to the intraday
+    monitor.
     """
     # Never fetch daily bars for more than a display-sized set — a hard stop
     # against any path accidentally requesting the whole universe.
     if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
-    try:
-        from data.prices import fetch_price_data_parallel
 
-        frames, _skipped = fetch_price_data_parallel(
-            [s.upper() for s in symbols],
-            period="90d",
-            interval="1d",
-            max_workers=4,
-            chunk_size=25,
-            timeout_s=10.0,
-            rescue_missing=False,
-            use_cache=True,
-        )
-    except Exception:
-        return {}
+    def fetch(syms: List[str]) -> Dict[str, Optional[str]]:
+        try:
+            frames = _daily_frames(syms, "90d")
+        except Exception:
+            return {}
+        return {sym: ema_cross_label(frame) for sym, frame in frames.items()}
 
-    out: Dict[str, str] = {}
-    for sym, frame in (frames or {}).items():
-        label = ema_cross_label(frame)
-        if label:
-            out[str(sym).upper()] = label
-    return out
+    return _per_symbol_cached(("ema_cross",), symbols, fetch)
 
 
 def _range_metrics(frame) -> Optional[Dict[str, Any]]:
@@ -465,24 +523,195 @@ def _range_metrics(frame) -> Optional[Dict[str, Any]]:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_daily_range_metrics(symbols: List[str]) -> Dict[str, Dict[str, Any]]:
-    """ATR/Donchian/Bollinger per symbol from daily bars. Cached like EMA crosses."""
+    """ATR/Donchian/Bollinger per symbol from daily bars. Cached per symbol like EMA crosses."""
     if not symbols or len(symbols) > _DAILY_ENRICH_MAX:
         return {}
-    try:
-        from data.prices import fetch_price_data_parallel
 
-        frames, _skipped = fetch_price_data_parallel(
-            [s.upper() for s in symbols],
-            period="150d", interval="1d", max_workers=4, chunk_size=25,
-            timeout_s=10.0, rescue_missing=False, use_cache=True,
-        )
-    except Exception:
+    def fetch(syms: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
+        try:
+            frames = _daily_frames(syms, "150d")
+        except Exception:
+            return {}
+        return {sym: _range_metrics(frame) for sym, frame in frames.items()}
+
+    return _per_symbol_cached(("range",), symbols, fetch)
+
+
+# ------------------------------ Pre-market ---------------------------------
+# Before the open Alpaca's snapshot still describes the last regular session:
+# dailyBar is yesterday and prevDailyBar the day before, so "today's move" from
+# those bars is yesterday's move (the NVAX stale-alert bug, PR #89). Pre-market
+# rows measure today's latest trade against yesterday's close instead.
+
+PREMARKET_START_ET = 4 * 60          # 4:00 ET, when extended-hours trading starts
+_PM_BARS_TTL_S = 60.0
+_pm_bars_cache: Dict[Any, Any] = {}
+
+
+def _et_date(ts: object):
+    """ET calendar date of an ISO timestamp, or None when unknown/unparseable."""
+    if not ts:
+        return None
+    import datetime as _dt
+    import re
+    from zoneinfo import ZoneInfo
+
+    # Alpaca prints nanoseconds (…T19:59:34.804444297Z); fromisoformat wants at most 6 digits.
+    txt = re.sub(r"(\.\d{6})\d+", r"\1", str(ts)).replace("Z", "+00:00")
+    try:
+        d = _dt.datetime.fromisoformat(txt)
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        return None
+    return d.astimezone(ZoneInfo("America/New_York")).date()
+
+
+def premarket_session_date(now=None):
+    """Today's ET date during pre-market (4:00 ET to the open on a trading day), else None."""
+    import datetime as _dt
+
+    from analytics import market_calendar as mc
+
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    et = now.astimezone(mc.ET)
+    day = et.date()
+    if not mc.is_trading_day(day):
+        return None
+    if et.hour * 60 + et.minute < PREMARKET_START_ET or now >= mc.session_bounds_utc(day)[0]:
+        return None
+    return day
+
+
+def _before(bar: object, day) -> bool:
+    """True when a snapshot bar is dated (ET) before `day`. Undated bars are not."""
+    d = _et_date(bar.get("t")) if isinstance(bar, dict) else None
+    return d is not None and d < day
+
+
+def premarket_quote(snapshot: object, day) -> Optional[Dict[str, Any]]:
+    """{last, prev_close, trade_ts} from today's latest pre-market trade, or None.
+
+    None until a trade prints today: a latest trade from an earlier day is last
+    night's after-hours print. The previous close is the newest daily bar dated
+    before today."""
+    if not isinstance(snapshot, dict):
+        return None
+    trade = snapshot.get("latestTrade") or {}
+    if not isinstance(trade, dict) or _et_date(trade.get("t")) != day:
+        return None
+    prev = None
+    for key in ("dailyBar", "prevDailyBar"):
+        bar = snapshot.get(key) or {}
+        if _before(bar, day):
+            prev = _sf(bar.get("c"))
+            break
+    last = _sf(trade.get("p"))
+    if not last or not prev or last <= 0 or prev <= 0:
+        return None
+    return {"last": last, "prev_close": prev, "trade_ts": trade.get("t")}
+
+
+def fetch_premarket_volume(symbols: List[str], day, now=None) -> Optional[Dict[str, Dict[str, float]]]:
+    """Per symbol: pre-market volume, dollar volume, VWAP, high and low from today's
+    1-minute bars since 4:00 ET. None when the bars can't be fetched (callers then
+    skip volume filters rather than drop every name). Cached for a minute."""
+    import datetime as _dt
+    import time as _time
+
+    from analytics import market_calendar as mc
+
+    syms = sorted({str(s).strip().upper() for s in symbols or [] if str(s).strip()})
+    if not syms:
         return {}
-    out: Dict[str, Dict[str, Any]] = {}
-    for sym, frame in (frames or {}).items():
-        m = _range_metrics(frame)
-        if m:
-            out[str(sym).upper()] = m
+    key = (day, tuple(syms))
+    hit = _pm_bars_cache.get(key)
+    if hit and _time.monotonic() - hit[0] < _PM_BARS_TTL_S:
+        return hit[1]
+    start = _dt.datetime.combine(day, _dt.time(4, 0), tzinfo=mc.ET).astimezone(_dt.timezone.utc)
+    try:
+        from data.price_alpaca import fetch_minute_bars_multi
+
+        bars = fetch_minute_bars_multi(syms, start.strftime("%Y-%m-%dT%H:%M:%SZ"), max_pages=20)
+    except Exception:
+        return None
+    out: Dict[str, Dict[str, float]] = {}
+    for sym, rows in (bars or {}).items():
+        vol = dollars = 0.0
+        hi: Optional[float] = None
+        lo: Optional[float] = None
+        for b in rows or []:
+            v, c = _sf(b.get("v")) or 0.0, _sf(b.get("c"))
+            if c is None:
+                continue
+            vol += v
+            dollars += v * c
+            h, l = _sf(b.get("h")) or c, _sf(b.get("l")) or c
+            hi = h if hi is None else max(hi, h)
+            lo = l if lo is None else min(lo, l)
+        if vol > 0:
+            out[str(sym).upper()] = {"volume": vol, "dollar_volume": dollars, "vwap": dollars / vol,
+                                     "high": hi, "low": lo}
+    if len(_pm_bars_cache) > 64:
+        _pm_bars_cache.clear()
+    _pm_bars_cache[key] = (_time.monotonic(), out)
+    return out
+
+
+# Pre-market dollar-volume floor. The free IEX feed carries a small slice of
+# pre-market volume, so its floor is far lower than the consolidated (SIP) one.
+PREMARKET_MIN_DOLLAR_VOL = {"iex": 50_000, "sip": 1_000_000}
+
+
+def build_premarket_gappers(
+    symbols: List[str],
+    *,
+    now=None,
+    limit: int = 40,
+    min_price: float = 2.0,
+    min_abs_pct: float = 2.0,
+    min_dollar_volume: Optional[float] = None,
+    candidates: int = 150,
+) -> List[Dict[str, Any]]:
+    """Names gapping before the open, biggest % move vs yesterday's close first.
+
+    Only names with a trade today count. The `candidates` biggest moves get a
+    pre-market volume check (1-minute bars since 4:00 ET) and must clear the
+    feed's dollar-volume floor. [] outside pre-market. Never raises."""
+    day = premarket_session_date(now)
+    if day is None or not symbols:
+        return []
+    feed = _get_alpaca_data_feed()
+    snapshots = fetch_alpaca_snapshots(list(symbols), feed=feed)
+    moves: List[Dict[str, Any]] = []
+    for sym, snap in (snapshots or {}).items():
+        q = premarket_quote(snap, day)
+        if q is None or q["last"] < min_price:
+            continue
+        pct = (q["last"] / q["prev_close"] - 1.0) * 100.0
+        if abs(pct) < min_abs_pct:
+            continue
+        moves.append({"ticker": str(sym).upper(), "last": round(q["last"], 2),
+                      "previous_close": round(q["prev_close"], 2), "pct": round(pct, 2),
+                      "trade_ts": q["trade_ts"]})
+    moves.sort(key=lambda r: abs(r["pct"]), reverse=True)
+    moves = moves[:candidates]
+    vols = fetch_premarket_volume([m["ticker"] for m in moves], day) if moves else {}
+    floor = min_dollar_volume if min_dollar_volume is not None else PREMARKET_MIN_DOLLAR_VOL.get(feed, 50_000)
+    out: List[Dict[str, Any]] = []
+    for m in moves:
+        v = (vols or {}).get(m["ticker"])
+        if vols is not None and (v is None or v["dollar_volume"] < floor):
+            continue  # too thin to trade (skipped only when volume could be checked)
+        out.append({**m,
+                    "pm_volume": int(v["volume"]) if v else None,
+                    "pm_dollar_volume": round(v["dollar_volume"]) if v else None,
+                    "pm_vwap": round(v["vwap"], 2) if v else None,
+                    "pm_high": round(v["high"], 2) if v and v.get("high") is not None else None,
+                    "pm_low": round(v["low"], 2) if v and v.get("low") is not None else None,
+                    "market_data_feed": feed})
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -490,6 +719,7 @@ def build_day_trader_metrics(
     symbols: List[str],
     *,
     with_rvol: bool = True,
+    now=None,
 ) -> List[Dict[str, Any]]:
     """Return per-symbol intraday day-trader metrics from Alpaca snapshots.
 
@@ -499,6 +729,11 @@ def build_day_trader_metrics(
       { ticker, open, last, change_dollar, chg_pct, gap_pct, adx, vwap,
         vs_vwap_pct, rvol, volume, supertrend, supertrend_direction, ewo }
     Symbols with no usable price are dropped. Sorted by |chg_pct| descending.
+
+    Pre-market (4:00 ET to the open) the snapshot still holds yesterday's
+    session, so rows instead measure today's latest trade against yesterday's
+    close, with pre-market volume/VWAP on the display path; names with no
+    trade yet today keep a price but no change (row["traded_today"] is False).
     """
     if not symbols:
         return []
@@ -517,6 +752,8 @@ def build_day_trader_metrics(
     ema_crosses = fetch_ema_crosses(syms) if with_rvol else {}
     range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
     source = _alpaca_source(data_feed)
+    pm_day = premarket_session_date(now)
+    pm_vols = (fetch_premarket_volume(syms, pm_day) or {}) if (pm_day and with_rvol) else {}
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:
@@ -547,6 +784,24 @@ def build_day_trader_metrics(
         vs_vwap_pct = ((last - vwap) / vwap * 100.0) if vwap else None
         avg = avg_vol.get(sym)
         rvol = (volume / avg) if (volume and avg) else None
+        premarket = pm_day is not None and _before(daily_bar, pm_day)
+        traded_today = None
+        if premarket:
+            # dailyBar is yesterday's session: its close is today's reference and
+            # nothing from it (open, VWAP, volume, gap) describes today.
+            q = premarket_quote(snap, pm_day)
+            traded_today = q is not None
+            prev_close = _sf(daily_bar.get("c"))
+            pm = pm_vols.get(sym) or {}
+            today_open = close_today = gap_pct = change_dollar = rvol = None
+            vwap = _sf(pm.get("vwap"))
+            volume = _sf(pm.get("volume"))
+            chg_pct = ((q["last"] - prev_close) / prev_close * 100.0) if (q and prev_close) else None
+            vs_vwap_pct = ((last - vwap) / vwap * 100.0) if (vwap and q) else None
+            day_before = _sf(prev_daily_bar.get("c"))
+            prior_chg_pct = (
+                (prev_close - day_before) / day_before * 100.0 if (prev_close and day_before) else None
+            )
 
         row = {
                 "ticker": sym,
@@ -592,6 +847,13 @@ def build_day_trader_metrics(
                 # ATR% / Donchian / Bollinger (daily). Empty dict when not fetched.
                 **(range_metrics.get(sym) or {}),
             }
+        if premarket:
+            row.update({"session": "premarket", "traded_today": traded_today,
+                        # Yesterday's full-session move (close vs the close before it).
+                        "prior_session_chg_pct": round(prior_chg_pct, 2) if prior_chg_pct is not None else None,
+                        "previous_close_timeframe": "last_regular_session_daily_bar",
+                        "vwap_timeframe": "premarket_1min_bars", "vwap_formula": "sum(c*v)/sum(v) since 04:00 ET",
+                        "volume_timeframe": "premarket_1min_bars_since_0400_et"})
         row.update(calculate_day_trader_row_audit(row))
         rows.append(row)
 

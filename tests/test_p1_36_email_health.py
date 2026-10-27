@@ -12,7 +12,7 @@ from unittest import mock
 from analytics import email_health as eh
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 UTC = dt.timezone.utc
 MON_NOON = dt.datetime(2026, 9, 28, 16, 0, tzinfo=UTC)      # Mon 12:00 ET
 MON_EVENING = dt.datetime(2026, 9, 28, 23, 30, tzinfo=UTC)  # Mon 19:30 ET
@@ -128,30 +128,6 @@ class FrozenModelTests(unittest.TestCase):
             "universe", "scanner", "research_capture", "maturation", "market_data",
             "cohort_parity", "forward_evidence", "workflows", "database", "artifact_freshness"))
         self.assertNotIn("email", (ROOT / "analytics" / "system_health.py").read_text().lower().split("subsystems")[1][:400])
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class CardTests(unittest.TestCase):
-    def test_card_renders_each_job(self):
-        from streamlit.testing.v1 import AppTest
-
-        result = eh.evaluate([run("digest", "2026-09-28T12:35:00Z", sent=0, skipped={"unverified": 6})],
-                             now=MON_NOON)
-        at = AppTest.from_string("import streamlit as st\n"
-                                 "from ui.email_health_view import render_email_health\n"
-                                 "render_email_health(st.session_state['r'])\n", default_timeout=30)
-        at.session_state["r"] = result
-        at.run()
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        text = " ".join(m.value for m in at.markdown)
-        self.assertIn("✉️ Email delivery", text)
-        self.assertIn("Morning digest", text)
-        self.assertIn("unverified=6", text)
-        self.assertIn("Separate from the System Health status", " ".join(c.value for c in at.caption))
-
-    def test_admin_tab_renders_the_card_after_system_health(self):
-        src = (ROOT / "ui" / "admin_results_tab.py").read_text()
-        self.assertLess(src.index("render_system_health()"), src.index("render_email_health()"))
 
 
 if __name__ == "__main__":

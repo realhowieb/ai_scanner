@@ -48,6 +48,9 @@ beforeEach(() => {
   assign.mockReset();
   prefs = { digest: true, evening: false, alerts: true };
   routes = [
+    on("GET", "/v1/billing/status", () => jsonResponse({ status: "active", sync_state: "confirmed", message: "Confirmed" })),
+    on("POST", "/v1/billing/sync", () => jsonResponse({ message: "Subscription checked with Stripe." })),
+    on("GET", "/v1/me", () => jsonResponse(me("pro"))),
     on("GET", "/v1/me/email-preferences", () => jsonResponse(prefs)),
     on("PATCH", "/v1/me/email-preferences", (b) => { Object.assign(prefs, b); return jsonResponse(prefs); }),
   ];
@@ -60,12 +63,87 @@ const user = () => userEvent.setup();
 const wrap = (ui: React.ReactNode, m: Schemas["Me"]) => render(<SessionProvider initialMe={m}>{ui}</SessionProvider>);
 
 describe("Account", () => {
+  it("refreshes the account tier when billing recovery changed it in the background", async () => {
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "canceled", plan: "basic", sync_state: "confirmed", message: "Account is on Starter" })),
+      on("GET", "/v1/me", () => jsonResponse({ ...me("basic"), email: me("premium").email })));
+    wrap(<AccountView />, me("premium"));
+    const plan = screen.getByRole("region", { name: "Plan" });
+    expect(await within(plan).findByText("Starter")).toBeInTheDocument();
+    await waitFor(() => expect(within(plan).queryByRole("button", { name: "Manage subscription" })).not.toBeInTheDocument());
+  });
+  it("shows the confirmed billing interval and renewal date independently of the next checkout choice", async () => {
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "active", plan: "pro", interval: "month",
+      amount: 2500, currency: "usd", renewal_at: "2026-11-16T12:00:00Z", checked_at: "2026-10-16T12:00:00Z",
+      sync_state: "confirmed", test_mode: true, message: "Confirmed" })));
+    const u = user();
+    wrap(<AccountView />, me("pro"));
+    expect(await screen.findByText("Monthly · $25.00 before tax")).toBeInTheDocument();
+    expect(screen.getByText("Next renewal")).toBeInTheDocument();
+    expect(screen.getByText("Test mode")).toBeInTheDocument();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    expect(screen.getByText("Monthly · $25.00 before tax")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose Pro yearly" })).toBeInTheDocument();
+  });
+
+  it("explains a pending checkout and lets the user resume or close it", async () => {
+    let open = true;
+    routes.unshift(on("GET", "/v1/billing/status", () => jsonResponse({ status: "incomplete", sync_state: open ? "pending" : "confirmed",
+      message: open ? "Payment is pending" : "No active subscription", checkout_pending: open,
+      checkout_url: open ? "https://checkout.stripe.com/resume" : null })),
+    on("POST", "/v1/billing/checkout/cancel", () => { open = false; return jsonResponse({ message: "Closed" }); }));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    expect(await screen.findByText("Payment is pending")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue checkout" })).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Start over" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Continue checkout" })).not.toBeInTheDocument());
+    expect(calls.some((call) => call.path === "/v1/billing/checkout/cancel")).toBe(true);
+  });
+  it("sends the selected yearly interval to checkout", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", () => jsonResponse({ url: "https://checkout.stripe.com/yearly", mode: "checkout" })));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    expect(screen.getByRole("radio", { name: "Monthly" })).toBeChecked();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Premium" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/yearly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "premium", interval: "year" });
+  });
+
+  it("allows an existing Premium subscriber to choose yearly billing for the same plan", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", () => jsonResponse({ url: "https://billing.stripe.com/yearly", mode: "portal" })));
+    const u = user();
+    wrap(<AccountView />, me("premium"));
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Choose Premium yearly" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/yearly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "premium", interval: "year" });
+  });
+
+  it("keeps monthly as the default and explains unavailable yearly checkout without substituting monthly", async () => {
+    routes.unshift(on("POST", "/v1/billing/checkout", (b) => (b as { interval: string }).interval === "year"
+      ? jsonResponse({ detail: "Yearly billing isn't available yet." }, 400)
+      : jsonResponse({ url: "https://checkout.stripe.com/monthly", mode: "checkout" })));
+    const u = user();
+    wrap(<AccountView />, me("basic"));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/monthly"));
+    expect(calls.find((c) => c.path === "/v1/billing/checkout")?.body).toEqual({ plan: "pro", interval: "month" });
+    assign.mockReset();
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    await u.click(screen.getByRole("button", { name: "Upgrade to Premium" }));
+    expect(await screen.findByText("Yearly billing isn't available yet.")).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    expect(calls.filter((c) => c.path === "/v1/billing/checkout").map((c) => c.body)).toEqual([
+      { plan: "pro", interval: "month" }, { plan: "premium", interval: "year" },
+    ]);
+  });
   it("Free: identity, plan from /v1/me, what is included and both upgrades", async () => {
     wrap(<AccountView />, me("basic"));
     expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByText("basic@example.invalid")).toBeInTheDocument();
     const plan = screen.getByRole("region", { name: /Plan/ });
-    expect(within(plan).getByText("Free")).toBeInTheDocument();
+    expect(within(plan).getByText("Starter")).toBeInTheDocument();
     expect(within(plan).getByRole("button", { name: "Upgrade to Pro" })).toBeInTheDocument();
     expect(within(plan).getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
     expect(within(plan).queryByRole("button", { name: "Manage subscription" })).not.toBeInTheDocument();
@@ -116,7 +194,7 @@ describe("Account", () => {
   it("email settings: loading, then an error with retry", async () => {
     routes.unshift(on("GET", "/v1/me/email-preferences", () => jsonResponse({ detail: "boom" }, 503)));
     wrap(<AccountView />, me("pro"));
-    expect(screen.getByRole("status")).toHaveTextContent("Loading email settings");
+    expect(screen.getByRole("region", { name: "Email" })).toHaveTextContent("Loading email settings");
     expect(await screen.findByText("Couldn't load your email settings right now")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
@@ -204,7 +282,7 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
     expect(card).toHaveTextContent("4 have a 5-trading-day outcome, 1 are still pending and 1 had no price data. No filters applied.");
     expect(card).toHaveTextContent("+2.00%");                       // median vs SPY
     expect(card).toHaveTextContent("67% of 3");                      // beat SPY with its own denominator
-    expect(card).toHaveTextContent("Insufficient evidence");
+    expect(card).toHaveTextContent("Insufficient sample coverage");
     expect(card).toHaveTextContent("1 matured signal has no SPY comparison yet");
     for (const c of calls.filter((x) => x.path.startsWith("/v1/outcomes/"))) expect(c.search).toBe("");   // no hidden filters
   });
@@ -233,7 +311,7 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
 
   it("stock page line: matured count, SPY beats, medians, no forecast", () => {
     render(<SymbolLine d={oc.symbol as Schemas["OutcomeSymbol"]} />);
-    expect(screen.getByText(/1 matured signal for AAA/)).toHaveTextContent("1 of 1 beat SPY over 5 trading days. Median return +4.00%, median vs SPY +3.00%.");
+    expect(screen.getByText(/1 matured signal for AAA/)).toHaveTextContent("1 of 1 beat SPY over 5 trading days. Median 5-trading-day return +4.00%, median vs SPY +3.00%.");
     expect(screen.getByText(/not a forecast/)).toBeInTheDocument();
   });
 });

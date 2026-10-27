@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
@@ -527,8 +527,13 @@ def share_url(ticker: str) -> str:
     try:
         from config import APP_BASE_URL
     except Exception:
-        APP_BASE_URL = "https://hsfinestai.streamlit.app"
-    return f"{str(APP_BASE_URL).rstrip('/')}/stock?ticker={str(ticker).strip().upper()}"
+        APP_BASE_URL = "https://app.hsfinest.com"
+    base = str(APP_BASE_URL).rstrip('/')
+    t = str(ticker).strip().upper()
+    # The Streamlit app's page is /stock?ticker=; the web app's is /stocks/<T>.
+    if ".streamlit.app" in base:
+        return f"{base}/stock?ticker={t}"
+    return f"{base}/stocks/{t}"
 
 
 def _fmt_event_time(t: Any) -> str:

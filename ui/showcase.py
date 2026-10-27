@@ -66,7 +66,7 @@ def apply_showcase_styles() -> None:
     if not screenshot_mode():
         return
     try:
-        import streamlit as st
+        from utils.st_compat import st
     except Exception:  # pragma: no cover
         return
     st.markdown(
@@ -92,7 +92,7 @@ def showcase_caption() -> None:
     if not screenshot_mode():
         return
     try:
-        import streamlit as st
+        from utils.st_compat import st
 
         st.caption("Product showcase · current application data")
     except Exception:

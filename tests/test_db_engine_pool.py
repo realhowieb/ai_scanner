@@ -8,14 +8,24 @@ from db import engine
 
 
 class FakeConn:
+    """Like psycopg: rollback() with no open transaction never touches the socket, so
+    a connection the server dropped only fails on the next query."""
+
     def __init__(self):
         self.rollbacks = 0
+        self.pings = 0
         self.closed = False
+        self.server_gone = False
 
     def rollback(self):
         if self.closed:
-            raise RuntimeError("connection is dead")
+            raise RuntimeError("connection is closed")
         self.rollbacks += 1
+
+    def execute(self, sql):
+        if self.server_gone:
+            raise RuntimeError("server closed the connection unexpectedly")
+        self.pings += 1
 
     def close(self):
         self.closed = True
@@ -36,9 +46,10 @@ class WarmConnTests(unittest.TestCase):
     def setUp(self):
         engine._pool_local.conn = None
 
-    def _env(self):
+    def _env(self, ping_s="30"):
         return mock.patch.dict(
-            "os.environ", {"NEON_DATABASE_URL": "postgres://x", "AI_SCANNER_DB_POOL": "1"}
+            "os.environ", {"NEON_DATABASE_URL": "postgres://x", "AI_SCANNER_DB_POOL": "1",
+                           "DB_WARM_PING_S": ping_s}
         )
 
     def test_connection_reused_and_close_ends_the_transaction(self):
@@ -64,6 +75,29 @@ class WarmConnTests(unittest.TestCase):
             dead.closed = True  # simulate Neon idle-timeout kill
             c2 = engine.get_neon_conn()
         self.assertIs(object.__getattribute__(c2, "_conn"), fresh)
+
+    def test_idle_connection_dropped_by_server_is_replaced(self):
+        # Neon suspended the idle compute: rollback() still succeeds, only a query fails.
+        dropped, fresh = FakeConn(), FakeConn()
+        with self._env(), mock.patch.dict(
+            sys.modules, {"psycopg": _fake_psycopg([dropped, fresh])}
+        ), mock.patch.object(engine._time, "monotonic", side_effect=[1000.0, 1100.0]):
+            engine.get_neon_conn()
+            dropped.server_gone = True
+            c2 = engine.get_neon_conn()
+        self.assertTrue(dropped.closed)
+        self.assertIs(object.__getattribute__(c2, "_conn"), fresh)
+
+    def test_recently_used_connection_is_not_pinged(self):
+        real = FakeConn()
+        with self._env(), mock.patch.dict(
+            sys.modules, {"psycopg": _fake_psycopg([real])}
+        ), mock.patch.object(engine._time, "monotonic", side_effect=[1000.0, 1005.0, 1040.0]):
+            engine.get_neon_conn()
+            engine.get_neon_conn()  # 5 s later: no extra round trip
+            self.assertEqual(real.pings, 0)
+            engine.get_neon_conn()  # 35 s after last use: pinged once
+        self.assertEqual(real.pings, 1)
 
     def test_pool_disabled_returns_raw_connection(self):
         real = FakeConn()

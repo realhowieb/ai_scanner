@@ -375,6 +375,21 @@ def parity_report() -> Optional[Dict[str, Any]]:
 
 
 # ---- orchestration -------------------------------------------------------------------------
+API_BASE_URL = "https://hsf-api-v1.onrender.com"
+
+
+def api_ready() -> Dict[str, Any]:
+    """The live API's /readyz (memory now and peak since restart). Read-only, one call."""
+    import requests
+
+    base = (os.getenv("HSF_API_BASE_URL") or API_BASE_URL).strip().rstrip("/")
+    r = requests.get(f"{base}/readyz", timeout=60)
+    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    keys = ("rss_mb", "rss_peak_mb", "container_mb", "container_peak_mb", "memory_limit_mb",
+            "memory_warn_mb", "memory_warning", "price_cache_entries")
+    return {"status": r.status_code, **{k: body.get(k) for k in keys}}
+
+
 def collect(now: _dt.datetime) -> Dict[str, Any]:
     errors: Dict[str, str] = {}
     timings: Dict[str, float] = {}
@@ -405,7 +420,9 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
         "previous_system_health": {"generated_at": (previous or {}).get("generated_at")},
     }
     recovery = T("recovery", _recovery_status)
+    api = T("api_ready", api_ready)
     return {
+        "api_ready": api,
         "now": now.isoformat(),
         "recovery": recovery,
         "universe": universe,

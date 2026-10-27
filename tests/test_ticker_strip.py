@@ -62,18 +62,6 @@ class TickerStripTests(unittest.TestCase):
         # overlapping symbol takes the fresher table quote (later wins)
         self.assertEqual(merged["MSFT"], -2.31)
 
-    def test_alerts_and_day_trader_render_symbol_tape(self):
-        from pathlib import Path
-
-        alerts_source = Path("ui/alerts.py").read_text()
-        day_trader_source = Path("ui/day_trader.py").read_text()
-        self.assertIn("render_ticker_strip(", alerts_source)
-        self.assertIn("watch_tickers", alerts_source)
-        self.assertIn("render_ticker_strip(", day_trader_source)
-        self.assertIn("watch_tickers", day_trader_source)
-        self.assertIn("active_watchlist_quote_rows", alerts_source)
-        self.assertIn("dt_rows", day_trader_source)
-
 
 if __name__ == "__main__":
     unittest.main()

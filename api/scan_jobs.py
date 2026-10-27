@@ -45,6 +45,7 @@ STALE_AFTER_S = 3 * 60           # no heartbeat this long = the process that hel
 INTERRUPTED = "The scan was interrupted because the service restarted. Start it again."
 CANCELLED = "Cancelled."
 MAX_ACTIVE_JOBS = 10             # across all users; beyond this the API answers 503
+ADMISSION_LOCK = "api_scan_jobs:admission"   # one transaction-scoped lock for every account and instance
 KEEP_DAYS = 7
 
 _pool: Optional[ThreadPoolExecutor] = None
@@ -185,13 +186,17 @@ def _release(job_id: str) -> None:
 
 
 def create_job(username: str, universe: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    """Insert a queued job: one active job per account, MAX_ACTIVE_JOBS overall."""
+    """Insert a queued job: one active job per account, MAX_ACTIVE_JOBS overall.
+
+    Both limits are checked and the job inserted under one service-wide advisory lock
+    held until commit, so two accounts (or two API instances) can't both see the last
+    free slot and both take it; a per-account lock would only stop the same account."""
     _expire_stale()
     conn = _conn()
     try:
         ensure_scan_jobs_schema(conn)
         cur = conn.cursor()
-        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"api_scan_jobs:{username}",))
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (ADMISSION_LOCK,))
         cur.execute("SELECT id FROM api_scan_jobs WHERE username = %s AND status IN ('queued', 'running') "
                     "ORDER BY created_at DESC LIMIT 1", (username,))
         mine = _rows(cur)
@@ -230,6 +235,16 @@ def list_jobs(username: str, limit: int = 10) -> List[Dict[str, Any]]:
     return _execute("SELECT id, status, universe, params, progress, NULL::jsonb AS result, error, created_at, "
                     "started_at, finished_at FROM api_scan_jobs WHERE username = %s "
                     "ORDER BY created_at DESC LIMIT %s", (username, int(limit)), fetch=True)
+
+
+def latest_earnings_job(username: str, max_age_s: int = 3600) -> Optional[Dict[str, Any]]:
+    """The user's newest complete earnings-universe scan that finished within max_age_s, with
+    its result: the Earnings tab fills unranked reporters' scores from it."""
+    rows = _execute("SELECT id, result, finished_at FROM api_scan_jobs WHERE username = %s "
+                    "AND universe = 'earnings' AND status = 'complete' "
+                    "AND finished_at > NOW() - make_interval(secs => %s) "
+                    "ORDER BY finished_at DESC LIMIT 1", (username, int(max_age_s)), fetch=True)
+    return rows[0] if rows else None
 
 
 def cancel_job(username: str, job_id: str) -> Optional[Dict[str, Any]]:

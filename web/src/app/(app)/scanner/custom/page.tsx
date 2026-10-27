@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { CustomScanView } from "@/features/CustomScanView";
 
 export const metadata: Metadata = { title: "Custom scan" };
 
 export default function CustomScanPage() {
-  return <CustomScanView />;
+  return (
+    <Suspense>
+      <CustomScanView />
+    </Suspense>
+  );
 }

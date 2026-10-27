@@ -9,6 +9,7 @@ render. Deterministic and best-effort; returns None rather than raising.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from math import isfinite
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
@@ -33,21 +34,34 @@ def _ranked_symbols(df, ranking: str, top_n: int) -> List[str]:
         return []
     work = df
     if ranking == "prebreakout":
-        try:
-            from ml_prebreakout import score_prebreakout
+        from analytics.prediction_provenance import models_from_row
 
-            scored = score_prebreakout(df)
-            if scored is None or "PreBreakoutProb%" not in scored.columns:
-                return []
-            # score_prebreakout returns all-zero probabilities when no trained
-            # model is available. Zeros are not a ranking — treating them as one
-            # silently degrades to the snapshot's stored order and fakes the
-            # A/B comparison. Require a real signal.
-            if float(scored["PreBreakoutProb%"].max() or 0.0) <= 0.0:
-                return []
-            work = scored.sort_values("PreBreakoutProb%", ascending=False)
-        except Exception:
+        # Use only prediction-time evidence. Loading today's model here rewrites
+        # past selections whenever the champion or its calibration changes.
+        def saved_probability(row):
+            evidence = models_from_row(row).get("prebreakout")
+            if isinstance(evidence, dict):
+                if evidence.get("status") != "captured":
+                    return None
+                value, scale = evidence.get("calibrated_probability"), 1.0
+            elif "PreBreakoutProb%" in row:
+                value, scale = row.get("PreBreakoutProb%"), 100.0
+            else:
+                value, scale = row.get("PreBreakoutProb"), 1.0
+            try:
+                value = float(value) / scale
+                return value if isfinite(value) and 0.0 <= value <= 1.0 else None
+            except (TypeError, ValueError):
+                return None
+
+        probabilities = df.apply(saved_probability, axis=1)
+        # Legacy unavailable-model fallbacks wrote all zeros; never infer an order
+        # from those, or from snapshots with no saved prediction.
+        valid = probabilities.notna()
+        if not valid.any() or probabilities[valid].max() <= 0:
             return []
+        work = df.loc[valid].assign(_saved_probability=probabilities[valid]).sort_values(
+            "_saved_probability", ascending=False, kind="stable")
     else:  # breakout
         if "BreakoutScore" in df.columns:
             work = df.sort_values("BreakoutScore", ascending=False)

@@ -3,18 +3,26 @@
 // Account: identity, plan and what it includes (from /v1/me only), billing through the
 // existing Stripe flow (checkout / customer portal), email settings, password, sign
 // out and account deletion. Every change is shown only after the server confirms it.
-import Link from "next/link";
-import { useState } from "react";
+import Link from "@/components/Link";
+import { PasswordField } from "@/components/PasswordField";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { account } from "@/api/account";
 import type { EmailPrefs } from "@/api/account";
 import { Dialog } from "@/components/Dialog";
+import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
 import { Card, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { beginBilling } from "@/lib/billingReturn";
+import { etDate, etTime } from "@/lib/format";
 import { FEATURE_PLAN, signOut, useSession } from "@/session/SessionProvider";
 import type { Me } from "@/session/SessionProvider";
+
+import { UsageAnalyticsPreference } from "@/components/UsageAnalytics";
+
+import { InviteFriendCard } from "./InviteFriend";
 
 /** What each entitlement means to a customer. Unknown flags are not shown. */
 export const FEATURE_LABELS: Record<string, string> = {
@@ -39,37 +47,105 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
   { key: "digest", label: "Morning market digest", note: "Before the open" },
   { key: "evening", label: "Evening market wrap", note: "After the close" },
   { key: "alerts", label: "Alert emails", note: "In-app alerts continue either way" },
+  { key: "weekly", label: "Weekly recap", note: "Saturday mornings" },
+  { key: "tips", label: "Tips and reminders", note: "A few in your first week, and one if you've been away" },
 ];
 
+function BillingDetails({ me }: { me: Me }) {
+  const { billingRevision, reload } = useSession();
+  const state = useApi(`billing-status:${me.email}`, (signal) => account.billingStatus(signal), billingRevision);
+  const close = useAction();
+  const data = state.data;
+  useEffect(() => {
+    // A recovery worker can update the tier while this window is already open.
+    // Reload /me rather than deriving entitlements from billing fields.
+    if (data?.plan && data.plan !== me.plan) reload();
+  }, [data?.plan, me.plan, reload]);
+  if (state.error && !data) return <ErrorState error={state.error} onRetry={state.reload} what="billing details" />;
+  if (!data) return <Skeleton rows={2} label="Loading billing details" />;
+  const cost = data.amount != null && data.currency ? new Intl.NumberFormat("en-US", {
+    style: "currency", currency: data.currency.toUpperCase(),
+  }).format(data.amount / 100) : null;
+  return <div className="stack-sm">
+    <dl className="kv" aria-label="Current subscription">
+      <div><dt>Status</dt><dd>{data.status.replaceAll("_", " ")}{data.test_mode && <> · <Pill tone="warn">Test mode</Pill></>}</dd></div>
+      {data.interval && <div><dt>Current billing</dt><dd>{data.interval === "year" ? "Yearly" : "Monthly"}{cost ? ` · ${cost} before tax` : ""}</dd></div>}
+      {data.renewal_at && <div><dt>Next renewal</dt><dd>{etTime(data.renewal_at)}</dd></div>}
+      {data.cancellation_at && <div><dt>{data.cancel_at_period_end ? "Paid access until" : "Cancellation date"}</dt><dd>{etTime(data.cancellation_at)}</dd></div>}
+      {data.grace_ends_at && <div><dt>Payment grace ends</dt><dd>{etTime(data.grace_ends_at)}</dd></div>}
+      {data.checked_at && <div><dt>Last confirmed</dt><dd>{etTime(data.checked_at)}</dd></div>}
+    </dl>
+    {(data.sync_state !== "confirmed" || data.cancel_at_period_end) && <p className="notice" role="status">{data.message}</p>}
+    {data.checkout_pending && <div className="row-actions">
+      {data.checkout_url && <button type="button" className="btn btn-primary" onClick={() => {
+        beginBilling(me.plan);
+        window.location.assign(data.checkout_url!);
+      }}>Continue checkout</button>}
+      <button type="button" className="btn" disabled={close.busy} onClick={() => void close.run(async () => {
+        await account.cancelCheckout(); state.reload(); return true;
+      })}>{close.busy ? "Closing checkout…" : "Start over"}</button>
+    </div>}
+    <ErrorLine error={close.error} />
+  </div>;
+}
+
 function PlanCard({ me }: { me: Me }) {
+  const [interval] = useBillingInterval();
+  const { syncBilling, billingBusy, billingStatus, billingError } = useSession();
   const portal = useAction();
   const open = (flow?: "cancel") => void portal.run(async () => {
     const link = await account.portal(flow);
+    beginBilling(me.plan);
     window.location.assign(link.url);
     return true;
   });
   const included = Object.keys(FEATURE_LABELS).filter((k) => me.entitlements[k]);
   const locked = Object.keys(FEATURE_LABELS).filter((k) => k in me.entitlements && !me.entitlements[k]);
-  const paid = me.plan === "pro" || me.plan === "premium";
+  const trial = me.pro_trial_until ?? null;
+  const paid = (me.plan === "pro" || me.plan === "premium") && !trial;
   return (
     <Card title="Plan" id="plan" aside={<Pill tone={paid ? "gold" : undefined}>{me.plan_label}</Pill>}>
       {me.plan === "admin" ? (
         <p className="body-sm">Admin account. Every feature is on and billing doesn&apos;t apply.</p>
+      ) : trial ? (
+        <div className="stack-sm">
+          <p className="notice" role="status">You have free Pro from an invite until {etDate(trial)}. After that your account goes back to Starter unless you upgrade. Nothing is charged.</p>
+          <BillingIntervalToggle />
+          <div className="row-actions">
+            <UpgradeButton plan="pro" label="Keep Pro" />
+            <UpgradeButton plan="premium" />
+          </div>
+        </div>
       ) : (
-        <div className="row-actions">
-          {me.plan === "basic" && <UpgradeButton plan="pro" />}
-          {me.plan !== "premium" && <UpgradeButton plan="premium" />}
-          {paid && (
-            <button type="button" className="btn" disabled={portal.busy} onClick={() => open()}>
-              {portal.busy ? "Opening…" : "Manage subscription"}
-            </button>
-          )}
+        <div className="stack-sm">
+          <BillingIntervalToggle />
+          <div className="row-actions">
+            {me.plan === "basic" && <UpgradeButton plan="pro" />}
+            {me.plan !== "premium" && <UpgradeButton plan="premium" />}
+            {(me.plan === "pro" || me.plan === "premium") && <UpgradeButton plan={me.plan}
+              label={`Choose ${me.plan_label} ${interval === "year" ? "yearly" : "monthly"}`} />}
+            {paid && (
+              <button type="button" className="btn" disabled={portal.busy} onClick={() => open()}>
+                {portal.busy ? "Opening…" : "Manage subscription"}
+              </button>
+            )}
+          </div>
+          {paid && <p className="cap">To change your billing interval, choose your plan above and confirm the change in Stripe.</p>}
         </div>
       )}
       <ErrorLine error={portal.error} />
+      {me.plan !== "admin" && <BillingDetails me={me} />}
+      {me.plan !== "admin" && <div className="stack-sm">
+        <p className="cap">Billing may open in your browser. Return to HSF after confirming your change; your plan refreshes automatically.</p>
+        <div><button type="button" className="btn" disabled={billingBusy} onClick={() => void syncBilling()}>
+          {billingBusy ? "Checking plan…" : "Refresh plan"}
+        </button></div>
+        {billingStatus && <p className="notice" role="status">{billingStatus}</p>}
+        <ErrorLine error={billingError} />
+      </div>}
       {!me.email_verified && me.plan !== "admin" && <p className="cap">Verify your email before upgrading.</p>}
       {paid && <p className="cap">Change plan, payment method or invoices in the Stripe customer portal. <button type="button" className="link-btn" onClick={() => open("cancel")}>Cancel subscription</button></p>}
-      <div className="grid2">
+      <details className="plan-features"><summary>Plan features</summary><div className="grid2">
         <div className="stack-sm">
           <p className="strong">Included</p>
           <ul className="bullets">{included.map((k) => <li key={k}>{FEATURE_LABELS[k]}</li>)}</ul>
@@ -85,7 +161,7 @@ function PlanCard({ me }: { me: Me }) {
             </ul>
           </div>
         )}
-      </div>
+      </div></details>
     </Card>
   );
 }
@@ -170,19 +246,14 @@ function PasswordCard() {
   return (
     <Card title="Password" id="password">
       <form className="stack-sm" onSubmit={submit}>
-        <label className="field"><span>Current password</span>
-          <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-        </label>
-        <label className="field"><span>New password</span>
-          <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
-        </label>
-        <label className="field"><span>Repeat new password</span>
-          <input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} required
+        <p className="cap">Use at least 10 characters. Avoid common passwords, repeated patterns, and your name or email.</p>
+        <PasswordField label="Current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+        <PasswordField label="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        <PasswordField label="Repeat new password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} required
             aria-invalid={mismatch || undefined} aria-describedby={mismatch ? "pw-mismatch" : undefined} />
-        </label>
         {mismatch && <p id="pw-mismatch" className="form-error">The new passwords don&apos;t match.</p>}
         <ErrorLine error={act.error} />
-        {done && <p className="notice" role="status">Password changed. Other devices and the classic app were signed out.</p>}
+        {done && <p className="notice" role="status">Password changed. Other sessions were signed out.</p>}
         <div className="row-actions">
           <button type="submit" className="btn btn-primary" disabled={act.busy || !current || !next || next !== again}>
             {act.busy ? "Changing…" : "Change password"}
@@ -279,17 +350,20 @@ export function AccountView() {
         </div>
         <button type="button" className="btn" onClick={() => void signOut()}>Sign out</button>
       </section>
+      <nav className="chips account-nav" aria-label="Account sections"><a className="chip" href="#plan">Plan and billing</a><a className="chip" href="#profile">Profile</a><a className="chip" href="#email">Email preferences</a><a className="chip" href="#password">Password</a><a className="chip" href="#data">Your data</a></nav>
       <div className="split">
         <div className="col-main">
           <PlanCard me={me} />
           <EmailCard me={me} />
+          <InviteFriendCard />
           <p className="cap">Alerts and watchlists have their own pages: <Link href="/alerts">Alerts</Link> · <Link href="/watchlists">Watchlists</Link>.</p>
         </div>
         <div className="col-side">
           <ProfileCard me={me} />
           <PasswordCard />
           <DownloadData />
-          <DeleteAccount />
+          <UsageAnalyticsPreference />
+          <details className="danger-zone"><summary>Danger zone</summary><DeleteAccount /></details>
         </div>
       </div>
     </div>

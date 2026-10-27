@@ -1,7 +1,9 @@
 import datetime as dt
+import json
 import unittest
 from unittest import mock
 
+import numpy as np
 import pandas as pd
 
 from analytics.signal_outcomes import score_signal
@@ -48,6 +50,32 @@ class SignalOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome["return_5d"], 0.10)
         self.assertEqual(outcome["mfe_5d"], 0.12)
         self.assertEqual(outcome["mae_5d"], -0.03)
+
+    def test_freeze_signal_writes_strict_json_for_nan_values(self):
+        # Sentry PYTHON-A6: PMLast=NaN before pre-market prints made Postgres
+        # reject the jsonb parameter, so the frozen alert row was lost.
+        cur = mock.MagicMock()
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(so, "get_neon_conn", return_value=conn), \
+                mock.patch.object(so, "_ensure_schema"):
+            ok = so.freeze_signal(
+                source="alert_event", source_event_id=890, signal_type="breakout",
+                user_id="u", alert_id=1, ticker="mur", fired_at=dt.datetime(2026, 10, 20, 12, 42),
+                entry_price=41.0, setup_score=70.0, ai_confidence=None, prebreakout_prob=None,
+                indicators={"PMLast": float("nan"), "RVOL": np.float64("inf"), "Spark": np.array([1.5, np.nan])},
+                raw_signal={"PMLast": np.nan, "EMACross": None, "Last": np.float32(42.5),
+                            "nested": {"x": [float("-inf"), 1]}, "When": dt.date(2026, 10, 20)},
+            )
+        self.assertTrue(ok)
+        params = cur.execute.call_args[0][1]
+        indicators, raw = params[-2], params[-1]
+        for payload in (indicators, raw):
+            self.assertNotIn("NaN", payload)
+            self.assertNotIn("Infinity", payload)
+        self.assertEqual(json.loads(indicators), {"PMLast": None, "RVOL": None, "Spark": [1.5, None]})
+        self.assertEqual(json.loads(raw), {"PMLast": None, "EMACross": None, "Last": 42.5,
+                                           "nested": {"x": [None, 1]}, "When": "2026-10-20"})
 
 
 if __name__ == "__main__":

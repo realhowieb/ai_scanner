@@ -10,10 +10,27 @@ transfer is saved. An endpoint that sets its own Cache-Control (no-store) is lef
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any, Callable, Dict, List
 
 Message = Dict[str, Any]
 MAX_BODY_BYTES = 8 * 1024 * 1024  # larger answers pass through untouched
+
+
+# Today, the latest scan, the Brief and the earnings scanner stamp every answer with the
+# request time, so their hash never repeated and they never got a 304. For the hash only: request-time "checked_at" values
+# are dropped, and Today's top-level "as_of" counts only to the hour (its greeting follows
+# it). The body sent is unchanged; a 304 keeps the caller's earlier copy.
+_CHECKED_AT = re.compile(rb'"checked_at":"[^"]*"')
+_TOP_AS_OF = re.compile(rb'^\{"as_of":"([0-9-]{10}T[0-9]{2})[^"]*"')
+CLOCK_STAMPED = {"/v1/today", "/v1/scans/latest", "/v1/brief", "/v1/scans/latest/earnings"}
+
+
+def hash_view(path: str, body: bytes) -> bytes:
+    if path not in CLOCK_STAMPED:
+        return body
+    body = _CHECKED_AT.sub(b'"checked_at":null', body)
+    return _TOP_AS_OF.sub(rb'{"as_of":"\1"', body, count=1)
 
 
 def etag_for(body: bytes) -> str:
@@ -79,7 +96,7 @@ class ETagMiddleware:
             if message.get("more_body", False):
                 return
             body = b"".join(chunks)
-            tag = etag_for(body)
+            tag = etag_for(hash_view(scope["path"], body))
             extra = [(b"etag", tag.encode("latin-1")), (b"cache-control", b"private, no-cache")]
             if if_none_match and matches(if_none_match, tag):
                 keep = [(k, v) for k, v in start.get("headers") or []

@@ -77,12 +77,12 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
         f"{reset_url}\n\n"
         f"If you did not request this, you can ignore this email.\n"
     )
-    body_html = f"""
-<p>You requested a password reset for your <strong>HSFinest.AI</strong> account.</p>
-<p><a href="{reset_url}">Reset my password</a></p>
-<p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>
-"""
-
+    body_html = _branded_card(
+        "Reset your password",
+        "<p style='margin:0 0 4px'>You asked to reset the password for your <strong>HSFinest.AI</strong> account.</p>",
+        reset_url, "Reset my password",
+        "This link expires in 30 minutes. If you didn't ask for this, you can ignore this email.",
+    )
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     from_header, envelope_from = _sender(SMTP_FROM)
@@ -163,12 +163,49 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
             f"(valid for 24 hours):\n\n{verify_url}\n\n"
             f"If you did not sign up, ignore this email.\n"
         ),
-        body_html=(
-            f"<p>Welcome to <strong>HSFinest.AI</strong> — Know what matters in the market right now.</p>"
-            f"<p><a href='{verify_url}'>Verify my email address</a></p>"
-            f"<p>This link expires in 24 hours. If you didn't sign up, ignore this email.</p>"
+        body_html=_branded_card(
+            "Verify your email",
+            "<p style='margin:0 0 4px'>Welcome to <strong>HSFinest.AI</strong>. "
+            "Know what matters in the market right now.</p>",
+            verify_url, "Verify my email address",
+            "This link expires in 24 hours. If you didn't sign up, ignore this email.",
         ),
     )
+
+
+DISCLAIMER = (
+    "Informational and educational purposes only — not financial, investment, "
+    "or trading advice. Trading involves risk of loss; do your own research."
+)
+
+
+def _footer(unsubscribe_url: str | None = None) -> str:
+    from ui.email_kit import FAINT
+
+    return ("Know what matters in the market right now.<br>"
+            f"{DISCLAIMER}"
+            + (f"<br>Don't want these emails? <a href='{unsubscribe_url}' style='color:{FAINT}'>Unsubscribe</a> "
+               "or change your email settings in HSF Settings." if unsubscribe_url else ""))
+
+
+def _branded_card(title: str, intro_html: str, url: str, label: str, fine_print: str) -> str:
+    """Account emails (verify, reset): one card with a button, in the shared shell."""
+    from ui import email_kit as k
+
+    body = intro_html + k.button(url, label) + k.note(
+        f"{k.esc(fine_print)}<br>Button not working? Paste this link into your browser:<br>"
+        f"<a href='{k.esc(url)}' style='color:{k.LINK};word-break:break-all'>{k.esc(url)}</a>")
+    return k.shell(k.card(k.esc(title), body), footer_html="Know what matters in the market right now.")
+
+
+def alert_html(subject: str, body: str, unsubscribe_url: str | None = None) -> str:
+    """A plain-text alert body as one card in the shared shell (one line per row)."""
+    from ui import email_kit as k
+
+    lines = [ln for ln in str(body or "").split("\n")]
+    inner = "".join(f"<p style='margin:0 0 6px;font-size:14px'>{k.esc(ln)}</p>" if ln.strip()
+                    else "<div style='height:6px'></div>" for ln in lines)
+    return k.shell(k.card(k.esc(subject), inner), title_line="Alert", footer_html=_footer(unsubscribe_url))
 
 
 def _unsubscribe_parts(unsubscribe_url: str | None) -> tuple[str, str, dict]:
@@ -185,32 +222,26 @@ def _unsubscribe_parts(unsubscribe_url: str | None) -> tuple[str, str, dict]:
 
 
 def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner: str,
-                      unsubscribe_url: str | None = None) -> bool:
+                      unsubscribe_url: str | None = None, *, title_line: str = "",
+                      glance_html: str = "") -> bool:
     """Send a branded rich-HTML digest (e.g. the pre-open morning digest).
 
-    `html_inner` is an HTML fragment (tables/headings) placed inside the branded
-    shell; `text_inner` is the plain-text fallback for non-HTML clients.
+    `html_inner` is an HTML fragment placed inside the branded shell (ui.email_kit):
+    a dark header with `title_line`, an optional "At a glance" band, then the body.
+    A fragment built from email_kit cards is placed as is; anything else is wrapped
+    in one white card. `text_inner` is the plain-text fallback for non-HTML clients.
     """
-    disclaimer = (
-        "Informational and educational purposes only — not financial, investment, "
-        "or trading advice. Trading involves risk of loss; do your own research."
-    )
+    from ui.email_kit import shell
+
+    disclaimer = DISCLAIMER
     unsub_text, unsub_html, headers = _unsubscribe_parts(unsubscribe_url)
+    footer = _footer(unsubscribe_url)
     return _send_smtp(
         to_address=to_address,
         subject=f"HSFinest.AI — {subject}",
         body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"
                    f"{unsub_text}"),
-        body_html=(
-            "<div style='font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
-            "max-width:640px;margin:0 auto;color:#111'>"
-            "<p style='font-size:18px;margin:0 0 4px'><strong>⚡ HSFinest.AI</strong></p>"
-            f"{html_inner}"
-            "<p style='color:#888;margin-top:20px'>— Know what matters in the market right now.</p>"
-            f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>"
-            f"{unsub_html}"
-            "</div>"
-        ),
+        body_html=shell(html_inner, title_line=title_line, glance=glance_html, footer_html=footer),
         headers=headers,
     )
 
@@ -228,14 +259,6 @@ def send_alert_email(to_address: str, subject: str, body: str,
             "or trading advice. Trading involves risk of loss; do your own research."
             f"{unsub_text}"
         ),
-        body_html=(
-            f"<p><strong>HSFinest.AI</strong> alert</p>"
-            f"<pre>{body}</pre>"
-            f"<p style='color:#888'>— Know what matters in the market right now.</p>"
-            f"<p style='color:#aaa;font-size:11px'>Informational and educational "
-            "purposes only — not financial, investment, or trading advice. Trading "
-            "involves risk of loss; do your own research.</p>"
-            f"{unsub_html}"
-        ),
+        body_html=alert_html(subject, body, unsubscribe_url),
         headers=headers,
     )

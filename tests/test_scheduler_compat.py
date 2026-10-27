@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scheduler import jobs
 from scheduler.cron_runner import ScanRunSummary, _load_universe, _skip_reason, _write_summary
+from tests.repo_files import python_files
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -117,11 +118,6 @@ class SchedulerCompatTests(unittest.TestCase):
 
 
 class ScannerEntrypointSourceTests(unittest.TestCase):
-    def test_ui_no_longer_discovers_removed_scan_runners(self) -> None:
-        source = (ROOT / "ui" / "pages_main.py").read_text(encoding="utf-8")
-
-        self.assertNotIn("run_sp500_scan", source)
-        self.assertNotIn("run_nasdaq_scan", source)
 
     def test_breakout_keeps_legacy_adapter_to_current_scanner(self) -> None:
         source = (ROOT / "scan" / "breakout.py").read_text(encoding="utf-8")
@@ -139,16 +135,10 @@ class ScannerEntrypointSourceTests(unittest.TestCase):
         self.assertIn("DB cache stale-symbol filtering skipped", source)
         self.assertIn("Price fetch chunk skipped", source)
 
-    def test_scan_ui_uses_eastern_time_for_market_diagnostics(self) -> None:
-        scans_source = (ROOT / "ui" / "scans.py").read_text(encoding="utf-8")
-        diagnostics_source = (ROOT / "ui" / "scan_diagnostics.py").read_text(encoding="utf-8")
-
-        self.assertNotIn("utcnow()", scans_source)
-        self.assertIn('ZoneInfo("America/New_York")', diagnostics_source)
 
     def test_project_uses_timezone_aware_utc_datetimes(self) -> None:
         forbidden = "datetime." + "utcnow()"
-        for path in ROOT.rglob("*.py"):
+        for path in python_files(ROOT):
             if any(part in {"__pycache__", ".venv", "venv"} for part in path.parts):
                 continue
             source = path.read_text(encoding="utf-8")

@@ -7,6 +7,7 @@ app if the database is missing or unavailable.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -14,7 +15,7 @@ from urllib.parse import urlparse
 from db.engine import schema_once
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover
     st = None  # type: ignore[assignment]
 
@@ -191,7 +192,7 @@ def track_event(
             INSERT INTO acquisition_events
                 (event_name, source, utm_source, utm_medium, utm_campaign, utm_content,
                  utm_term, referrer_domain, user_hash, plan, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
             """,
             (
                 name,
@@ -204,7 +205,8 @@ def track_event(
                 attr.get("referrer_domain"),
                 user_hash(username),
                 _clean(plan, max_len=40) if plan else None,
-                clean_meta,
+                # psycopg can't send a bare dict; every insert failed silently without this.
+                json.dumps(clean_meta),
             ),
         )
         conn.commit()

@@ -13,6 +13,7 @@ import functools
 import inspect
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -30,8 +31,11 @@ from api import devices, models, routes, store, user_data
 # Re-exported: tests and older callers reach these through api.main.
 from api.deps import _account_cache, _recent_account, current_account, entitlements_for, forget_account  # noqa: F401
 from api.etag import ETagMiddleware
+from api.memory import memory_status, rss_mb, tune_allocator
 from api.scans import json_safe
 from api.settings import Settings, load_settings
+
+tune_allocator()  # cap malloc arenas before any worker thread starts (api/memory.py)
 
 log = logging.getLogger("hsf_api")
 access_log = logging.getLogger("hsf_api.access")
@@ -68,10 +72,42 @@ class _ReleasingRoute(APIRoute):
 
 READYZ_RETRY_S = 2.0
 
+# Sent on every answer. The API speaks JSON to the web server and the phone app, so
+# nothing it returns should be sniffed as another type, framed, or leak a referrer.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000",
+}
+
+
+def docs_enabled() -> bool:
+    """/docs and /openapi.json list every endpoint, admin ones included. They're on for
+    local work and off on Render unless HSF_API_DOCS=1. The web client's copy of the
+    contract comes from scripts/export_openapi.py, not from the live service."""
+    raw = os.environ.get("HSF_API_DOCS", "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return os.environ.get("RENDER", "").strip().lower() != "true"
+
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
-    app = FastAPI(title="HSFinest.AI API", version="1.0.0")
+    docs = docs_enabled()
+    app = FastAPI(title="HSFinest.AI API", version="1.0.0",
+                  docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
+                  openapi_url="/openapi.json" if docs else None,
+                  responses={422: {"model": models.ValidationErrorResponse, "description": "Invalid request fields"}})
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException
+
+    from api.errors import http_response, validation_response
+
+    app.add_exception_handler(RequestValidationError, validation_response)
+    app.add_exception_handler(HTTPException, http_response)
     app.router.route_class = _ReleasingRoute
     app.state.settings = settings
     # Scan, history and stock responses are large JSON; the web BFF's fetch() accepts
@@ -104,12 +140,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 status = response.status_code
         finally:
             route = request.scope.get("route")
+            from api.operations import record_request
+
+            record_request(rid, request.method, getattr(route, "path", None) or "unmatched",
+                           status, (time.perf_counter() - t0) * 1000)
             access_log.info(json.dumps({
                 "request_id": rid, "method": request.method,
                 "route": getattr(route, "path", None) or "unmatched", "status": status,
                 "db_traffic": db_metrics.snapshot(),
-                "ms": round((time.perf_counter() - t0) * 1000, 1)}))
+                "ms": round((time.perf_counter() - t0) * 1000, 1), "rss_mb": rss_mb()}))
         response.headers["X-Request-ID"] = rid
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
         return response
 
     @app.exception_handler(store.DatabaseUnavailable)
@@ -125,8 +167,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         pass
 
     @app.get("/", include_in_schema=False)
-    def root() -> RedirectResponse:
-        return RedirectResponse("/docs")
+    def root() -> Any:
+        if docs:
+            return RedirectResponse("/docs")
+        return {"ok": True, "service": "HSFinest.AI API"}
 
     @app.get("/healthz", response_model=models.Health)
     def healthz() -> Dict[str, bool]:
@@ -179,11 +223,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.exception_handler(trading_mod.PaperUnavailable)
     def _paper_unavailable(_request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=503)
+        return JSONResponse({"detail": str(exc), "code": "paper_unavailable",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=503)
 
     @app.exception_handler(trading_mod.PaperRejected)
     def _paper_rejected(_request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=400)
+        return JSONResponse({"detail": str(exc), "code": "paper_rejected",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=400)
+
+    @app.exception_handler(trading_mod.OrderConflict)
+    def _paper_conflict(_request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse({"detail": str(exc), "code": "order_conflict",
+                             "request_id": getattr(_request.state, "request_id", None)}, status_code=409)
 
     @app.exception_handler(trading_mod.TradeClosed)
     def _trade_closed(_request: Request, exc: Exception) -> JSONResponse:
@@ -202,6 +253,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         log.warning("billing service call failed: %s", str(exc)[:120])
         return JSONResponse({"detail": "Billing is temporarily unavailable. Please try again in a minute."},
                             status_code=502)
+
+    @app.exception_handler(acct.VerificationUnavailable)
+    def _verification_down(_request: Request, exc: Exception) -> JSONResponse:
+        log.warning("email verification lookup failed: %s", type(exc.__cause__ or exc).__name__)
+        return JSONResponse({"detail": "We can't confirm your email verification right now. "
+                                       "Please try again in a few minutes.",
+                             "code": "verification_unavailable"},
+                            status_code=503, headers={"Retry-After": "30"})
 
     @app.get("/readyz", response_model=models.Ready,
              responses={503: {"description": "Database unavailable, or (strict=true) a scheduled scan was missed"}})
@@ -236,12 +295,35 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except Exception:  # scan freshness is informational
             pass
         body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
-                "scan_age_minutes": age, **fresh}
+                "scan_age_minutes": age, **fresh, **memory_status()}
+        from api import shared_cache
+
+        kv = shared_cache.status()  # informational: the API works without Key Value
+        body["key_value"] = {"configured": kv["configured"], "ok": kv["ok"], "ping_ms": kv["ping_ms"]}
+        body["build"] = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:12] or None
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
 
+    async def _cap_threads() -> None:
+        """Requests run on a shared thread pool, and each busy thread keeps its own warm
+        database connection and memory. Starlette's default is 40; HSF_API_THREADS
+        (default 24) keeps connections and memory in check on a 512 MB instance."""
+        import anyio.to_thread
+
+        try:
+            n = int(os.environ.get("HSF_API_THREADS", "24").strip() or 24)
+        except ValueError:
+            n = 24
+        if n > 0:
+            anyio.to_thread.current_default_thread_limiter().total_tokens = n
+
+    app.router.on_startup.append(_cap_threads)
+
     routes.register_all(app)
+    from api import billing
+
+    billing.register(app)
     return app
 
 
@@ -327,6 +409,51 @@ def _start_realtime_alerts() -> None:
         log.warning("realtime alerts worker failed to start: %s", str(e)[:120])
 
 
+def _register_telegram_webhook() -> None:
+    """Point the Telegram bot at this API once it's deployed (no-op until the TELEGRAM_* settings exist)."""
+    if os.environ.get("RENDER", "").strip().lower() != "true":
+        return
+    import threading
+
+    def run() -> None:
+        try:
+            from api.chat_delivery import register_telegram_webhook
+
+            register_telegram_webhook()
+        except Exception as e:  # best effort; Telegram linking just stays unavailable
+            log.warning("telegram webhook registration failed: %s", type(e).__name__)
+
+    threading.Thread(target=run, name="telegram-webhook", daemon=True).start()
+
+
+def _start_day_trader_keep_warm() -> None:
+    """Keep the Day Trader movers table warm during market hours (api.market)."""
+    try:
+        _market().start_day_trader_keep_warm()
+    except Exception as e:  # best effort; the first visitor builds it instead
+        log.warning("day trader keep-warm failed to start: %s", type(e).__name__)
+
+
+def _start_scan_watchdog() -> None:
+    """P2-80: flag (and re-run, with a token) a scan slot that didn't run (api/scan_watchdog.py)."""
+    try:
+        from api.scan_watchdog import start
+
+        start()
+    except Exception as e:  # best effort; the daily health report still catches missed slots
+        log.warning("scan watchdog failed to start: %s", type(e).__name__)
+
+
+def _start_ops_jobs() -> None:
+    """Live check notices, nightly ops note, weekly recap/business emails, daily account mail (api/ops_jobs.py)."""
+    try:
+        from api.ops_jobs import start
+
+        start()
+    except Exception as e:  # best effort; nothing user-facing depends on it
+        log.warning("ops jobs failed to start: %s", type(e).__name__)
+
+
 def _module_app():
     """Module-level app for `uvicorn api.main:app` (settings from the environment).
     Importing never raises, so tests can import create_app without the secret."""
@@ -335,11 +462,21 @@ def _module_app():
     except RuntimeError as e:
         log.error("HSF API not started: %s", e)
         return _failing_app(f"HSF API not started: {e}")
+    # One stuck query mustn't hold a request thread forever (db/engine.py). Jobs keep no limit.
+    os.environ.setdefault("HSF_DB_STATEMENT_TIMEOUT_MS", "30000")
     from api.monitoring import init_api_monitoring
 
     init_api_monitoring()
     _warm_caches()
     _start_realtime_alerts()
+    _register_telegram_webhook()
+    _start_scan_watchdog()
+    _start_ops_jobs()
+    _start_day_trader_keep_warm()
+    if os.getenv("BILLING_MODE", "external").strip().lower() == "embedded":
+        from billing_service.main import start_reconciliation_worker
+
+        start_reconciliation_worker()
     return app
 
 

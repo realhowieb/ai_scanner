@@ -1,24 +1,32 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
+import { alertRules } from "@/api/userData";
 import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
-import { Card, Empty, ErrorLine, ErrorState, Freshness, Locked, Pill, Skeleton } from "@/components/ui";
+import { SectionNav } from "@/components/SectionNav";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
-import { SymbolEvidence } from "./OutcomeEvidence";
+import { stateHorizon } from "@/lib/researchTime";
+
+import { SnapshotTime } from "./SnapshotTime";
+import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
 import { PriceChart, type ChartEvent } from "./PriceChart";
 import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { ShareStockButton } from "./ShareStock";
+import { SmartAlerts } from "./SmartAlerts";
+import { StockFilings, StockNews } from "./StockNews";
 
 type Stock = Schemas["StockDetail"];
 
@@ -84,27 +92,113 @@ function DecisionSnapshot({ s }: { s: Stock }) {
   );
 }
 
-function Historical({ s }: { s: Stock }) {
+/** Price facts from the cached daily bars, for names the latest scan didn't rank. */
+export function barFacts(bars: Stock["bars"]) {
+  const last = bars.at(-1);
+  const prev = bars.at(-2);
+  if (!last) return null;
+  const dayChange = prev && prev.close ? ((last.close - prev.close) / prev.close) * 100 : null;
+  const sma50 = last.sma50 ?? (bars.length >= 50 ? bars.slice(-50).reduce((a, b) => a + b.close, 0) / 50 : null);
+  const vs50 = sma50 ? ((last.close - sma50) / sma50) * 100 : null;
+  const high = Math.max(...bars.map((b) => b.high ?? b.close));
+  const fromHigh = Number.isFinite(high) && high > 0 ? ((last.close - high) / high) * 100 : null;
+  return { dayChange, vs50, fromHigh, sessions: bars.length };
+}
+
+function earningsText(days: number | null | undefined): string {
+  if (days === null || days === undefined || days < 0) return "None on the HSF calendar";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
+
+const signed = (v: number | null) => (v === null || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+const tone = (v: number | null) => (v === null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
+
+/** One tap: a "New HSF setup" smart alert on this ticker, so the user hears when it gets ranked. */
+function RankedAlertButton({ ticker, onAdded }: { ticker: string; onAdded: () => void }) {
+  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
+  const act = useAction();
+  const [done, setDone] = useState(false);
+  const sym = ticker.toUpperCase();
+  const has = done || (rules.data?.rules ?? []).some((r) => r.rule_type === "SETUP_APPEARED" && r.ticker === sym);
+  if (rules.error || !rules.data) return null;
+  if (has) return <p className="cap" role="status">You&apos;ll get an alert when {sym} becomes a ranked setup. Manage it on <Link href="/alerts">Alerts</Link>.</p>;
+  if (rules.data.used >= rules.data.limit) return <p className="cap">All your alerts are in use. Free one on <Link href="/alerts">Alerts</Link> to get told when {sym} gets ranked.</p>;
+  const add = () => void act.run(async () => {
+    await alertRules.create({ rule_type: "SETUP_APPEARED", ticker: sym, enabled: true, delivery_channels: ["in_app"] });
+    setDone(true);
+    rules.reload();
+    onAdded();
+    return true;
+  });
+  return (
+    <>
+      <button type="button" className="btn" onClick={add} disabled={act.busy}>{act.busy ? "Adding…" : `Alert me if ${sym} gets ranked`}</button>
+      <ErrorLine error={act.error} />
+    </>
+  );
+}
+
+/** For names the latest scan didn't rank: what we know from price, instead of empty HSF fields. */
+function UnrankedSnapshot({ s, onAlert }: { s: Stock; onAlert: () => void }) {
+  const f = barFacts(s.bars);
+  const highLabel = f && f.sessions >= 100 ? "From 6-month high" : f ? `From ${f.sessions}-day high` : "";
+  const why = s.in_latest_scan
+    ? `${s.ticker} was scanned at ${s.scan_at ? etTime(s.scan_at) : "the latest scan"} but didn't qualify as an HSF setup.`
+    : `${s.ticker} wasn't among the ranked setups in the latest market scan${s.scan_at ? ` (${etTime(s.scan_at)})` : ""}.`;
+  const lastReading = s.from_history && s.hsf_score != null
+    ? ` Its last recorded HSF reading was ${s.hsf_score}${s.status ? ` (${s.status[0]}${s.status.slice(1).toLowerCase()})` : ""}.`
+    : s.hsf_score == null ? " HSF has no recorded score for it." : "";
+  return (
+    <Card title="Not in today's ranked setups" id="snapshot" className="snapshot-card unranked-card">
+      <p className="body-sm">{why}{lastReading} HSF ranks a stock when a setup like a breakout, gap or golden cross shows up.</p>
+      {f && (
+        <div className="tiles snapshot-tiles">
+          <div className="tile"><span className="cap">Last session</span><p className={`tile-value small mono ${tone(f.dayChange)}`}>{signed(f.dayChange)}</p></div>
+          <div className="tile"><span className="cap">vs 50-day average</span><p className={`tile-value small mono ${tone(f.vs50)}`}>{signed(f.vs50)}</p></div>
+          <div className="tile"><span className="cap">{highLabel}</span><p className="tile-value small mono">{signed(f.fromHigh)}</p></div>
+          <div className="tile"><span className="cap">Next earnings</span><p className="tile-value small">{earningsText(s.earnings_days)}</p></div>
+        </div>
+      )}
+      <div className="row-actions"><RankedAlertButton ticker={s.ticker} onAdded={onAlert} /></div>
+    </Card>
+  );
+}
+
+function Historical({ s, ranked }: { s: Stock; ranked: boolean }) {
   if (s.historical_locked) {
-    return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, and this ticker&apos;s own record.</Locked>;
+    return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, how similar past setups moved over 1, 3 and 5 days, and this ticker&apos;s own record.</Locked>;
   }
   const ctx = s.historical_context as { bucket?: string; positive_rate?: number; n?: number; confidence?: string; sufficient?: boolean } | null | undefined;
   const sum = s.history_summary as { observations?: number; matured?: number; positive?: number } | null | undefined;
   const coh = s.outcome_cohort as { status?: string; score_band?: string; horizon?: string; comparable?: number; follow_through_rate?: number | null; evidence_strength?: string } | null | undefined;
   return (
-    <div className="stack-sm">
-      <SymbolEvidence ticker={s.ticker} />
-      {!ctx && !sum && !coh ? null : <p className="cap">Descriptive research on saved scans. Not a forecast and not evidence that a setup will work.</p>}
-      {ctx && (ctx.sufficient && ctx.positive_rate !== undefined ? (
-        <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% of past readings reached +4% within 5 days (n={ctx.n}, {String(ctx.confidence || "").toLowerCase()} confidence).</p>
-      ) : (
-        <p className="body-sm">HSF {ctx.bucket}: still building history{ctx.n ? ` (n=${ctx.n})` : ""}.</p>
-      ))}
-      {sum && !!sum.observations && (
-        <p className="body-sm">This ticker: {sum.observations} earlier HSF observation{sum.observations === 1 ? "" : "s"}, {sum.matured} matured, {sum.positive} positive (observations, not trades).</p>
-      )}
-      {coh && coh.follow_through_rate !== null && coh.follow_through_rate !== undefined && (
-        <p className="body-sm">Similar states ({coh.status}, HSF {coh.score_band}, {coh.horizon}): {coh.comparable} observations, {Math.round(coh.follow_through_rate * 100)}% persisted or strengthened ({String(coh.evidence_strength || "early").toLowerCase()} evidence).</p>
+    <div className="stack historical-evidence">
+      <section aria-label="Ticker signal history" className="stack-sm">
+        <h3 className="strong">Ticker signal history</h3>
+        <SymbolEvidence ticker={s.ticker} />
+        <p className="cap">Signals group saved readings into one record per ticker per entry day. They can differ from the individual observation counts below.</p>
+      </section>
+      {sum && sum.observations != null && <section aria-label="Saved ticker observations" className="stack-sm">
+        <h3 className="strong">Saved ticker observations</h3>
+        <p className="body-sm">{s.ticker}: {sum.observations} saved scan observations · {sum.matured ?? "Unavailable"} matured · {sum.positive ?? "Unavailable"} reached +4% within 5 trading days.</p>
+        <p className="cap">Individual saved readings, including multiple readings on a day. Counts come from this ticker’s stored history, which can cover a different period from the grouped signal record. A pending reading is not a negative outcome.</p>
+      </section>}
+      {ctx && <section aria-label="Price outcomes by score range" className="stack-sm">
+        <h3 className="strong">Price outcomes by score range</h3>
+        {ctx.sufficient && ctx.positive_rate != null ? <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% reached +4% within 5 trading days · {ctx.n ?? "Unavailable"} matured observations across tickers.</p>
+          : <p className="body-sm">HSF {ctx.bucket}: still building history · {ctx.n ?? "Unavailable"} matured observations.</p>}
+        <p className="cap">Measures the largest price rise over 5 trading days; a 5-day return is used when that rise is unavailable. This is not a realized trading win rate.{ctx.confidence ? ` Sample coverage: ${String(ctx.confidence).toLowerCase().replace(/\s*confidence$/, "")}.` : ""}</p>
+      </section>}
+      {coh && coh.follow_through_rate != null && <section aria-label="Setup persistence" className="stack-sm">
+        <h3 className="strong">Setup persistence</h3>
+        <p className="body-sm">{Math.round(coh.follow_through_rate * 100)}% persisted or strengthened · {coh.comparable ?? "Unavailable"} comparable observations with {coh.status} status and HSF {coh.score_band}.</p>
+        <p className="cap">Compared with {stateHorizon(coh.horizon)}. This measures HSF state, not price return. Elapsed hours include weekends and holidays.{coh.evidence_strength ? ` Sample coverage: ${String(coh.evidence_strength).toLowerCase()}; this describes sample size, not predictive reliability.` : ""}</p>
+      </section>}
+      <p className="cap">These records use different units, cohorts and horizons. They are descriptive research, not forecasts or evidence that this setup will work.</p>
+      {ranked && s.hsf_score != null && Number.isFinite(s.hsf_score) && (
+        <SimilarSetups score={s.hsf_score} setup={s.primary_setup} setupName={s.primary_setup ? setupLabel(s.primary_setup) : undefined} />
       )}
     </div>
   );
@@ -190,6 +284,10 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
   const comps = Object.entries(s.score_components || {}).filter(([, v]) => Number.isFinite(v));
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
   const noScore = s.hsf_score === null || s.hsf_score === undefined;
+  const lastBar = s.bars.at(-1);
+  const ranked = s.in_latest_scan && s.has_setup;
+  const [rulesVersion, setRulesVersion] = useState(0);
+  const alertAdded = () => { setRulesVersion((v) => v + 1); onChanged?.(); };
 
   return (
     <div className="stack">
@@ -207,29 +305,25 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
               <span className={`mono ${(s.change_pct ?? 0) > 0 ? "up" : (s.change_pct ?? 0) < 0 ? "down" : "cap"}`}>{pct(s.change_pct)}</span>
               <span className="cap">{s.from_history ? "from the last recorded observation" : s.scan_at ? `at the ${etTime(s.scan_at)} scan` : ""}, not a live quote</span>
             </div>
-          ) : <p className="cap">No price from the scans.</p>}
+          ) : lastBar ? <div className="quote"><span className="mono big">{price(lastBar.close)}</span><span className="cap">Daily close through {shortDate(s.bars_as_of ?? lastBar.date)} · not a live quote; no scan price available.</span></div> : <p className="cap">No price from the scans.</p>}
         </div>
         <div className="row-actions">
           <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged}
             label={s.watchlists.length ? `Watch ${s.ticker} elsewhere` : `Watch ${s.ticker}`} />
           <PriceAlertButton ticker={s.ticker} at={s.price} label={s.price != null ? `Alert near ${price(s.price)}` : "Set price alert"}
             note={s.price != null ? `Last scan price ${price(s.price)}${s.scan_at ? ` at ${etTime(s.scan_at)}` : ""}, not a live quote.` : undefined} onCreated={onChanged} />
+          <ShareStockButton ticker={s.ticker} />
         </div>
       </section>
 
-      {!s.in_latest_scan && (
-        <p className="banner" role="status">
-          {s.ticker} wasn&apos;t in the latest market scan{s.scan_at ? ` (${etTime(s.scan_at)})` : ""}.
-          {s.from_history ? " The score below is from its last recorded HSF observation." : noScore ? " HSF has no recorded score for it." : ""}
-        </p>
-      )}
-      {s.in_latest_scan && !s.has_setup && <p className="notice" role="status">Scanned, but it didn&apos;t qualify as an HSF setup in the latest scan.</p>}
+      <SectionNav label={`${s.ticker} sections`} items={[["snapshot", "Overview"], ["price", "Chart"], ["score", "HSF Score"], ["signals", "Signals"],
+        ["risks", "Risks"], ["hist", "History"], ["plan", "Trade plan"], ["ai", "AI note"], ["news", "News"], ["filings", "Filings"]]} />
 
-      <DecisionSnapshot s={s} />
+      {ranked ? <DecisionSnapshot s={s} /> : <UnrankedSnapshot s={s} onAlert={alertAdded} />}
 
       <div className="split stock-split">
         <div className="col-main">
-          <Card title="Price" id="price" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
+          <Card title="Price" id="price" source="data" className="price-card" aside={s.bars_as_of ? `Daily bars through ${shortDate(s.bars_as_of)}` : undefined}>
             {s.bars.length >= 2 ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} volumeFeed={s.volume_feed} /> : <Empty title="No price history cached for this ticker.">Charts appear once daily bars are available for this ticker.</Empty>}
           </Card>
           {/* The first reason is already the snapshot's "Main reason". */}
@@ -238,21 +332,23 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
               <List items={s.reasons.slice(1)} empty="" />
             </Card>
           )}
-          <div className="grid2">
-            <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No specific risks flagged." /></Card>
+          {ranked && <div className="grid2">
+            <Card title="Risks" id="risks" className="risks-card"><List items={s.risks} empty="No risk details returned by this scan. This is not an all-clear." /></Card>
             <Card title="What to watch" id="watch" className="watch-card"><List items={s.watch_next} empty="Nothing specific to watch yet." /></Card>
-          </div>
-          <Card title="Historical context" id="hist"><Historical s={s} /></Card>
+          </div>}
+          <Card title="Historical context" id="hist"><Historical s={s} ranked={ranked} /></Card>
           {s.in_latest_scan && s.has_setup && (
             <Card title="Trade plan" id="plan">
               {pro ? <TradePlan s={s} /> : <Locked title="Trade plans are part of Pro" plan="pro">Entry, stop, targets and position size from your account size and risk.</Locked>}
             </Card>
           )}
-          {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai"><AINote s={s} /></Card>}
+          {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai" source="ai"><AINote s={s} /></Card>}
+          <StockNews ticker={s.ticker} />
+          <StockFilings ticker={s.ticker} />
         </div>
 
         <aside className="col-side">
-          <Card title="HSF Score" id="score" className="score-card" aside={s.scan_at ? <Freshness at={s.scan_at} /> : undefined}>
+          <Card title="HSF Score" id="score" source="ranking" className="score-card" aside={s.scan_at ? <SnapshotTime at={s.scan_at} archived={s.from_history} /> : undefined}>
             {noScore ? <Empty title="No HSF Score">It needs to appear in a scan first.</Empty> : (
               <>
                 <div className="score-ring" style={{ ["--p" as string]: `${s.hsf_score}%` }}>
@@ -267,8 +363,10 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             )}
           </Card>
 
+          <ScoreHistory ticker={s.ticker} />
+
           {comps.length > 0 && (
-            <Card title="Score components" id="comps">
+            <Card title="Score components" id="comps" source="ranking">
               <ul className="comps">
                 {comps.map(([k, v]) => (
                   <li key={k}><span className="cap">{label(k)}</span>
@@ -279,23 +377,24 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             </Card>
           )}
 
-          <Card title="Signals" id="signals">
+          {(ranked || s.signals.length > 0) && <Card title="Signals" id="signals">
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
-              <div><dt>PreBreakout</dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
+              <div><dt>PreBreakout <span className="cap">(model probability)</span></dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
             </dl>
-          </Card>
+          </Card>}
 
           <Card title="Your lists and alerts" id="mine">
             {s.watchlists.length ? <div className="chips">{s.watchlists.map((w) => <Link key={w.id} href={`/watchlists?id=${w.id}`} className="pill">{w.name}</Link>)}</div> : <p className="cap">Not on your watchlists.</p>}
             {s.alerts.length ? (
               <ul className="bullets">{s.alerts.map((a) => <li key={a.id}>{describeAlert(a)}{a.enabled ? "" : " (off)"}</li>)}</ul>
             ) : <p className="cap">No alerts on {s.ticker}.</p>}
+            <Link href={`/stocks/compare?symbols=${encodeURIComponent(s.ticker)}`} className="cap">Compare {s.ticker} with other stocks →</Link>
           </Card>
 
-          <ScoreHistory ticker={s.ticker} />
+          <SmartAlerts key={rulesVersion} ticker={s.ticker} onChanged={onChanged} folded />
         </aside>
       </div>
     </div>

@@ -4,20 +4,21 @@
 // API, stored encrypted and never sent back), place whole-share market buys after an
 // explicit confirmation, and see positions and the order feed. No real money moves;
 // orders are imported into the Journal.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import { api, unwrap } from "@/api/client";
+import { ApiError, api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, RefreshStatus, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
+import { PaperOrderTracker, usePaperTracking } from "@/features/PaperOrderTracker";
 
 type Status = Schemas["PaperStatus"];
 type Position = { symbol?: string; qty?: string | number; avg_entry_price?: string | number; current_price?: string | number;
@@ -111,6 +112,9 @@ function AccountCard({ s, onDisconnected }: { s: Status; onDisconnected: () => v
 }
 
 function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => void }) {
+  const { me } = useSession();
+  const tracking = usePaperTracking(me?.email);
+  const confirmation = useRef<{ slot: string; key: string } | null>(null);
   const [ticker, setTicker] = useState(initial);
   const [qty, setQty] = useState("1");
   const [review, setReview] = useState(false);
@@ -123,11 +127,31 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
     unwrap(api.GET("/v1/stocks/{ticker}", { params: { path: { ticker: t } }, signal })));
   const last = quote.data?.price ?? null;
   const send = async () => {
+    const slot = `hsf-paper-confirmation:${me?.email}:${t}:${q}`;
+    let key = confirmation.current?.slot === slot ? confirmation.current.key : null;
+    try { key = key || sessionStorage.getItem(slot); } catch { /* mounted retries still use the ref */ }
+    key = key || crypto.randomUUID();
+    confirmation.current = { slot, key };
+    // Persist before sending: a lost response or reload must reuse this ID.
+    try { sessionStorage.setItem(slot, key); } catch { /* blocked storage */ }
+    const clear = () => {
+      confirmation.current = null;
+      try { sessionStorage.removeItem(slot); } catch { /* blocked storage */ }
+    };
+    tracking.save(key);
     const ok = await act.run(async () => {
-      setPlaced(await unwrap(api.POST("/v1/paper/orders", { body: { ticker: t, qty: q, confirm: true } })));
+      try {
+        setPlaced(await unwrap(api.POST("/v1/paper/orders", { body: { ticker: t, qty: q, confirm: true, idempotency_key: key } })));
+      } catch (e) {
+        if (e instanceof ApiError && [400, 409, 422].includes(e.status)) { clear(); tracking.save(null); }
+        else tracking.save(key);
+        throw e;
+      }
       return true;
     });
     if (ok) {
+      tracking.save(key);
+      clear();
       setReview(false);
       onPlaced();
     }
@@ -143,8 +167,10 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
         </label>
         <button type="submit" className="btn btn-primary" disabled={!valid}>Review order</button>
       </form>
-      <p className="cap">Whole-share market buy in your Alpaca paper account. No real money. The order is added to your <Link href="/journal">Journal</Link> with the trade plan&apos;s stop and target.</p>
+      <p className="cap">Whole-share market buy in your Alpaca paper account. No real money. Actual fills are added to your <Link href="/journal">Journal</Link>. If a request is interrupted, confirm the same ticker and share count again to check it safely.</p>
       {placed && <p className="notice" role="status">Sent: buy {placed.qty} {placed.ticker} ({placed.status}{n(placed.filled_avg_price) !== null ? `, filled at ${price(n(placed.filled_avg_price))}` : ""}).</p>}
+      {placed && !placed.journal_synced && <p className="cap">Journal sync pending. Refresh Journal or paper activity to check fills and retry the import.</p>}
+      {tracking.key && !act.busy && <PaperOrderTracker key={tracking.key} confirmationId={tracking.key} />}
       <Dialog open={review} title="Confirm paper order" onClose={() => { setReview(false); act.clear(); }}>
         <div className="stack-sm">
           <dl className="kv">
@@ -167,21 +193,26 @@ function OrderCard({ initial, onPlaced }: { initial: string; onPlaced: () => voi
 }
 
 function Activity({ tick }: { tick: number }) {
-  const act = useApi(`paper-activity:${tick}`, (signal) => unwrap(api.GET("/v1/paper/activity", { params: { query: { limit: 25 } }, signal })));
+  const act = useApi("paper-activity", (signal) => unwrap(api.GET("/v1/paper/activity", { params: { query: { limit: 25 } }, signal })), tick);
   if (act.error && !act.data) return <ErrorState error={act.error} onRetry={act.reload} what="your paper positions" />;
   if (!act.data) return <Skeleton rows={6} label="Loading positions and orders" />;
   const positions = act.data.positions as Position[];
   const orders = act.data.orders as Order[];
   return (
     <>
+      <RefreshStatus updatedAt={act.updatedAt} refreshing={act.refreshing} error={act.error} onRetry={act.reload} />
+      <div className="row-actions"><button type="button" className="btn" onClick={act.reload} disabled={act.loading || act.refreshing}>Refresh activity</button></div>
       <Card title="Paper activity" id="activity-summary">
         <div className="metric-strip" aria-label="Paper activity summary">
-          <span><strong>{metric(act.data.summary?.positions, positions.length)}</strong> positions</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : metric(act.data.summary?.positions, positions.length)}</strong> positions</span>
           <span><strong>{metric(act.data.summary?.orders, orders.length)}</strong> orders</span>
-          <span><strong>{money(act.data.summary?.market_value)}</strong> value</span>
-          <span><strong>{money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : money(act.data.summary?.market_value)}</strong> value</span>
+          <span><strong>{act.data.positions_available === false ? "Unavailable" : money(act.data.summary?.unrealized_pl)}</strong> open P/L</span>
         </div>
       </Card>
+      {positions.length === 0 && orders.length === 0 && act.data.positions_available !== false ? <Card title="No paper activity yet" id="paper-empty">
+        <p>No open paper positions. No paper orders yet.</p><p className="cap">Start with a stock in the <Link href="/scanner">Scanner</Link>, review its evidence, then use the paper order form to practice with simulated money.</p>
+      </Card> : <>
       <Card title="Positions" id="positions">
         {act.data.positions_available === false ? <p className="cap">Alpaca didn&apos;t return positions just now. <button type="button" className="link-btn" onClick={act.reload}>Try again</button></p>
           : positions.length === 0 ? <Empty title="No open paper positions." />
@@ -231,7 +262,7 @@ function Activity({ tick }: { tick: number }) {
             </table>
           </div>
         )}
-      </Card>
+      </Card></>}
     </>
   );
 }

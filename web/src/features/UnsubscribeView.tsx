@@ -3,7 +3,7 @@
 // The link in every HSF email (/unsubscribe?t=…&k=…). Works signed out: the token names
 // the account. Opening the page changes nothing (email scanners open links); a person
 // has to press a button.
-import Link from "next/link";
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -13,8 +13,11 @@ import { ErrorLine, ErrorState, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 
-type Kind = "digest" | "evening" | "alerts";
-const LABELS: Record<Kind, string> = { digest: "Morning market digest", evening: "Evening market wrap", alerts: "Alert emails" };
+type Kind = "digest" | "evening" | "alerts" | "weekly" | "tips";
+const LABELS: Record<Kind, string> = {
+  digest: "Morning market digest", evening: "Evening market wrap", alerts: "Alert emails",
+  weekly: "Weekly recap", tips: "Tips and reminders",
+};
 const KINDS = Object.keys(LABELS) as Kind[];
 
 export function UnsubscribeView() {

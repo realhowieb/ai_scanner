@@ -40,8 +40,10 @@ def _ensure_schema(conn) -> None:
         ("target_price", "DOUBLE PRECISION"),
         ("breakout_score", "DOUBLE PRECISION"),
         ("ai_confidence", "DOUBLE PRECISION"),
+        ("hsf_score", "DOUBLE PRECISION"),
     ):
         cur.execute(f"ALTER TABLE user_trades ADD COLUMN IF NOT EXISTS {col} {ddl}")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_trades_paper_order ON user_trades (user_id, alpaca_order_id)")
     conn.commit()
     cur.close()
 
@@ -66,6 +68,7 @@ def log_trade(
     target_price: Optional[float] = None,
     breakout_score: Optional[float] = None,
     ai_confidence: Optional[float] = None,
+    hsf_score: Optional[float] = None,
 ) -> None:
     """Record a trade. The keyword fields carry paper-order + provenance data
     (Alpaca order id, plan stop/target, and the scanner score / AI confidence at
@@ -82,17 +85,46 @@ def log_trade(
         """
         INSERT INTO user_trades
             (user_id, ticker, entry_price, shares, source,
-             alpaca_order_id, stop_price, target_price, breakout_score, ai_confidence)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             alpaca_order_id, stop_price, target_price, breakout_score, ai_confidence, hsf_score)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             user_id, (ticker or "").upper(), float(entry_price), int(shares), source,
             (str(alpaca_order_id) if alpaca_order_id else None),
-            _f(stop_price), _f(target_price), _f(breakout_score), _f(ai_confidence),
+            _f(stop_price), _f(target_price), _f(breakout_score), _f(ai_confidence), _f(hsf_score),
         ),
     )
     conn.commit()
     cur.close()
+
+
+def reconcile_paper_fill(user_id: str, order_id: str, ticker: str, price: float, shares: int, context: dict) -> None:
+    """Import/update one actual fill atomically, including retries on other servers.
+
+    A transaction lock avoids imposing a unique index on older journals that may
+    already contain duplicate paper rows. Manual trades and closed flags are kept.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"paper-fill:{user_id}:{order_id}",))
+        cur.execute("SELECT id FROM user_trades WHERE user_id = %s AND alpaca_order_id = %s ORDER BY id LIMIT 1 FOR UPDATE",
+                    (user_id, order_id))
+        existing = cur.fetchone()
+        if existing:
+            trade_id = existing["id"] if isinstance(existing, dict) else existing[0]
+            cur.execute("UPDATE user_trades SET entry_price = %s, shares = %s WHERE id = %s AND user_id = %s AND shares <= %s",
+                        (price, shares, trade_id, user_id, shares))
+        else:
+            cur.execute("""INSERT INTO user_trades
+                (user_id,ticker,entry_price,shares,source,alpaca_order_id,stop_price,target_price,breakout_score,ai_confidence)
+                VALUES (%s,%s,%s,%s,'paper',%s,%s,%s,%s,%s)""",
+                        (user_id, ticker, price, shares, order_id, context.get("stop_price"), context.get("target_price"),
+                         context.get("breakout_score"), context.get("ai_confidence")))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
 
 
 def _row_to_trade(r: Any) -> Dict[str, Any]:
@@ -110,23 +142,39 @@ def _row_to_trade(r: Any) -> Dict[str, Any]:
     }
 
 
-def list_trades(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def list_trades(user_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """User's trades, open first then most recent."""
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
-        FROM user_trades
-        WHERE user_id = %s
-        ORDER BY (closed_at IS NOT NULL), entered_at DESC
-        LIMIT %s
-        """,
-        (user_id, int(limit)),
-    )
-    rows = cur.fetchall()
-    cur.close()
-    return [_row_to_trade(r) for r in rows]
+    try:
+        cur.execute(
+            """
+            SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
+            FROM user_trades
+            WHERE user_id = %s
+            ORDER BY (closed_at IS NOT NULL), entered_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (user_id, int(limit), int(offset)),
+        )
+        return [_row_to_trade(r) for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_trade(user_id: str, trade_id: int) -> Optional[Dict[str, Any]]:
+    """Look up an owned trade directly, independent of journal page limits."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at
+            FROM user_trades WHERE user_id = %s AND id = %s""", (user_id, int(trade_id)))
+        row = cur.fetchone()
+        return None if row is None else _row_to_trade(row)
+    finally:
+        cur.close()
+        conn.close()
 
 
 def close_trade(trade_id: int, user_id: str, exit_price: float) -> None:
@@ -151,6 +199,30 @@ def delete_trade(trade_id: int, user_id: str) -> None:
     )
     conn.commit()
     cur.close()
+
+
+def closed_trades(user_id: str, limit: int = 2000) -> List[Dict[str, Any]]:
+    """Closed trades oldest close first, with the score recorded at entry (journal insights)."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT id, ticker, entry_price, shares, source, entered_at, exit_price, closed_at,
+                   breakout_score, hsf_score
+            FROM user_trades
+            WHERE user_id = %s AND closed_at IS NOT NULL AND exit_price IS NOT NULL
+            ORDER BY closed_at, id
+            LIMIT %s
+            """,
+            (user_id, int(limit)),
+        )
+        keys = ("id", "ticker", "entry_price", "shares", "source", "entered_at", "exit_price", "closed_at",
+                "breakout_score", "hsf_score")
+        return [dict(r) if isinstance(r, dict) else dict(zip(keys, r)) for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
 
 
 def journal_stats(user_id: str) -> Optional[Dict[str, Any]]:

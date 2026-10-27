@@ -166,6 +166,27 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(col["duplicates"]["exact_same_ticker_same_instant"], 1)
         self.assertEqual(col["late_frozen_observations"], 1)
 
+    def test_partial_snapshot_size_depends_on_freeze_source(self):
+        brief = [opp(i, f"B{i}", "2026-10-01T16:40:00") for i in range(5)]
+        scanner = [{**opp(10 + i, f"S{i}", "2026-10-02T16:40:00"), "signal_type": mr.SCANNER_SIGNAL_TYPE}
+                   for i in range(mr.SCANNER_TOP_N_PER_SNAPSHOT)]
+        short = [{**opp(50 + i, f"P{i}", "2026-10-05T16:40:00"), "signal_type": mr.SCANNER_SIGNAL_TYPE}
+                 for i in range(5)]
+        col = mr.build_report(brief + scanner + short, [], now=NOW)["collection"]
+        self.assertEqual(col["partial_snapshots"], 1)  # only the 5-row Scanner snapshot
+        # Only the 3 regular-hours slots save a snapshot (EDT: 13:35, 16:35, 19:35 UTC).
+        self.assertEqual(col["expected_observations_per_trading_day"], 3 * mr.SCANNER_TOP_N_PER_SNAPSHOT)
+
+    def test_missing_windows_count_only_regular_hours_slots(self):
+        rows = [opp(1, "AAA", "2026-10-01T13:40:00"), opp(2, "BBB", "2026-10-01T16:40:00"),
+                opp(3, "CCC", "2026-10-01T19:40:00")]
+        col = mr.build_report(rows, [], now=ts("2026-10-02T00:00:00"))["collection"]
+        msw = col["missing_scan_windows"]
+        self.assertEqual((msw["count"], msw["of"]), (0, 3))
+        for slot in ("12:35", "20:35", "21:35"):   # pre-market / after-hours: no snapshot expected
+            self.assertEqual(msw["per_slot"][slot]["expected"], 0)
+        self.assertEqual(msw["per_slot"]["16:35"], {"expected": 1, "with_snapshot": 1})
+
     def test_lookahead_and_recorded_before_timestamp_are_pit_violations(self):
         row = {**opp(1, "AAA", "2026-10-01T16:40:00"), "created_at": ts("2026-10-01T10:00:00")}
         rep = mr.build_report([row], [], now=NOW)
@@ -178,6 +199,20 @@ class ReportTests(unittest.TestCase):
         fi = mr.build_report(rows, scans, now=NOW)["feature_integrity"]
         self.assertEqual(fi["recent_scan_join_rate"], 0.5)
         self.assertEqual(fi["scan_join_status"]["ONLY_LATER_SCANS"], 1)
+
+    def test_scan_id_link_and_model_version_from_the_scan_inference(self):
+        a = opp(1, "AAA", "2026-10-06T16:40:00")
+        a["raw_signal"]["source_scan_id"] = ts("2026-10-06T16:35:00").isoformat()
+        a["raw_signal"]["models"] = {"prebreakout": {"status": "captured",
+                                                     "loaded_artifact": {"version": "prebreakout-xgb-v16"}}}
+        b = opp(2, "BBB", "2026-10-06T16:40:00")
+        b["raw_signal"]["models_prebreakout_version"] = "prebreakout-xgb-v16"   # slim readiness projection
+        c = opp(3, "CCC", "2026-10-06T16:40:00")
+        c["raw_signal"]["models"] = {"prebreakout": {"status": "unavailable", "reason": "model_unavailable"}}
+        scans = [scan("AAA", "2026-10-06T16:35:00", written="2026-10-06T16:40:04")]   # own scan, written after
+        fi = mr.build_report([a, b, c], scans, now=NOW)["feature_integrity"]
+        self.assertEqual(fi["scan_join_status"].get("MATCHED"), 1)
+        self.assertAlmostEqual(fi["recent_model_version_rate"], round(2 / 3, 4))
 
     def test_api_view_has_no_tickers_or_row_ids(self):
         rows, scans = synthetic(days=20)
@@ -331,6 +366,17 @@ class MlReadinessApiTests(ApiTestCase):
         item = spec["paths"]["/v1/ml/readiness"]
         self.assertEqual(set(item), {"get"})
         self.assertTrue(item["get"]["x-internal"])
+
+
+class SnapshotSlotTests(unittest.TestCase):
+    def hhmm(self, d):
+        return [s.strftime("%H:%M") for s in mr.mc.snapshot_scan_slots(d)]
+
+    def test_regular_hours_slots_follow_dst_and_early_closes(self):
+        self.assertEqual(self.hhmm(dt.date(2026, 10, 16)), ["13:35", "16:35", "19:35"])   # EDT
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 9)), ["16:35", "19:35", "20:35"])    # EST
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 27)), ["16:35"])                     # 13:00 ET close
+        self.assertEqual(self.hhmm(dt.date(2026, 10, 17)), [])                            # Saturday
 
 
 if __name__ == "__main__":

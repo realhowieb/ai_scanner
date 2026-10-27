@@ -47,10 +47,11 @@ class GuardrailRuleTests(unittest.TestCase):
 
     def test_every_feature_in_the_code_is_classified(self):
         used = set()
-        for path in (ROOT / "ui").glob("*.py"):
-            used |= set(re.findall(r'feature="([a-z_]+)"', path.read_text()))
-        exempt = used & g.EXEMPT_FEATURES
-        self.assertEqual(exempt, {"nl_screener", "nl_scan_setup", "admin_triage"})   # nothing else opts out
+        for folder in ("ui", "api"):
+            for path in (ROOT / folder).glob("*.py"):
+                used |= set(re.findall(r'feature="([a-z_]+)"', path.read_text()))
+        # The exempt features lived in the retired Streamlit app; nothing live opts out now.
+        self.assertEqual(used & g.EXEMPT_FEATURES, set())
 
 
 class ScrubTests(unittest.TestCase):
@@ -196,23 +197,7 @@ class SummaryInputTests(unittest.TestCase):
 
 
 class LabellingTests(unittest.TestCase):
-    def test_template_notes_are_not_labelled_ai(self):
-        results = (ROOT / "ui" / "results.py").read_text()
-        self.assertNotIn('st.subheader("AI Notes")', results)
-        self.assertEqual(results.count('st.subheader("📝 Setup notes")'), 4)
-        self.assertEqual(results.count("not AI-generated"), 4)
-        self.assertNotIn("AI notes", results)
 
-    def test_template_note_text_never_claims_ai(self):
-        from ui.ai_notes import generate_ai_note
-
-        rows = [pd.Series({"Ticker": "MXL", "BreakoutScore": 52.3, "GapPct": 2.1, "Trend20D%": 47.7,
-                           "VolRel20": 1.36, "DollarVol20": 9.5e6, "Volatility20D%": 5.8}),
-                pd.Series({"Ticker": "X", "Last": 10.0, "Change": 0.1, "% Change": 1.0}),
-                pd.Series({"Ticker": "EMPTY"}), None]
-        for row in rows:
-            note = generate_ai_note(row)
-            self.assertNotRegex(note, r"\bAI\b", note)
 
     def test_real_ai_surfaces_say_so_and_who_ranks(self):
         summary = (ROOT / "ui" / "ai_summary.py").read_text()
@@ -232,39 +217,8 @@ class LabellingTests(unittest.TestCase):
         self.assertNotIn("generate_ai_note", summary)
         self.assertIn('st.warning(err or "Could not generate summary.")', summary)
 
-    def test_no_copy_claims_ai_calculates_or_ranks_hsf(self):
-        pat = re.compile(r"\b(AI|Claude)\b[^\"'\n]{0,30}\b(ranks|ranked|picks|chooses|selects|calculates|"
-                         r"computes|scores|decides|recommends)\b", re.IGNORECASE)
-        hits = []
-        for path in [*(ROOT / "ui").glob("*.py"), *(ROOT / "pages").glob("*.py"), ROOT / "app.py"]:
-            for i, line in enumerate(path.read_text().splitlines(), 1):
-                if pat.search(line) and not line.lstrip().startswith("#"):
-                    hits.append(f"{path.name}:{i}: {line.strip()[:100]}")
-        self.assertEqual(hits, [])
-
-    def test_screener_examples_are_expressible_filters(self):
-        # The natural-language screener can only set universe/price/volume/gap/session
-        # filters; example chips must not promise sectors or trade types it can't find.
-        src = (ROOT / "ui" / "ai_screener.py").read_text()
-        for promise in ("AI Stocks", "Swing Trades", "swing trade setups"):
-            self.assertNotIn(promise, src)
-
-    def test_three_step_scanner_is_not_called_an_ai_scanner(self):
-        self.assertNotIn("3-Step AI Scanner", (ROOT / "ui" / "three_step_scanner.py").read_text())
-
 
 class PackagingAndTierTests(unittest.TestCase):
-    def test_premium_ai_claim_names_only_real_ai_features(self):
-        from ui import pricing
-
-        label = next(lbl for lbl, flag in pricing.ROWS if flag == "can_ai_notes")
-        self.assertIn("AI scan summaries and results chat", label)
-        self.assertIn("setup notes", label)
-        self.assertNotIn("AI setup notes", label)
-        self.assertNotIn("AI setup notes", pricing.benefits_markdown() + pricing.plans_html())
-        billing = (ROOT / "pages" / "billing.py").read_text()
-        self.assertNotIn("AI research", billing)
-        self.assertIn("AI scan summaries and chat", billing)
 
     def test_premium_still_has_its_distinct_value(self):
         from ui import pricing

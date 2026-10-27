@@ -41,26 +41,6 @@ class WatchlistHardeningSourceTests(unittest.TestCase):
         self.assertEqual(normalize_watchlist_name("   "), "")
         self.assertLessEqual(len(normalize_watchlist_name("X" * 200)), 80)
 
-    def test_management_ui_wires_default_duplicate_notes_and_bulk_actions(self):
-        source = (ROOT / "ui" / "watchlists.py").read_text()
-
-        self.assertIn("Make this my default watchlist", source)
-        self.assertIn("Set as Default", source)
-        self.assertIn("Duplicate", source)
-        self.assertIn("Copy Selected", source)
-        self.assertIn("Move Selected", source)
-        self.assertIn("Remove Selected", source)
-        self.assertIn("Ticker notes", source)
-        self.assertIn("Confirm delete", source)
-
-    def test_result_watchlist_action_uses_centralized_add_path(self):
-        source = (ROOT / "ui" / "result_watchlist.py").read_text()
-
-        self.assertIn("add_tickers_to_watchlist", source)
-        self.assertIn("list_watchlists", source)
-        self.assertIn("get_default_watchlist_id", source)
-        self.assertIn("Destination", source)
-
 
 class DefaultRepairTests(unittest.TestCase):
     def test_default_repair_selects_one_deterministic_default(self):

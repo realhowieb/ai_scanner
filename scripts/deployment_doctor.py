@@ -58,7 +58,6 @@ def run_checks(*, strict_env: bool = False) -> list[CheckResult]:
         _env_any("database-url", ("NEON_DATABASE_URL", "DATABASE_URL"), required=strict_env),
         _env_any("alpaca-key", ("ALPACA_API_KEY_ID",), required=strict_env),
         _env_any("alpaca-secret", ("ALPACA_API_SECRET_KEY",), required=strict_env),
-        _env_any("cookie-password", ("COOKIE_PASSWORD",), required=strict_env),
         _env_any("billing-api-base", ("BILLING_API_BASE",), required=strict_env),
         _env_any("stripe-secret-key", ("STRIPE_SECRET_KEY",), required=strict_env),
         _env_any("stripe-webhook-secret", ("STRIPE_WEBHOOK_SECRET",), required=strict_env),
@@ -71,7 +70,6 @@ def run_checks(*, strict_env: bool = False) -> list[CheckResult]:
         _import_module("scan.engine"),
         _import_module("scheduler.cron_runner"),
         _import_module("db.runs"),
-        _import_module("ui.scans"),
     ]
     return checks
 

@@ -13,6 +13,13 @@ _initialized = False
 _STREAMLIT_COMPONENT_LOGGER = "streamlit.web.server.component_request_handler"
 _COOKIE_COMPONENT_BUILD_PATH = "streamlit_cookies_manager/build"
 
+# Third-party loggers whose ERROR records are expected and already handled by our
+# code. yfinance logs "possibly delisted; no price data found" and quote 404s at
+# ERROR for every unknown or delisted ticker (typos, acquired names, test
+# tickers); the price loader records those as skipped symbols, so they are noise
+# in Sentry. Real exceptions raised from yfinance calls are still reported.
+_IGNORED_LOGGERS = ("yfinance",)
+
 
 def _is_handled_cookie_component_directory_read(event: dict[str, Any]) -> bool:
     """Return whether *event* is Streamlit's harmless bare-component probe.
@@ -49,7 +56,7 @@ def _get_dsn() -> str | None:
         return dsn
     # Streamlit secrets (app context only); guarded — no secrets file in cron.
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
 
         val = st.secrets.get("SENTRY_DSN")  # may raise if no secrets
         return str(val) if val else None
@@ -68,11 +75,18 @@ def init_sentry(component: str = "app") -> bool:
         return False
     try:
         import sentry_sdk
+        from sentry_sdk.integrations.logging import ignore_logger
+
+        for name in _IGNORED_LOGGERS:
+            ignore_logger(name)
 
         sentry_sdk.init(
             dsn=dsn,
             # Errors only — no performance tracing (avoids overhead/cost).
             traces_sample_rate=0.0,
+            send_default_pii=False,
+            include_local_variables=False,
+            max_request_body_size="never",
             environment=os.getenv("SENTRY_ENV", "production"),
             release=os.getenv("SENTRY_RELEASE") or None,
             before_send=_before_send,

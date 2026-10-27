@@ -1,9 +1,9 @@
 import re
 
 import bcrypt
-import streamlit as st
 
 from db.users import load_users, seed_neon_users_from_local, update_neon_user_password
+from utils.st_compat import st
 
 try:  # optional: a mid-redeploy import race must never block sign-in
     from ui.landing import render_signed_out_details, render_signed_out_hero
@@ -346,7 +346,7 @@ def auth_ui():
                     su_agree = st.checkbox("I agree to use this tool for educational/informational purposes only.", key="signup_agree")
                     signup_clicked = st.form_submit_button("Start scanning free")
 
-            with st.expander("What you get with a Free account", expanded=True):
+            with st.expander("What you get with Starter (free)", expanded=True):
                 st.write("- ✔️ The latest full-market ranking, updated through the trading day")
                 st.write("- ✔️ HSF Score (0–100 opportunity ranking) with the evidence behind it")
                 st.write("- ✔️ HSF Score and basic Stock Intelligence for current opportunities")

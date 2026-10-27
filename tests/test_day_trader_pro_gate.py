@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-HAS_ST = importlib.util.find_spec("streamlit") is not None
+HAS_ST = True
 
 SCRIPT = '''
 import runpy, streamlit as st
@@ -44,44 +44,6 @@ class EntitlementTests(unittest.TestCase):
         self.assertFalse(included("can_day_trader", "basic"))
         self.assertTrue(included("can_day_trader", "pro"))
         self.assertIn("Pro adds the live Day Trader monitor", upgrade_message("can_day_trader"))
-
-
-@unittest.skipUnless(HAS_ST, "needs streamlit")
-class PageGateTests(unittest.TestCase):
-    def render(self, state):
-        from streamlit.testing.v1 import AppTest
-
-        at = AppTest.from_string(SCRIPT, default_timeout=60)
-        for k, v in {"username": "u@example.com", **state}.items():
-            at.session_state[k] = v
-        with mock.patch("ui.day_trader.render_day_trader_panel") as panel, \
-             mock.patch("ui.app_runtime._upgrade_button") as upgrade:
-            at.run()
-        self.assertFalse(at.exception, [str(e.value)[:300] for e in at.exception])
-        page_cta = [c for c in upgrade.call_args_list if c.args[2] == "upgrade_to_pro_day_trader"]
-        return at, panel, page_cta
-
-    def test_free_sees_upgrade_note_not_the_monitor(self):
-        at, panel, upgrade = self.render({"tier_key": "basic", "entitlements": _flags("basic")})
-        panel.assert_not_called()
-        self.assertEqual(len(upgrade), 1)
-        self.assertIn("Pro adds the live Day Trader monitor", at.info[0].value)
-
-    def test_paid_tiers_and_admin_get_the_monitor(self):
-        for state in ({"tier_key": "pro", "entitlements": _flags("pro")},
-                      {"tier_key": "premium", "entitlements": _flags("premium")},
-                      {"tier_key": "basic", "is_admin": True, "entitlements": _flags("basic", True)}):
-            _, panel, upgrade = self.render(state)
-            panel.assert_called_once()
-            self.assertEqual(upgrade, [])
-
-    def test_session_from_before_the_flag_falls_back_to_tier(self):
-        old = {k: v for k, v in _flags("pro").items() if k != "can_day_trader"}
-        _, panel, _ = self.render({"tier_key": "pro", "entitlements": old})
-        panel.assert_called_once()
-        old_free = {k: v for k, v in _flags("basic").items() if k != "can_day_trader"}
-        _, panel, _ = self.render({"tier_key": "basic", "entitlements": old_free})
-        panel.assert_not_called()
 
 
 if __name__ == "__main__":

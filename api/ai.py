@@ -166,3 +166,97 @@ def brief_narrative(username: str) -> Dict[str, Any]:
                                                           max_tokens=200, username=username,
                                                           feature="market_brief_narrative"))
     return {"snapshot_time": ts, "text": text}
+
+
+WATCHLIST_NOTE_SYSTEM = (
+    "You write a short morning rundown of one trader's watchlist, from HSF scan facts only. "
+    "In 3-6 plain sentences, say what changed since the previous scan: which stocks gained or lost "
+    "HSF Score or rank, which became or stopped being ranked setups, unusual volume, and earnings coming up. "
+    "Lead with the biggest changes and group quiet names together in one clause. Use ONLY the facts "
+    "provided: do NOT invent prices, news, levels, forecasts or tickers. Describe conditions and what to "
+    "watch; never predict, never tell the reader to buy, sell or hold. No emojis, no headings, no preamble."
+)
+WATCHLIST_NOTE_MAX_SYMBOLS = 40
+
+
+def _fmt(v: Any, nd: int = 0, suffix: str = "") -> Optional[str]:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f:
+        return None
+    return f"{f:.{nd}f}{suffix}"
+
+
+def watchlist_facts(intel: Dict[str, Any], earnings: Dict[str, Dict[str, Any]]) -> str:
+    """One line of facts per symbol from GET /v1/watchlists/{id}/intelligence, biggest
+    score moves first. Empty when the list has no symbols or no scan is available."""
+    items = list(intel.get("items") or [])
+    if not items or not intel.get("scan_available"):
+        return ""
+    items.sort(key=lambda i: -abs(float(i.get("score_change") or 0)))
+    lines = []
+    for i in items[:WATCHLIST_NOTE_MAX_SYMBOLS]:
+        t = str(i.get("ticker") or "")
+        if not i.get("in_latest_scan"):
+            parts = ["not in the latest scan"]
+        elif not i.get("ranked"):
+            parts = ["scanned, not a ranked HSF setup"]
+            if i.get("previous_rank") is not None:
+                parts.append(f"was ranked #{i['previous_rank']} on the previous scan")
+        else:
+            parts = [f"HSF Score {_fmt(i.get('hsf_score'))}"]
+            if i.get("score_change") is not None:
+                parts.append(f"change {float(i['score_change']):+.0f} since previous scan")
+            elif i.get("previous_hsf_score") is None:
+                parts.append("newly ranked this scan")
+            if i.get("rank") is not None:
+                parts.append(f"rank #{i['rank']}")
+            if i.get("setup"):
+                parts.append(f"setup {i['setup']}")
+            if i.get("status"):
+                parts.append(f"status {i['status']}")
+            if i.get("fading"):
+                parts.append("fading")
+        if i.get("price_change_pct") is not None and _fmt(i.get("price_change_pct"), 1) is not None:
+            parts.append(f"price change {float(i['price_change_pct']):+.1f}%")
+        if i.get("rvol") is not None and _fmt(i.get("rvol"), 1) is not None:
+            parts.append(f"relative volume {float(i['rvol']):.1f}x")
+        e = earnings.get(t.upper())
+        if e:
+            days = int(e.get("earnings_days") or 0)
+            parts.append("reports earnings " + ("today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"))
+        lines.append(f"- {t}: " + "; ".join(parts))
+    extra = len(items) - WATCHLIST_NOTE_MAX_SYMBOLS
+    if extra > 0:
+        lines.append(f"- ({extra} more symbols not listed)")
+    return "\n".join(lines)
+
+
+def watchlist_note(username: str, watchlist: Dict[str, Any], entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """Claude's plain-English rundown of what changed on one of your watchlists since the
+    previous market scan. Cached per watchlist and scan, so asking again costs nothing."""
+    import datetime as dt
+
+    from api import alert_rules, watchlist_intel
+
+    intel = watchlist_intel.intelligence(username, watchlist, entitlements)
+    tickers = [str(i.get("ticker") or "") for i in intel.get("items") or []]
+    earnings = alert_rules.earnings_lookup(tickers, dt.datetime.now(dt.timezone.utc)) if tickers else {}
+    earnings = {t: e for t, e in earnings.items()
+                if e.get("earnings_days") is not None and int(e["earnings_days"]) <= 7}
+    facts = watchlist_facts(intel, earnings)
+    as_of = intel.get("last_scan_at")
+    if not facts:
+        return {"snapshot_time": as_of, "text": None}
+    name = str(watchlist.get("name") or "this watchlist")
+
+    def make() -> str:
+        return _ask(system=WATCHLIST_NOTE_SYSTEM,
+                    user=(f"Watchlist \"{name}\". Latest scan {as_of}; previous scan {intel.get('previous_scan_at')}.\n"
+                          f"Facts per symbol:\n{facts}\n\nWrite the rundown."),
+                    max_tokens=350, username=username, feature="watchlist_note")
+
+    key = ("watchlist", username, int(watchlist["id"]), str(as_of), hash(facts))
+    return {"snapshot_time": as_of, "text": _shared(key, make)}

@@ -204,6 +204,49 @@ class EarningsRailTests(unittest.TestCase):
             self.assertEqual(_annotate_earnings(lines), lines)
 
 
+class PreopenDigestTests(unittest.TestCase):
+    """Before the open (the 8:35 ET digest) there is no gap or session change yet."""
+
+    def _pm(self, ticker, *, traded, chg=None, prior=None, last=100.0, prev=99.0):
+        return {"ticker": ticker, "last": last, "previous_close": prev, "chg_pct": chg,
+                "gap_pct": None, "session": "premarket", "traded_today": traded,
+                "prior_session_chg_pct": prior}
+
+    def _compose(self, watch, gappers, preopen=True):
+        with mock.patch("scheduler.morning_digest._track_record_line", return_value=("", "")):
+            return _compose("u@example.com", watch, gappers, [], [], preopen_gappers=preopen)
+
+    def test_watchlist_shows_premarket_and_yesterday_columns(self):
+        html, text = self._compose(
+            [self._pm("NVDA", traded=True, chg=-2.5, prior=1.2, last=215.9, prev=221.49),
+             self._pm("AMT", traded=False, prior=-0.8, last=180.1, prev=179.47)], [])
+        self.assertIn("Pre-mkt %", html)
+        self.assertIn("Yesterday %", html)
+        self.assertNotIn("Gap %", html.split("Top market gappers")[0])
+        self.assertIn("-2.50%", html)
+        self.assertIn("-0.80%", html)
+        self.assertIn("179.47", html)     # no trade today: yesterday's close, not an after-hours print
+        self.assertNotIn("180.1", html)
+        self.assertIn("NVDA: 215.9 (pre-mkt -2.50%, yesterday +1.20%)", text)
+
+    def test_empty_preopen_gappers_say_so(self):
+        html, _ = self._compose([], [])
+        self.assertIn("No S&amp;P 500 or NASDAQ stock is gapping", html)
+
+    def test_preopen_gappers_table(self):
+        html, text = self._compose([], [{"ticker": "MU", "last": 110.0, "chg_pct": 10.0,
+                                         "gap_pct": None, "session": "premarket"}])
+        part = html.split("Top market gappers")[1]
+        self.assertIn("+10.00%", part)
+        self.assertNotIn("Gap %", part)
+        self.assertIn("MU: 110.0 (pre-mkt +10.00%)", text)
+
+    def test_regular_session_layout_unchanged(self):
+        html, _ = self._compose([_row()], [_row(ticker="NVDA")], preopen=False)
+        self.assertIn("Gap %", html)
+        self.assertNotIn("Pre-mkt %", html)
+
+
 import importlib.util as _ilu  # noqa: E402
 
 _PANDAS = _ilu.find_spec("pandas") is not None
@@ -233,9 +276,33 @@ class GappersFallbackTests(unittest.TestCase):
     def test_market_gappers_falls_back_when_live_empty(self):
         from scheduler.morning_digest import _market_gappers
 
-        with mock.patch("market_data.build_day_trader_metrics", return_value=[]):
+        with mock.patch("market_data.build_day_trader_metrics", return_value=[]), \
+                mock.patch("market_data.premarket_session_date", return_value=None):
             out = _market_gappers(self._df(), limit=3)
         self.assertEqual([r["ticker"] for r in out], ["AAOI", "VLO", "SKHY"])
+
+    def test_preopen_uses_live_premarket_gappers_not_yesterdays_scan(self):
+        import datetime as dt
+
+        from scheduler.morning_digest import _market_gappers
+
+        live = [{"ticker": "MU", "last": 110.0, "previous_close": 100.0, "pct": 10.0}]
+        with mock.patch("market_data.premarket_session_date", return_value=dt.date(2026, 10, 15)), \
+                mock.patch("market_data.build_premarket_gappers", return_value=live) as bpg, \
+                mock.patch("ui.day_trader._movers_universe", return_value=["MU", "NVDA"]):
+            out = _market_gappers(self._df(), limit=3)
+        self.assertEqual(bpg.call_args.args[0], ["MU", "NVDA"])
+        self.assertEqual(out, [{"ticker": "MU", "last": 110.0, "chg_pct": 10.0,
+                                "gap_pct": None, "session": "premarket"}])
+
+    def test_preopen_with_no_gappers_yet_is_empty_not_stale(self):
+        import datetime as dt
+
+        from scheduler.morning_digest import _market_gappers
+
+        with mock.patch("market_data.premarket_session_date", return_value=dt.date(2026, 10, 15)), \
+                mock.patch("market_data.build_premarket_gappers", side_effect=RuntimeError("feed down")):
+            self.assertEqual(_market_gappers(self._df(), limit=3), [])
 
 
 @unittest.skipUnless(_PANDAS, "_latest_snapshot_df loads DataFrames")
@@ -271,3 +338,46 @@ class LatestSnapshotDfTests(unittest.TestCase):
         self.assertIsNotNone(df)
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["Ticker"], "AAA")
+
+
+class RedesignTests(unittest.TestCase):
+    def test_watchlist_cap_keeps_earnings_and_traded_names(self):
+        from scheduler import morning_digest as md
+
+        rows = [{"ticker": f"T{i}", "last": 10.0, "chg_pct": None, "prior_session_chg_pct": -10.0 - i,
+                 "session": "premarket"} for i in range(8)]
+        rows += [{"ticker": "NVDA", "last": 212.5, "chg_pct": 0.11, "prior_session_chg_pct": -4.3, "session": "premarket"},
+                 {"ticker": "AMT ⚠️E4d", "last": 181.4, "chg_pct": None, "prior_session_chg_pct": 2.1, "session": "premarket"}]
+        shown, more = md._cap(rows, 6)
+        names = [r["ticker"] for r in shown]
+        self.assertEqual(names[:2], ["AMT ⚠️E4d", "NVDA"])
+        self.assertEqual(more, 4)
+        html = md._preopen_table(rows, show_prior=True, limit=6)
+        self.assertIn("Earnings ", html)     # the ⚠️E4d flag renders as a tag
+        self.assertNotIn("⚠️E4d", html)
+        self.assertIn("+ 4 more", html)
+
+    def test_single_mover_has_no_best_worst_note(self):
+        from scheduler import morning_digest as md
+
+        self.assertEqual(md._watchlist_notes([{"ticker": "NVDA", "chg_pct": 0.1}, {"ticker": "X", "chg_pct": None}], {}), [])
+
+    def test_glance_summarizes(self):
+        from scheduler import morning_digest as md
+
+        g = md.digest_glance([{"ticker": "NVDA", "chg_pct": 0.11}], [{"ticker": "MRNA", "chg_pct": -4.16}],
+                             preopen=True, earnings_count=7, week_earnings={"AMT": 4, "GNRC": 5},
+                             top_setups=[("SOXS", 82.8)])
+        for frag in ("At a glance", "quiet before the open", "MRNA", "only big gapper", "7 companies",
+                     "AMT", "GNRC", "report this week", "SOXS"):
+            self.assertIn(frag, g)
+        self.assertEqual(md.digest_glance([], []), "")
+
+    def test_shell_wraps_plain_fragments_in_a_card(self):
+        from ui.email_kit import is_kit, shell
+
+        out = shell("<p>hello</p>", title_line="Welcome", footer_html="f")
+        self.assertIn("HSFinest.AI", out)
+        self.assertIn("Welcome", out)
+        self.assertTrue(is_kit(out))
+        self.assertNotIn("At a glance", out)

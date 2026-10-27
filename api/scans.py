@@ -88,7 +88,13 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     scan_total = len(opps)
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
-    if signal:
+    if signal == "prebreakout":
+        # The model's strongest names this scan, kept in HSF order (see PREBREAKOUT_TOP_N).
+        from ui.results_intelligence import prebreakout_picks
+
+        picked = {id(o) for o in prebreakout_picks(opps)}
+        opps = [o for o in opps if id(o) in picked]
+    elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
     visible = opps[:cap]
     if sort != "score":
@@ -102,6 +108,184 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             'freshness': run_freshness(runs[0]),
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
+
+
+# ---- Earnings scanner ---------------------------------------------------------------------------
+# Day offsets from today's ET date, inclusive. Today is free; the others need can_earnings (Pro).
+EARNINGS_WINDOWS = {"today": (0, 0), "tomorrow": (1, 1), "week": (0, 7)}
+EARNINGS_TIMES = ("bmo", "amc")
+
+
+def _ticker_key(ticker: Any) -> str:
+    """BRK-B, BRK.B and BRKB match: the calendar stores symbols without separators."""
+    return "".join(ch for ch in str(ticker or "").upper() if ch.isalnum())
+
+
+def _et_date(now: Optional[dt.datetime] = None) -> dt.date:
+    from zoneinfo import ZoneInfo
+
+    return (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York")).date()
+
+
+def _earnings_time(raw: Any) -> Optional[str]:
+    t = str(raw or "").strip().lower()
+    return t or None
+
+
+def earnings_tickers(window: str, now: Optional[dt.datetime] = None) -> List[str]:
+    """Every symbol in the earnings calendar that reports in `window` (ET days), soonest first."""
+    from db.earnings import fetch_earnings_this_week
+
+    lo, hi = EARNINGS_WINDOWS[window]
+    today = _et_date(now)
+    start, end = today + dt.timedelta(days=lo), today + dt.timedelta(days=hi)
+    rows = []
+    for r in fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []:
+        d = r.get("earnings_date")
+        d = d.date() if isinstance(d, dt.datetime) else d
+        sym = str(r.get("symbol") or "").strip().upper()
+        if sym and isinstance(d, dt.date) and start <= d <= end:
+            rows.append((d, sym))
+    out: List[str] = []
+    for _, sym in sorted(rows):
+        if sym not in out:
+            out.append(sym)
+    return out
+
+
+def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
+                  time: Optional[str] = None, include_unranked: bool = False,
+                  watched: Optional[set] = None, custom: Optional[Dict[str, Any]] = None,
+                  now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    """Setups in the latest market scan that report earnings in `window` (ET days), joined with
+    the earnings calendar. Soonest day first, then HSF Score. With include_unranked, names that
+    report but did not rank in the scan follow each day's ranked names: scored from `custom`
+    (the user's recent earnings custom scan job) when it has them, else with live quotes only."""
+    from analytics.data_freshness import describe
+    from db.earnings import fetch_earnings_this_week
+    from ui.entitlement_view import redact_prebreakout_rows
+
+    cap = max_results_for(tier)
+    lo, hi = EARNINGS_WINDOWS[window]
+    today = _et_date(now)
+    start, end = today + dt.timedelta(days=lo), today + dt.timedelta(days=hi)
+    base = {"window": window, "start": start.isoformat(), "end": end.isoformat(), "max_results": cap}
+
+    calendar: Dict[str, Dict[str, Any]] = {}
+    for r in fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []:
+        d = r.get("earnings_date")
+        if isinstance(d, dt.datetime):
+            d = d.date()
+        key = _ticker_key(r.get("symbol"))
+        if not key or not isinstance(d, dt.date) or not (start <= d <= end):
+            continue
+        t = _earnings_time(r.get("earnings_time"))
+        if time and t != time:
+            continue
+        calendar[key] = {"ticker": str(r.get("symbol")).strip().upper(), "earnings_date": d, "time": t}
+
+    watched_keys = {_ticker_key(t) for t in watched or ()}
+
+    def earnings_fields(e: Dict[str, Any], key: str) -> Dict[str, Any]:
+        return {"earnings_date": e["earnings_date"].isoformat(), "days_until": (e["earnings_date"] - today).days,
+                "time": e["time"], "on_watchlist": key in watched_keys}
+
+    runs = market_runs()
+    opps = (redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])),
+                                    allowed=bool(entitlements.get("can_early_breakout"))) if runs else [])
+    ranked, seen = [], set()
+    for i, o in enumerate(opps):
+        key = _ticker_key(o.get("ticker"))
+        if key in calendar and key not in seen:
+            seen.add(key)
+            ranked.append({**_scan_row(o), "rank": i + 1, "ranked": True, **earnings_fields(calendar[key], key)})
+    for r in ranked:
+        r["score_source"] = "scan"
+    scored: Dict[str, Dict[str, Any]] = {}
+    for o in ((custom or {}).get("result") or {}).get("setups") or []:
+        k = _ticker_key(o.get("ticker"))
+        if k and k not in scored:
+            scored[k] = o
+    unranked = []
+    for key, e in calendar.items():
+        if key in seen:
+            continue
+        o = scored.get(key)
+        row = ({**_scan_row(o), "score_source": "custom"} if o else {"score": None, "signals": [], "score_source": None})
+        unranked.append({**row, "ticker": e["ticker"], "rank": None, "ranked": False, **earnings_fields(e, key)})
+
+    def order(row: Dict[str, Any]) -> Any:
+        return (row["earnings_date"], not row["ranked"], -(row.get("score") or 0), row["ticker"])
+
+    rows = sorted(ranked[:cap], key=order)
+    if include_unranked:
+        extra = sorted(unranked, key=order)[:cap]
+        _fill_quotes([r for r in extra if r.get("last") is None])
+        rows = sorted(rows + extra, key=order)
+    out = {**base, "total": len(ranked), "unranked_total": len(unranked), "limited": len(ranked) > cap,
+           "setups": rows}
+    if custom and scored:
+        out.update(custom_scan_id=custom.get("id"), custom_scan_at=_iso(custom.get("finished_at")))
+    if not runs:
+        return {**out, "scan_at": None, "stale": None, "freshness": describe(None)}
+    return {**out, "scan_at": _iso(runs[0]["created_at"]),
+            "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
+            "freshness": run_freshness(runs[0])}
+
+
+def _fill_quotes(rows: List[Dict[str, Any]]) -> None:
+    """Live last / change / gap for rows the scan never priced, QUOTE_MAX tickers per provider
+    call (each set cached like the Watchlists Refresh). No quote leaves the row as it is."""
+    for i in range(0, len(rows), QUOTE_MAX):
+        chunk = rows[i:i + QUOTE_MAX]
+        quotes = latest_quotes([r["ticker"] for r in chunk]).get("quotes") or {}
+        for r in chunk:
+            q = quotes.get(str(r["ticker"]).strip().upper())
+            if q:
+                r.update(last=q.get("last"), chg_pct=q.get("chg_pct"), gap_pct=q.get("gap_pct"))
+
+
+MOVERS_MAX = 10
+
+
+def score_movers(tier: str, *, limit: int = 5) -> Dict[str, Any]:
+    """The setups whose HSF Score moved most between the two latest full-market scans.
+
+    Read-only over the same observation the watchlist and alert-rule code use (no
+    provider calls). Only tickers ranked in both scans count, and only within the
+    plan's row cap (risers by their rank now, fallers by their rank before), so a
+    plan never sees setups below its Scanner cap. Never raises: no data reads as empty."""
+    from api import watchlist_intel
+
+    out: Dict[str, Any] = {"scan_at": None, "previous_scan_at": None, "rising": [], "falling": [],
+                           "max_results": max_results_for(tier)}
+    try:
+        obs = watchlist_intel.market_observation()
+    except Exception:
+        return out
+    if not obs or obs.get("previous_run_id") is None:
+        if obs:
+            out["scan_at"] = _iso(obs.get("scan_at"))
+        return out
+    cap = out["max_results"]
+    rows = []
+    for t, cur in obs["ranked"].items():
+        prev = obs["previous_ranked"].get(t)
+        now_s, was_s = _num(cur.get("score")), _num((prev or {}).get("score"))
+        if prev is None or now_s is None or was_s is None or now_s == was_s:
+            continue
+        rows.append({"ticker": t, "score": int(round(now_s)), "previous_score": int(round(was_s)),
+                     "change": int(round(now_s - was_s)), "rank": int(cur["rank"]),
+                     "previous_rank": int(prev["rank"]), "setup": cur.get("primary_setup"),
+                     "last": _num(cur.get("last")), "chg_pct": _num(cur.get("chg_pct"))})
+    n = max(1, min(int(limit), MOVERS_MAX))
+    rising = sorted((r for r in rows if r["change"] > 0 and r["rank"] <= cap),
+                    key=lambda r: (-r["change"], r["rank"]))[:n]
+    falling = sorted((r for r in rows if r["change"] < 0 and r["previous_rank"] <= cap),
+                     key=lambda r: (r["change"], r["previous_rank"]))[:n]
+    out.update(scan_at=_iso(obs.get("scan_at")), previous_scan_at=_iso(obs.get("previous_scan_at")),
+               rising=rising, falling=falling)
+    return out
 
 
 def watchlist_scan_state(tickers: List[str], entitlements: Dict[str, bool]) -> Dict[str, Any]:
@@ -278,7 +462,7 @@ def _stock_core(ticker: str) -> Dict[str, Any]:
             quote["last"] = quote["last"] if quote["last"] is not None else _num(r.get("Last"))
             quote["chg_pct"] = quote["chg_pct"] if quote["chg_pct"] is not None else _num(r.get("PctChange"))
         return {"intel": intel, "scan_at": _iso(run["created_at"]) if run else None,
-                "in_latest_scan": bool(rows), "quote": quote}
+                "in_latest_scan": bool(rows), "rvol": _num((current_opp or {}).get("rvol")), "quote": quote}
 
     return stock_cache.get(ticker, load, ttl_s=STOCK_TTL_S, stale_s=STOCK_STALE_S)
 
@@ -291,6 +475,7 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     movement = intel.get("movement") or {}
     out = {
         "ticker": ticker,
+        "rvol": core.get("rvol"),
         "scan_at": core["scan_at"],
         "in_latest_scan": core["in_latest_scan"],
         "has_setup": bool(intel.get("has_opportunity")),
@@ -338,11 +523,12 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
     if not syms:
         return {"series": {}}
 
-    def load() -> Dict[str, List[float]]:
+    def load() -> Dict[str, Any]:
         from data.prices import fetch_price_data_batch
 
         frames, _skipped = fetch_price_data_batch(syms, period="2mo", timeout_s=8.0, batch_retries=1)
         out: Dict[str, List[float]] = {}
+        last_bar: Dict[str, Any] = {}
         for t in syms:
             df = frames.get(t)
             if df is None or getattr(df, "empty", True):
@@ -350,16 +536,93 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
             col = next((c for c in df.columns if str(c).lower() == "close"), None)
             if col is None:
                 continue
-            closes = [v for v in (_num(x) for x in df[col].tolist()) if v is not None]
-            if len(closes) >= 2:
-                out[t] = [round(v, 4) for v in closes[-SPARK_SESSIONS:]]
-        return out
+            valid = [(stamp, value) for stamp, raw in df[col].items() if (value := _num(raw)) is not None]
+            if len(valid) >= 2:
+                out[t] = [round(value, 4) for _, value in valid[-SPARK_SESSIONS:]]
+            if valid:
+                stamp, value = valid[-1]
+                # A numeric index is not a session date. Never invent provenance.
+                if isinstance(stamp, (dt.datetime, dt.date)):
+                    last_bar[t] = {"close": round(value, 4), "session": stamp.strftime("%Y-%m-%d")}
+        return {"series": out, "last_bar": last_bar}
 
     try:
-        series = spark_cache.get(("closes", tuple(syms)), load, ttl_s=SPARK_TTL_S, stale_s=6 * 3600)
+        return spark_cache.get(("dated-closes", tuple(syms)), load, ttl_s=SPARK_TTL_S, stale_s=6 * 3600)
     except Exception:
-        series = {}
-    return {"series": series}
+        return {"series": {}, "last_bar": {}}
+
+
+QUOTE_MAX = 50
+QUOTE_TTL_S = 60
+quote_cache = TTLCache(max_entries=64)
+
+
+def _trade_day(stamp: Any) -> Optional[str]:
+    """The New York calendar day of a provider timestamp (UTC ISO), or None."""
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        when = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=dt.timezone.utc)
+        return when.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except ValueError:
+        return None
+
+
+def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
+    """Latest trade per ticker from the quote provider (Alpaca snapshots), for the Watchlists
+    Refresh. Change is against the close before the trade's session, so a pre-market trade
+    is compared with the last regular close. One provider call per distinct ticker set,
+    shared for QUOTE_TTL_S; an empty answer (no keys, provider down) is not cached."""
+    syms = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})[:QUOTE_MAX]
+    if not syms:
+        return {"quotes": {}, "feed": None}
+
+    def load() -> Dict[str, Any]:
+        from market_data import _get_alpaca_data_feed, fetch_alpaca_snapshots
+
+        snaps = fetch_alpaca_snapshots(syms) or {}
+        out: Dict[str, Any] = {}
+        for t in syms:
+            snap = snaps.get(t)
+            if not isinstance(snap, dict):
+                continue
+            trade = snap.get("latestTrade") or {}
+            day = snap.get("dailyBar") or {}
+            prev = snap.get("prevDailyBar") or {}
+            last = _num(trade.get("p"))
+            at = trade.get("t") if isinstance(trade.get("t"), str) else None
+            if last is None:
+                last, at = _num(day.get("c")), day.get("t") if isinstance(day.get("t"), str) else None
+            if last is None:
+                continue
+            # Before the open, dailyBar is still the last finished session: that is the base.
+            trade_day, bar_day = _trade_day(at), _trade_day(day.get("t"))
+            base_bar = day if trade_day and bar_day and trade_day > bar_day else prev
+            base = _num(base_bar.get("c"))
+            # A gap exists only once today's session has opened (dailyBar is today's bar).
+            opened = _num(day.get("o")) if base_bar is prev else None
+            out[t] = {"last": round(last, 4), "prev_close": base,
+                      "chg_pct": round((last - base) / base * 100.0, 2) if base else None,
+                      "gap_pct": round((opened - base) / base * 100.0, 2) if base and opened else None, "at": at}
+        feed = None
+        try:
+            feed = str(_get_alpaca_data_feed()).strip().lower() or None
+        except Exception:
+            pass
+        return {"quotes": out, "feed": feed}
+
+    key = ("quotes", tuple(syms))
+    try:
+        res = quote_cache.get(key, load, ttl_s=QUOTE_TTL_S)
+    except Exception:
+        return {"quotes": {}, "feed": None}
+    if not res.get("quotes"):
+        quote_cache.clear_key(key)
+    return res
 
 
 SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans

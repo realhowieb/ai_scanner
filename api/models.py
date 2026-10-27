@@ -5,13 +5,61 @@ clients can be generated from the OpenAPI schema.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
 
+class ValidationErrorResponse(BaseModel):
+    detail: Union[str, List[Dict[str, Any]]]
+    code: Optional[str] = None
+    fields: Dict[str, str] = Field(default_factory=dict)
+    request_id: Optional[str] = None
+
+
 class Health(BaseModel):
     ok: bool
+
+
+class BillingStatus(BaseModel):
+    status: str = "unknown"
+    plan: Optional[Literal["basic", "pro", "premium", "admin"]] = None
+    interval: Optional[Literal["month", "year"]] = None
+    amount: Optional[int] = None
+    currency: Optional[str] = None
+    renewal_at: Optional[str] = None
+    cancellation_at: Optional[str] = None
+    cancel_at_period_end: bool = False
+    checked_at: Optional[str] = None
+    test_mode: Optional[bool] = None
+    sync_state: Literal["confirmed", "pending", "needs_attention", "unavailable"] = "pending"
+    message: str
+    grace_ends_at: Optional[str] = None
+    checkout_pending: bool = False
+    checkout_url: Optional[str] = None
+
+
+class BillingFailure(BaseModel):
+    event_type: str
+    code: str
+    at: str
+
+
+class AdminBilling(BaseModel):
+    mode: Literal["test", "live", "unknown", "external"]
+    prices_configured: Dict[str, bool]
+    prices_valid: Dict[str, bool]
+    webhook_configured: bool
+    webhook_check_available: bool
+    last_webhook_at: Optional[str] = None
+    failed_syncs: int = 0
+    webhook_failures: List[BillingFailure] = Field(default_factory=list)
+
+
+class KeyValueStatus(BaseModel):
+    configured: bool = Field(description="REDIS_URL is set")
+    ok: Optional[bool] = Field(default=None, description="It answered a ping; null when not configured")
+    ping_ms: Optional[float] = None
 
 
 class Ready(BaseModel):
@@ -24,6 +72,23 @@ class Ready(BaseModel):
     scan_age_minutes: Optional[float] = None
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     expected_scan_at: Optional[str] = Field(default=None, description="When stale: the missed scan slot (ISO)")
+    rss_mb: Optional[float] = Field(default=None, description="API memory in use now (MB)")
+    rss_peak_mb: Optional[float] = Field(default=None, description="Highest API memory seen since the last restart (MB)")
+    container_mb: Optional[float] = Field(default=None, description=(
+        "Container memory now, as Render measures it (MB); rss_mb also counts shared libraries"))
+    container_peak_mb: Optional[float] = Field(default=None, description=(
+        "Highest container memory since the last restart (MB); memory_warning uses this when present"))
+    price_cache_entries: Optional[int] = Field(default=None, description="Price frames held in memory now")
+    memory_limit_mb: Optional[float] = Field(default=None, description="The instance's memory limit (MB)")
+    memory_warn_mb: Optional[float] = Field(default=None, description="memory_warning turns on at this peak (MB)")
+    memory_warning: Optional[bool] = Field(default=None, description=(
+        "The peak (container_peak_mb, else rss_peak_mb) reached memory_warn_mb: close to the limit, where Render restarts the API"))
+    key_value: Optional["KeyValueStatus"] = Field(default=None, description=(
+        "Render Key Value (shared rate limits and lookups). Informational: without it each "
+        "instance counts in memory"))
+    build: Optional[str] = Field(default=None, description=(
+        "Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); "
+        "the post-promote live check waits for it to match"))
 
 
 class TokenPair(BaseModel):
@@ -33,15 +98,32 @@ class TokenPair(BaseModel):
     refresh_token: str = Field(description="Single use; POST /v1/auth/refresh returns a new one")
 
 
+class BillingAttention(BaseModel):
+    state: Literal["past_due"]
+    grace_ends_at: Optional[str] = Field(default=None, description="Paid access ends then unless the card is updated (ISO)")
+
+
 class Me(BaseModel):
     email: str
     name: Optional[str] = None
     plan: Literal["basic", "pro", "premium", "admin"]
-    plan_label: str = Field(description="Customer-facing name, e.g. Free, Pro")
+    plan_label: str = Field(description="Customer-facing name, e.g. Starter, Pro")
     is_admin: bool
     alert_limit: int
     email_verified: bool = Field(default=True, description="False until the emailed link is used; needed to upgrade and for email alerts")
     entitlements: Dict[str, bool] = Field(description="Feature flags, e.g. can_day_trader, can_ai_notes")
+    pro_trial_until: Optional[str] = Field(default=None, description="Set while a free Pro month from an invite is running")
+    billing_attention: Optional[BillingAttention] = Field(default=None, description=(
+        "Set while the last charge for a paid plan failed (the app shows an 'update your card' banner)"))
+
+
+class Referrals(BaseModel):
+    code: str = Field(description="Your invite code")
+    path: str = Field(description="Sign-up path with your code, e.g. /signup?ref=abc23def")
+    signed_up: int = Field(description="Accounts created with your link")
+    verified: int = Field(description="Of those, accounts that confirmed their email (each earned you both a trial)")
+    reward_days: int = Field(description="Days of Pro each of you gets per verified invite (0 = no trial right now)")
+    pro_trial_until: Optional[str] = None
 
 
 class DataFreshness(BaseModel):
@@ -155,6 +237,8 @@ class TapeQuote(BaseModel):
 class Tape(BaseModel):
     """The scrolling price strip: market ETFs and a few large caps."""
     quotes: List[TapeQuote] = Field(default=[], description="In display order; empty when no quote is available")
+    phase: Optional[Literal["premarket", "open", "afterhours", "closed"]] = Field(
+        default=None, description="U.S. equity session right now (ET, holiday-aware); null when unknown")
 
 
 class Snapshot(BaseModel):
@@ -228,10 +312,70 @@ class LatestScan(BaseModel):
     scan_at: Optional[str] = Field(default=None, description="ISO time of the market scan; null when none exists")
     total: int = Field(description="Setups matching the filters, before the plan cap")
     scan_total: Optional[int] = Field(default=None, description="Setups in the scan before any filter (signal, score floor)")
-    max_results: int = Field(description="Rows this plan sees (Free 25, Pro 100, Premium 200)")
+    max_results: int = Field(description="Rows this plan sees (Starter 25, Pro 100, Premium 200)")
     limited: bool = Field(description="True when the plan cap hides some matching setups")
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
     setups: List[ScanSetup] = []
+
+
+class EarningsSetup(BaseModel):
+    ticker: str
+    score: Optional[int] = Field(default=None, description="HSF Score; null when the name did not rank in the scan")
+    rank: Optional[int] = Field(default=None, description="Position in the latest scan's HSF ranking")
+    ranked: bool = True
+    primary_setup: Optional[str] = None
+    status: Optional[str] = None
+    n_signals: Optional[int] = None
+    signals: List[str] = []
+    fading: bool = False
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+    gap_pct: Optional[float] = None
+    rvol: Optional[float] = None
+    prob: Optional[float] = Field(default=None, description="PreBreakout model output; null below Premium")
+    earnings_date: str = Field(description="YYYY-MM-DD")
+    days_until: int = Field(description="Days from today's ET date")
+    time: Optional[str] = Field(default=None, description="bmo (before open) / amc (after close) / … when known")
+    on_watchlist: bool = False
+    score_source: Optional[Literal["scan", "custom"]] = Field(
+        default=None, description="scan: the latest market scan ranked it; custom: scored by your recent earnings "
+                                  "scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)")
+
+
+class EarningsScan(BaseModel):
+    window: Literal["today", "tomorrow", "week"]
+    start: str = Field(description="First ET day of the window (YYYY-MM-DD)")
+    end: str = Field(description="Last ET day of the window (YYYY-MM-DD)")
+    freshness: Optional[DataFreshness] = None
+    scan_at: Optional[str] = None
+    stale: Optional[bool] = None
+    total: int = Field(description="Ranked setups that report in the window, before the plan cap")
+    unranked_total: int = Field(description="Names that report in the window but did not rank in the scan")
+    max_results: int
+    custom_scan_id: Optional[str] = Field(default=None, description="Your earnings scan whose scores fill unranked names")
+    custom_scan_at: Optional[str] = Field(default=None, description="When that scan finished (ISO)")
+    limited: bool
+    setups: List[EarningsSetup] = []
+
+
+class ScoreMover(BaseModel):
+    ticker: str
+    score: int = Field(description="HSF Score in the latest scan")
+    previous_score: int = Field(description="HSF Score in the scan before")
+    change: int = Field(description="score - previous_score")
+    rank: int
+    previous_rank: int
+    setup: Optional[str] = None
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+
+
+class ScoreMovers(BaseModel):
+    scan_at: Optional[str] = Field(default=None, description="The latest full-market scan")
+    previous_scan_at: Optional[str] = Field(default=None, description="The scan it is compared with")
+    max_results: int = Field(description="The plan's Scanner row cap; movers stay inside it")
+    rising: List[ScoreMover] = []
+    falling: List[ScoreMover] = []
 
 
 class LifecycleEvent(BaseModel):
@@ -278,6 +422,7 @@ class Alert(BaseModel):
 
 class StockDetail(BaseModel):
     ticker: str
+    rvol: Optional[float] = Field(default=None, description="Relative volume in the displayed market scan")
     scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
     in_latest_scan: bool = Field(description="The ticker had at least one row in that scan")
     has_setup: bool = Field(description="It qualifies as an HSF setup (or has a recent recorded score)")
@@ -350,7 +495,7 @@ class TickersResult(BaseModel):
 
 
 class Alerts(BaseModel):
-    limit: int = Field(description="Alerts this plan may have (Free 1, Pro 5, Premium 25)")
+    limit: int = Field(description="Alerts this plan may have (Starter 1, Pro 5, Premium 25)")
     used: int
     email_enabled: bool = Field(description="Pro+ get alert emails; everyone gets in-app alerts")
     summary: Dict[str, Any] = Field(default={}, description="UI summary: active, paused, fired_recently, by_type and delivery availability")
@@ -456,6 +601,48 @@ class WatchlistIntelligence(BaseModel):
     items: List[WatchlistIntelItem] = []
 
 
+class WatchlistPerfItem(BaseModel):
+    ticker: str
+    added_at: Optional[str] = None
+    base_date: Optional[str] = Field(default=None, description="Day of the starting price")
+    base_price: Optional[float] = None
+    base_source: Optional[Literal["saved", "close"]] = Field(
+        default=None, description="saved: the price stored when added; close: the last daily close at that time")
+    since_first_bar: bool = Field(default=False, description="Added before the year of history: measured from its first bar")
+    last: Optional[float] = None
+    last_date: Optional[str] = None
+    change_pct: Optional[float] = None
+    benchmark_change_pct: Optional[float] = Field(default=None, description="SPY over the same span")
+    vs_benchmark: Optional[float] = Field(default=None, description="change_pct - benchmark_change_pct, in points")
+    sessions: Optional[int] = Field(default=None, description="Trading sessions since the starting price")
+
+
+class PerfPick(BaseModel):
+    ticker: str
+    change_pct: float
+
+
+class WatchlistPerfSummary(BaseModel):
+    count: int
+    up: int
+    down: int
+    avg_change_pct: float
+    median_change_pct: float
+    beat_benchmark: int
+    compared: int
+    best: PerfPick
+    worst: PerfPick
+
+
+class WatchlistPerformance(BaseModel):
+    watchlist_id: Optional[int] = None
+    name: Optional[str] = None
+    benchmark: str = "SPY"
+    as_of: Optional[str] = Field(default=None, description="Latest daily bar used")
+    items: List[WatchlistPerfItem] = []
+    summary: Optional[WatchlistPerfSummary] = None
+
+
 class WatchlistChange(BaseModel):
     ticker: str
     event_type: str = Field(description="NEW_OPPORTUNITY, DROPPED, RISING, FALLING, STATUS_UPGRADE, STATUS_DOWNGRADE, "
@@ -538,6 +725,8 @@ class AlertRuleType(BaseModel):
     kind: Literal["level", "transition"]
     threshold: Optional[RuleThreshold] = None
     takes_value: bool = Field(description="SETUP_APPEARED: optional setup name, e.g. Breakout")
+    scope: Literal["symbol", "market"] = Field(
+        default="symbol", description="symbol: set a ticker or watchlist_id; market: the whole market (SCAN_MATCH)")
     default_cooldown_seconds: int
     available: bool = Field(description="False when the plan doesn't include it")
 
@@ -557,6 +746,8 @@ class EmailPrefs(BaseModel):
     digest: bool = Field(description="Morning market digest")
     evening: bool = Field(description="Evening market wrap")
     alerts: bool = Field(description="Alert emails")
+    weekly: bool = Field(description="Saturday weekly recap")
+    tips: bool = Field(description="First-week tips and the come-back email")
 
 
 class BillingLink(BaseModel):
@@ -593,9 +784,10 @@ class ScanProgress(BaseModel):
 
 class ScanParams(BaseModel):
     """The parameters the scan actually used (after plan rules)."""
-    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"]
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"]
     ticker: Optional[str] = None
     watchlist_id: Optional[int] = None
+    earnings_window: Optional[Literal["today", "tomorrow", "week"]] = None
     score_all: bool = False
     profile: Literal["regular", "aggressive", "conservative"]
     session_requested: Literal["regular", "premarket", "afterhours"]
@@ -608,7 +800,7 @@ class ScanParams(BaseModel):
     apply_gap_filter: bool
     unusual_volume: bool
     top_n: int
-    max_results: int = Field(description="This plan's row cap (Free 25, Pro 100, Premium 200)")
+    max_results: int = Field(description="This plan's row cap (Starter 25, Pro 100, Premium 200)")
     full_lists: bool = Field(description="True for Premium/admin: NASDAQ and Combo scan the full lists")
     max_nasdaq: Optional[int] = None
     max_combo: Optional[int] = None
@@ -763,9 +955,32 @@ class DayTraderRow(BaseModel):
     dt_conflicts: List[str] = Field(default=[], description="Signals that lower the score")
     quote_flags: List[str] = Field(default=[], description="Why the quote may be wrong: Extreme move, Far from "
                                    "VWAP, Stale quote. Flagged rows rank last.")
+    traded_today: Optional[bool] = Field(default=None, description="Pre-market only: false until the name trades "
+                                         "today; such rows have no change and no DT score")
 
     model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
 
+
+class PremarketGapper(BaseModel):
+    ticker: str
+    last: float = Field(description="Today's latest pre-market trade")
+    previous_close: float = Field(description="Yesterday's regular-session close")
+    pct: float = Field(description="Pre-market move in percent vs the previous close")
+    pm_volume: Optional[int] = Field(default=None, description="Shares traded since 4:00 ET on this feed")
+    pm_dollar_volume: Optional[float] = None
+    pm_vwap: Optional[float] = None
+    pm_high: Optional[float] = None
+    pm_low: Optional[float] = None
+    trade_ts: Optional[str] = Field(default=None, description="Time of the latest trade")
+
+
+class PremarketGappers(BaseModel):
+    """Whole-market pre-market gappers (Pro). `active` is false outside pre-market
+    (4:00 ET to the open), with no rows."""
+    active: bool
+    as_of: str
+    feed: str = Field(description="Market data feed: iex (partial pre-market volume) or sip")
+    rows: List[PremarketGapper] = []
 
 class DayTrader(BaseModel):
     state: Literal["premarket", "open", "afterhours", "closed"]
@@ -782,8 +997,112 @@ class DayTraderSparklines(BaseModel):
     series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
 
 
+class DailyBarClose(BaseModel):
+    close: float
+    session: str = Field(description="Provider daily-bar session date; the session may still be in progress")
+
+
 class Sparklines(BaseModel):
+    last_bar: Dict[str, DailyBarClose] = Field(default={}, description="Latest finite daily-bar value and its source session; omitted when undated. Not a live quote.")
     series: Dict[str, List[float]] = Field(default={}, description="Ticker -> up to 21 daily closes, oldest first; the last is the session in progress during market hours. Tickers without bars are left out")
+
+
+class LatestQuote(BaseModel):
+    last: float = Field(description="Latest trade price (the day's close after the session ends)")
+    prev_close: Optional[float] = Field(default=None, description="The close the change is measured from")
+    chg_pct: Optional[float] = Field(default=None, description="Percent vs prev_close")
+    gap_pct: Optional[float] = Field(default=None, description="Today's open vs prev_close (null before the open)")
+    at: Optional[str] = Field(default=None, description="Time of that trade (ISO, UTC)")
+
+
+class LatestQuotes(BaseModel):
+    """Latest trades from the quote provider, shared for about a minute. Tickers without a quote are left out."""
+    quotes: Dict[str, LatestQuote] = {}
+    feed: Optional[str] = Field(default=None, description="Provider feed: 'iex' (one exchange) or 'sip' (all exchanges)")
+
+
+class ChatDestination(BaseModel):
+    available: bool = Field(description="Set up on the server and switched on")
+    connected: bool
+    label: Optional[str] = Field(default=None, description="Chat or channel name; never the webhook URL")
+    last_status: Optional[str] = Field(default=None, description="accepted or failed, for the latest alert")
+    last_at: Optional[str] = None
+
+
+class ChatAlerts(BaseModel):
+    telegram: ChatDestination
+    discord: ChatDestination
+    plan_allows: bool = Field(default=False, description="The plan includes chat alerts (Pro and above)")
+
+
+class TelegramLink(BaseModel):
+    url: str = Field(description="https://t.me/<bot>?start=<one-time code>")
+    expires_in_minutes: int
+
+
+class NewsItem(BaseModel):
+    id: str = ""
+    headline: str
+    summary: Optional[str] = None
+    source: Optional[str] = Field(default=None, description="e.g. benzinga")
+    author: Optional[str] = None
+    url: Optional[str] = Field(default=None, description="The story on the publisher's site (http/https only)")
+    published_at: str = Field(description="ISO, UTC")
+    symbols: List[str] = []
+
+
+class StockNews(BaseModel):
+    """Alpaca News (Benzinga feed) for one ticker."""
+    ticker: str
+    items: List[NewsItem] = []
+    available: bool = Field(description="False when news is switched off or the provider can't be reached")
+
+
+class NewsFlag(BaseModel):
+    count: int = Field(description="Stories in the window")
+    latest_at: str = Field(description="Newest story (ISO, UTC)")
+    headline: str = Field(description="Newest headline")
+
+
+class NewsFlags(BaseModel):
+    flags: Dict[str, NewsFlag] = Field(default={}, description="Only tickers with news are listed")
+    hours: int = Field(description="Look-back window in hours")
+
+
+class InsiderTrade(BaseModel):
+    insider: str
+    role: str = Field(description="Officer title, Director, 10% owner or Insider")
+    type: Literal["Buy", "Sale"] = Field(description="Open-market purchase (P) or sale (S)")
+    date: Optional[str] = None
+    shares: Optional[float] = None
+    price: Optional[float] = None
+    value: Optional[float] = Field(default=None, description="shares x price, USD")
+    url: Optional[str] = Field(default=None, description="The filing on sec.gov")
+
+
+class FilingEvent(BaseModel):
+    date: str
+    form: str = "8-K"
+    items: List[str] = Field(default=[], description="8-K item numbers, e.g. 2.02")
+    labels: List[str] = Field(default=[], description="Plain names for the items")
+    url: str
+
+
+class InsiderSummary(BaseModel):
+    buys: int
+    sales: int
+    buy_value: float
+    sale_value: float
+    days: int
+
+
+class StockFilings(BaseModel):
+    """SEC EDGAR filings for one ticker over the last 90 days."""
+    ticker: str
+    available: bool
+    insider: List[InsiderTrade] = []
+    events: List[FilingEvent] = []
+    insider_summary: InsiderSummary
 
 
 class ScorePoint(BaseModel):
@@ -816,6 +1135,34 @@ class AIChatAnswer(BaseModel):
     answer: Optional[str] = None
 
 
+class AIJournalCoach(BaseModel):
+    closed: int = Field(description="Closed trades in the journal")
+    min_trades: int = Field(description="Closed trades needed before coaching")
+    text: Optional[str] = Field(default=None, description="Markdown bullets; null below min_trades")
+
+
+class AIScanView(BaseModel):
+    name: str = "AI scan"
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"] = "sp500"
+    ticker: str = ""
+    watchlist_id: Optional[int] = None
+    earnings_window: Literal["today", "tomorrow", "week"] = "today"
+    session: Literal["regular", "premarket", "afterhours"] = "regular"
+    top_n: Literal[10, 25, 50, 100, 200] = 25
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_dollar_vol: Optional[float] = None
+    unusual: bool = False
+    gap: bool = False
+    min_gap: Optional[float] = None
+    score_all: bool = False
+
+
+class AIScanBuilder(BaseModel):
+    view: AIScanView = Field(description="Custom scan settings in the saved-view shape (nothing runs)")
+    explanation: Optional[str] = None
+
+
 class JournalTrade(BaseModel):
     id: int
     ticker: str
@@ -832,9 +1179,56 @@ class JournalTrade(BaseModel):
 
 
 class Journal(BaseModel):
+    limit: int = 200
+    offset: int = 0
+    has_more: bool = False
     trades: List[JournalTrade] = []
     stats: Optional[Dict[str, Any]] = Field(default=None, description="{closed, wins, avg_return_pct}; null before any closed trade")
-    summary: Dict[str, Any] = Field(default={}, description="UI summary: open/closed counts, win rate, average return and open P/L")
+    summary: Dict[str, Any] = Field(default={}, description="Page open/closed counts and P/L; win rate and average return use all closed trades")
+
+
+class JournalGroup(BaseModel):
+    label: str
+    count: int
+    wins: int
+    win_rate: float
+    avg_return_pct: float
+    pnl: float
+
+
+class JournalPick(BaseModel):
+    ticker: Optional[str] = None
+    return_pct: float
+
+
+class JournalInsightSummary(BaseModel):
+    wins: int
+    losses: int
+    win_rate: float
+    avg_return_pct: float
+    avg_win_pct: Optional[float] = None
+    avg_loss_pct: Optional[float] = None
+    profit_factor: Optional[float] = Field(default=None, description="Gross $ won / gross $ lost; null with no losses")
+    total_pnl: float
+    avg_hold_days: Optional[float] = None
+    best: JournalPick
+    worst: JournalPick
+
+
+class JournalCurvePoint(BaseModel):
+    closed_at: Optional[str] = None
+    ticker: Optional[str] = None
+    pnl: float
+    cumulative_pnl: float
+
+
+class JournalInsights(BaseModel):
+    closed: int
+    summary: Optional[JournalInsightSummary] = None
+    curve: List[JournalCurvePoint] = []
+    by_score: List[JournalGroup] = Field(default=[], description="By HSF Score when the trade was logged")
+    by_hold: List[JournalGroup] = []
+    by_source: List[JournalGroup] = []
 
 
 class TradePlan(BaseModel):
@@ -864,11 +1258,19 @@ class PaperActivity(BaseModel):
 
 
 class PaperOrder(BaseModel):
+    journal_synced: bool = Field(default=False, description="True only after an actual fill has been imported; pending fills retry on journal/activity refresh")
     order_id: Optional[str] = None
     status: str
     ticker: str
     qty: int
     filled_avg_price: Optional[Any] = None
+
+
+class PaperOrderTracking(PaperOrder):
+    state: Literal["pending", "submitted", "synced", "rejected"]
+    filled_qty: float = 0
+    broker_available: Optional[bool] = Field(default=None, description="False when this check could not reach or confirm the broker; saved status is retained")
+    updated_at: Optional[str] = Field(default=None, description="Last saved tracking change; not a market quote timestamp")
 
 
 class PlanTier(BaseModel):
@@ -1126,3 +1528,415 @@ class OutcomeSymbol(_OutcomeEnvelope):
     ticker: str
     horizons: List[OutcomeMetrics]
     observations: OutcomePage
+
+
+# ---- admin console (admins only) ----------------------------------------------------------------
+class AdminUser(BaseModel):
+    username: str
+    full_name: Optional[str] = None
+    tier: str
+    is_active: bool
+    is_admin: bool
+    email_verified: bool
+    created_at: Optional[str] = None
+
+
+class AdminUsers(BaseModel):
+    users: List[AdminUser]
+
+
+class AdminCreateUser(BaseModel):
+    email: str = Field(max_length=254)
+    full_name: str = Field(max_length=120)
+    password: str = Field(max_length=200)
+    tier: Literal["basic", "pro", "premium"] = "basic"
+    active: bool = True
+
+
+class AdminUserTarget(BaseModel):
+    username: str = Field(max_length=254)
+
+
+class AdminUpdateUser(AdminUserTarget):
+    tier: Optional[Literal["basic", "pro", "premium"]] = None
+    is_active: Optional[bool] = None
+
+
+class AdminSetRole(AdminUserTarget):
+    is_admin: bool
+
+
+class AdminAuditEvent(BaseModel):
+    at: Optional[str] = None
+    actor: Optional[str] = None
+    action: str
+    target: Optional[str] = None
+    details: str
+
+
+class AdminAudit(BaseModel):
+    events: List[AdminAuditEvent]
+
+
+class AdminSubsystem(BaseModel):
+    name: str
+    status: Optional[str] = None
+    label: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class AdminIncident(BaseModel):
+    severity: Optional[str] = None
+    id: Optional[str] = None
+    age_hours: Optional[float] = None
+    summary: Optional[str] = None
+    recommended_action: Optional[str] = None
+
+
+class AdminEmailJob(BaseModel):
+    job: str
+    label: Optional[str] = None
+    status: Optional[str] = None
+    detail: Optional[str] = None
+
+
+class AdminEmailHealth(BaseModel):
+    status: str
+    day: Optional[str] = None
+    jobs: List[AdminEmailJob]
+
+
+class AdminHealth(BaseModel):
+    operations: Dict[str, Any] = Field(description="Same as GET /v1/admin/operations")
+    health_score: Optional[float] = None
+    human_action: Optional[str] = None
+    next_expected_scan: Optional[str] = None
+    subsystems: List[AdminSubsystem]
+    incidents: List[AdminIncident]
+    email: Optional[AdminEmailHealth] = None
+
+
+class AdminCheck(BaseModel):
+    name: str
+    status: Literal["ok", "warn", "error", "not_configured"]
+    detail: Optional[str] = None
+    ms: Optional[float] = None
+
+
+class AdminEarningsCache(BaseModel):
+    last_refresh: Optional[str] = None
+    dated_rows: Optional[int] = None
+
+
+class AdminProviders(BaseModel):
+    checked_at: str
+    checks: List[AdminCheck]
+    earnings_cache: AdminEarningsCache
+
+
+class AdminScanError(BaseModel):
+    at: Optional[str] = None
+    context: Optional[str] = None
+    username: Optional[str] = None
+    tickers: Optional[int] = None
+    error_type: Optional[str] = None
+    message: str
+
+
+class AdminLoginAttempt(BaseModel):
+    at: Optional[str] = None
+    username: Optional[str] = None
+    success: bool
+    ip_address: Optional[str] = None
+
+
+class AdminAiUsage(BaseModel):
+    feature: str
+    calls: int
+
+
+class AdminActivity(BaseModel):
+    scan_errors: List[AdminScanError]
+    login_attempts: List[AdminLoginAttempt]
+    ai_usage: List[AdminAiUsage]
+
+
+class AdminDbCheck(BaseModel):
+    connected: bool
+    earnings_rows: Optional[int] = None
+    bad_symbols: Optional[int] = None
+    issues: List[str]
+
+
+class AdminEarningsRefresh(BaseModel):
+    state: Literal["idle", "running", "done", "failed"]
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    started_by: Optional[str] = None
+    symbols: Optional[int] = None
+    dated: Optional[int] = None
+    error: Optional[str] = None
+
+
+# ---- admin analytics (Phase 2) -------------------------------------------------------------------
+class AdminOverview(BaseModel):
+    total_users: int
+    active_users_30d: int
+    new_users_7d: int
+    scans_today: int
+    paying_users: int
+
+
+class AdminSystemStatus(BaseModel):
+    system: str
+    status: str
+    reason: str
+
+
+class AdminUsersDay(BaseModel):
+    day: str
+    new: int
+    total: int
+
+
+class AdminScansDay(BaseModel):
+    day: str
+    scheduled: int
+    user: int
+
+
+class AdminPlanCount(BaseModel):
+    plan: str
+    users: int
+
+
+class AdminConversions(BaseModel):
+    signups: int
+    paid: int
+    signup_to_paid: Optional[float] = Field(None, description="Fraction of recorded signups with a recorded paid conversion")
+    destinations: List[AdminPlanCount] = []
+
+
+class AdminRecoveryEvent(BaseModel):
+    started_at: Optional[str] = None
+    incident: Optional[str] = None
+    action: Optional[str] = None
+    result: Optional[str] = None
+
+
+class AdminFunnelStep(BaseModel):
+    key: str
+    label: str
+    users: int
+    of_signups: Optional[float] = Field(None, description="Fraction of the period's sign-ups that reached this step")
+
+
+class AdminFunnelSource(BaseModel):
+    source: str
+    signed_up: int
+    verified: int
+    engaged: int
+    paid: int
+
+
+class AdminFunnel(BaseModel):
+    steps: List[AdminFunnelStep]
+    by_source: List[AdminFunnelSource] = []
+    invite_trials: int = Field(0, description="Accounts in the period with a free Pro trial from an invite")
+    unavailable: List[str] = Field([], description="Steps that failed to load and count as zero")
+
+
+class AdminAnalytics(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    unavailable: List[str] = Field([], description="Sources that failed to load; the rest is still shown")
+    overview: AdminOverview
+    systems: List[AdminSystemStatus]
+    users_daily: List[AdminUsersDay]
+    plans: List[AdminPlanCount]
+    scans_daily: List[AdminScansDay]
+    conversions: AdminConversions
+    recovery: List[AdminRecoveryEvent]
+    funnel: Optional[AdminFunnel] = Field(None, description="Sign-up funnel for accounts created in the period")
+
+
+class AdminPerfGroup(BaseModel):
+    key: Optional[str] = None
+    column: Optional[str] = None
+    n: int
+    matured: int
+    sufficient: bool
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_mfe: Optional[float] = None
+    average_mae: Optional[float] = None
+
+
+class AdminSignalOptions(BaseModel):
+    signals: List[str]
+    cohorts: List[str]
+    horizons: List[str]
+    sessions: List[str]
+    score_low: Optional[int] = None
+    score_high: Optional[int] = None
+
+
+class AdminSignalSummary(BaseModel):
+    observations: int
+    matured: int
+    n: int
+    sufficient: bool
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    average_mfe: Optional[float] = None
+    average_mae: Optional[float] = None
+
+
+class AdminSignals(BaseModel):
+    """Returns are fractions. Missing outcomes are excluded, never counted as zero."""
+    loaded_at: Optional[str] = None
+    days: int
+    min_n: int
+    loaded_observations: int = Field(0, description="Observations read for this period (newest first)")
+    truncated: bool = Field(False, description="The period holds more observations than were read")
+    options: AdminSignalOptions
+    summary: AdminSignalSummary
+    by_signal_horizon: List[AdminPerfGroup]
+    score_available: bool
+    score_horizon: Optional[str] = None
+    score_buckets: List[AdminPerfGroup]
+    score_matrix: List[AdminPerfGroup]
+
+
+class AdminFunnelStage(BaseModel):
+    stage: str
+    count: int
+    pct: Optional[float] = None
+
+
+class AdminCohort(BaseModel):
+    cohort: str
+    observations: int
+
+
+class AdminEvidenceReadiness(BaseModel):
+    state: str
+    reason: Optional[str] = None
+    trading_days: Optional[Any] = None
+    trading_days_preferred: Optional[Any] = None
+    scan_runs: Optional[Any] = None
+    scan_runs_preferred: Optional[Any] = None
+    formal_evaluation: Optional[str] = None
+
+
+class AdminEvidence(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    loaded_observations: int = 0
+    truncated: bool = False
+    funnel: List[AdminFunnelStage]
+    pending: int
+    excluded: int
+    metadata_completeness: Optional[float] = None
+    oldest_pending: Optional[str] = None
+    latest_observation: Optional[str] = None
+    latest_matured: Optional[str] = None
+    last_maturation_run: Optional[str] = None
+    cohorts: List[AdminCohort]
+    readiness: AdminEvidenceReadiness
+
+
+class AdminStairWindow(BaseModel):
+    window: Optional[Any] = None
+    horizon: str
+    observations: Optional[int] = None
+    matured: int
+    positive_rate: Optional[float] = None
+    average_return: Optional[float] = None
+    median_return: Optional[float] = None
+    mfe: Optional[float] = None
+    mae: Optional[float] = None
+
+
+class AdminStairStepper(BaseModel):
+    loaded_at: Optional[str] = None
+    days: int
+    observations: int
+    latest: Optional[str] = None
+    horizons: List[str]
+    windows: List[AdminStairWindow]
+    best_window: Optional[Any] = None
+    verdict_reason: Optional[str] = None
+
+
+class AdminMlGate(BaseModel):
+    gate: str
+    kind: str
+    value: Optional[Any] = None
+    needs: str
+    status: str
+    progress: float = Field(..., description="0 to 1")
+    why: Optional[str] = None
+
+
+class AdminMlReadiness(BaseModel):
+    status: str
+    recommendation: str
+    generated_at: Optional[str] = None
+    matured_signal_days: int
+    matured_rows: int
+    matured_trading_days: int
+    matured_symbols: int
+    outcome_coverage_recent: Optional[float] = None
+    walk_forward_folds: int
+    gates: List[AdminMlGate]
+    blocking_reasons: List[str]
+    estimate_trading_days: Optional[int] = None
+
+
+# ---- getting started, unread alerts, feedback, shared stock links (api.web_state, api.share) ----
+class GettingStartedStep(BaseModel):
+    id: Literal["watchlist", "alert", "delivery", "guide"]
+    title: str
+    detail: str
+    href: str = Field(description="Where the step is done in the web app")
+    done: bool
+
+
+class GettingStarted(BaseModel):
+    show: bool = Field(description="False once every step is done or the card was closed")
+    dismissed: bool
+    done: int
+    total: int
+    steps: List[GettingStartedStep]
+
+
+class UnreadAlerts(BaseModel):
+    count: int = Field(description="Alerts fired since the Alerts page was last opened (at most 99)")
+    seen_at: Optional[str] = None
+
+
+class FeedbackItem(BaseModel):
+    id: int
+    user_id: str
+    kind: str
+    message: str
+    path: Optional[str] = None
+    plan: Optional[str] = None
+    build: Optional[str] = None
+    created_at: str
+
+
+class PublicStock(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    price: Optional[float] = None
+    change_pct: Optional[float] = None
+    scan_at: Optional[str] = None
+    ranked: bool = Field(description="In the latest scan's ranked setups (HSF Score 40 or more)")
+    hsf_score: Optional[int] = None
+    setup: Optional[str] = None
+    reason: Optional[str] = Field(default=None, description="The first reason only; the rest needs an account")
+    hidden_insights: int = Field(description="Other reasons, signals and risks shown after signing up")

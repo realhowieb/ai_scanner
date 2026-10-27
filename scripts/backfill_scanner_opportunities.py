@@ -42,7 +42,7 @@ def main(argv=None) -> int:
     total = empty = 0
     for run in sorted(runs, key=lambda r: r["created_at"]):
         if args.apply:
-            n = freeze_run(run, args.top_n)
+            n = freeze_run(run, args.top_n, score_confidence=False)  # never today's model on past rows
         else:
             n = len(scanner_opportunities(int(run["id"]), args.top_n))
         empty += n == 0

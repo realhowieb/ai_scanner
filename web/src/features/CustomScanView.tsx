@@ -1,7 +1,8 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { ComponentProps, FormEvent } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { TICKER_RE } from "@/components/AppShell";
@@ -9,8 +10,11 @@ import { Card, Empty, ErrorState, UpgradeButton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { CANCELLED, useScanJob } from "@/hooks/useScanJob";
 import type { ScanApi, ScanCreate, ScanJob } from "@/hooks/useScanJob";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
+import { SavedResearchViews } from "./SavedResearchViews";
+import { ScanBuilder } from "./ScanBuilder";
 import { SetupTable } from "./SetupTable";
 
 type Universe = ScanCreate["universe"];
@@ -23,7 +27,22 @@ export const UNIVERSES: { id: Universe; label: string; feature?: string; plan?: 
   { id: "us_market", label: "US market", feature: "can_full_universe", plan: "premium" },
   { id: "watchlist", label: "A watchlist" },
   { id: "ticker", label: "One ticker" },
+  { id: "earnings", label: "Stocks reporting earnings" },
 ];
+type EarnWindow = "today" | "tomorrow" | "week";
+const EARN_WINDOWS: { id: EarnWindow; label: string; pro?: boolean }[] = [
+  { id: "today", label: "Today" },
+  { id: "tomorrow", label: "Tomorrow", pro: true },
+  { id: "week", label: "Next 7 days", pro: true },
+];
+const EARN_TEXT: Record<EarnWindow, string> = { today: "today", tomorrow: "tomorrow", week: "in the next 7 days" };
+
+/** ?universe=earnings&when=week&start=1 (the Earnings tab's button): prefill, and start once. */
+function earningsLink(q: URLSearchParams): { when: EarnWindow; start: boolean } | null {
+  if (q.get("universe") !== "earnings") return null;
+  const w = q.get("when");
+  return { when: w === "tomorrow" || w === "week" ? w : "today", start: q.get("start") === "1" };
+}
 const SESSIONS: { id: Session; label: string; feature?: string }[] = [
   { id: "regular", label: "Regular" },
   { id: "premarket", label: "Pre-market", feature: "can_premarket" },
@@ -104,7 +123,9 @@ function optNum(v: string): number | undefined {
 export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const { can } = useSession();
   const scan = useScanJob({ client });
-  const [universe, setUniverse] = useState<Universe>("sp500");
+  const sp = useSearchParams();
+  const [link] = useState(() => earningsLink(new URLSearchParams(sp?.toString() ?? "")));
+  const [universe, setUniverse] = useState<Universe>(link ? "earnings" : "sp500");
   const [ticker, setTicker] = useState("");
   const [watchlistId, setWatchlistId] = useState<string>("");
   const [session, setSession] = useState<Session>("regular");
@@ -115,16 +136,21 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const [unusual, setUnusual] = useState(false);
   const [gap, setGap] = useState(false);
   const [minGap, setMinGap] = useState("");
-  const [scoreAll, setScoreAll] = useState(false);
+  const [scoreAll, setScoreAll] = useState(!!link);
+  const [earnWindow, setEarnWindow] = useState<EarnWindow>(link?.when ?? "today");
   const [formErr, setFormErr] = useState<string | null>(null);
+  const earnLocked = (w: EarnWindow) => w !== "today" && !can("can_earnings");
 
   // The plan's row cap comes from the server (same cap as the Scanner).
   const cap = useApi("cap", (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 1 } }, signal })));
   const maxRows = cap.data?.max_results ?? 25;
+  // Scoring every earnings reporter returns up to the plan's whole row cap.
+  const rowsShown = universe === "earnings" && scoreAll ? maxRows : Math.min(topN, maxRows);
   const lists = useApi(universe === "watchlist" ? "watchlists" : null, (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
   const selectedList = lists.data?.find((w) => String(w.id) === watchlistId);
   const scanEstimate = universe === "ticker" ? "1 ticker"
     : universe === "watchlist" ? `${selectedList?.symbol_count ?? 0} ticker${selectedList?.symbol_count === 1 ? "" : "s"}`
+    : universe === "earnings" ? `Stocks reporting ${EARN_TEXT[earnWindow]}`
     : universe === "sp500" ? "S&P 500"
     : universe === "nasdaq" ? (can("can_full_universe") ? "full NASDAQ list" : "plan-capped NASDAQ")
     : universe === "combo" ? (can("can_full_universe") ? "full combined list" : "plan-capped combined list")
@@ -143,12 +169,13 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     statusRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, [job?.scan_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setFormErr(null);
     const t = ticker.trim().toUpperCase();
     if (universe === "ticker" && !TICKER_RE.test(t)) return setFormErr("Enter a ticker symbol like AAPL.");
     if (universe === "watchlist" && !watchlistId) return setFormErr("Choose a watchlist.");
+    if (universe === "earnings" && earnLocked(earnWindow)) return setFormErr("Scanning tomorrow's or this week's earnings is part of Pro.");
     const filters: NonNullable<ScanCreate["filters"]> = {
       top_n: Math.min(topN, maxRows),
       session,
@@ -159,13 +186,45 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       ...(gap ? { apply_gap_filter: true, ...(optNum(minGap) !== undefined ? { min_gap: optNum(minGap) } : {}) } : {}),
     };
     startedHere.current = true;
-    void scan.start({
+    const started = await scan.start({
       universe,
       ...(universe === "ticker" ? { ticker: t } : {}),
       ...(universe === "watchlist" ? { watchlist_id: Number(watchlistId) } : {}),
-      ...((universe === "ticker" || universe === "watchlist") && scoreAll ? { score_all: true } : {}),
+      ...(universe === "earnings" ? { earnings_window: earnWindow } : {}),
+      ...((universe === "ticker" || universe === "watchlist" || universe === "earnings") && scoreAll ? { score_all: true } : {}),
       filters,
     });
+    if (started) captureUsage("custom_scan_started", { universe, session });
+  };
+
+  // The Earnings tab's "Score every reporter" button lands here with the window and start=1.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current || !link) return;
+    linked.current = true;
+    if (link.start && !earnLocked(link.when)) {
+      startedHere.current = true;
+      void scan.start({ universe: "earnings", earnings_window: link.when, score_all: true, filters: { session: "regular" } });
+      window.history.replaceState(null, "", window.location.pathname);   // a reload doesn't start another scan
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A saved view, or the settings the AI scan builder wrote, fills the form (nothing runs).
+  const applyView: ComponentProps<typeof SavedResearchViews>["onApply"] = (v) => {
+    if (!("universe" in v)) return;
+    const allowed = UNIVERSES.find((u) => u.id === v.universe);
+    if ((allowed?.feature && !can(allowed.feature)) || (v.unusual && !can("can_unusual_volume")) || (v.gap && !can("can_scan_nasdaq")) || (v.session === "premarket" && !can("can_premarket")) || (v.session === "afterhours" && !can("can_afterhours"))) {
+      setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
+    }
+    setUniverse(v.universe ?? "sp500"); setTicker(v.ticker ?? ""); setWatchlistId(v.watchlist_id ? String(v.watchlist_id) : "");
+    if (v.universe === "earnings" && earnLocked(v.earnings_window ?? "today")) {
+      setFormErr("This saved view uses settings outside your current plan. Choose another view or upgrade."); return;
+    }
+    setEarnWindow(v.earnings_window ?? "today");
+    setSession(v.session ?? "regular"); setTopN(v.top_n ?? 25); setMinPrice(v.min_price == null ? "" : String(v.min_price));
+    setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
+    setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
+    setFormErr(null);
   };
 
   const err = scan.error;
@@ -180,7 +239,13 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
         </div>
       </section>
 
-      <div className="split">
+      <SavedResearchViews kind="custom_views" disabled={active || scan.starting}
+        current={{ name: "", universe, ticker, watchlist_id: watchlistId ? Number(watchlistId) : null, session, earnings_window: earnWindow,
+          top_n: topN as 10 | 25 | 50 | 100 | 200, min_price: optNum(minPrice), max_price: optNum(maxPrice),
+          min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), score_all: scoreAll }}
+        onApply={applyView} />
+      <ScanBuilder disabled={active || scan.starting} onApply={applyView} />
+      <div className="split custom-scan-layout">
         <form className="card col-side form" onSubmit={submit} aria-label="Scan settings">
           <fieldset disabled={active || scan.starting}>
             <legend className="h2">What to scan</legend>
@@ -190,7 +255,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 return (
                   <label key={u.id} className={`radio${locked ? " is-locked" : ""}`}>
                     <input type="radio" name="universe" value={u.id} checked={universe === u.id} disabled={locked}
-                      onChange={() => setUniverse(u.id)} />
+                      onChange={() => { setUniverse(u.id); if (u.id === "earnings") setScoreAll(true); }} />
                     <span>{u.label}</span>
                     {locked && <span className="pill pill-gold">{u.plan === "premium" ? "Premium" : "Pro"}</span>}
                   </label>
@@ -213,12 +278,26 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 </select>
               </label>
             )}
-            {(universe === "ticker" || universe === "watchlist") && (
+            {universe === "earnings" && (
+              <div className="seg-group" role="radiogroup" aria-label="Reporting">
+                {EARN_WINDOWS.map((w) => {
+                  const locked = earnLocked(w.id);
+                  return (
+                    <label key={w.id} className={`seg${earnWindow === w.id ? " on" : ""}${locked ? " is-locked" : ""}`}>
+                      <input type="radio" name="earnings_window" className="sr-only" checked={earnWindow === w.id} disabled={locked}
+                        onChange={() => setEarnWindow(w.id)} />
+                      {w.label}{locked ? " · Pro" : ""}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {(universe === "ticker" || universe === "watchlist" || universe === "earnings") && (
               <label className="check"><input type="checkbox" checked={scoreAll} onChange={(e) => setScoreAll(e.target.checked)} />
                 <span>Score every ticker, not only setups</span></label>
             )}
 
-            <legend className="h2 mt">Session</legend>
+            <h2 className="h2 mt">Session</h2>
             <div className="seg-group" role="radiogroup" aria-label="Session">
               {SESSIONS.map((s) => {
                 const locked = !!s.feature && !can(s.feature);
@@ -231,11 +310,11 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               })}
             </div>
 
-            <legend className="h2 mt">Filters</legend>
+            <details className="advanced-scan"><summary>Advanced filters</summary><p className="cap">Blank fields use the scanner’s server defaults. Set a value to override them.</p>
             <div className="grid2">
-              <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Default" /></label>
-              <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Default" /></label>
-              <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Default" /></label>
+              <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Server default" /></label>
+              <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Server default" /></label>
+              <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Results</span>
                 <select value={Math.min(topN, maxRows)} onChange={(e) => setTopN(Number(e.target.value))}>
                   {TOP_N.map((n) => <option key={n} value={n} disabled={n > maxRows}>{n}{n > maxRows ? " (upgrade)" : ""}</option>)}
@@ -250,17 +329,20 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               <input type="checkbox" checked={gap} disabled={!can("can_scan_nasdaq")} onChange={(e) => setGap(e.target.checked)} />
               <span>Gap filter{can("can_scan_nasdaq") ? "" : " · Pro"}</span>
             </label>
-            {gap && <label className="field"><span>Min gap (%)</span><input inputMode="decimal" value={minGap} onChange={(e) => setMinGap(e.target.value)} placeholder="Default" /></label>}
+            {gap && <label className="field"><span>Min gap (%)</span><input inputMode="decimal" value={minGap} onChange={(e) => setMinGap(e.target.value)} placeholder="Server default" /></label>}
+            </details>
           </fieldset>
           {formErr && <p className="form-error" role="alert">{formErr}</p>}
+          <div className="scan-submit">
           <div className="metric-strip" aria-label="Scan preview">
             <span><strong>{scanEstimate}</strong> source</span>
-            <span><strong>{Math.min(topN, maxRows)}</strong> max rows</span>
+            <span><strong>{rowsShown}</strong> max rows</span>
             <span><strong>{session}</strong> session</span>
           </div>
           <button type="submit" className="btn btn-primary btn-block" disabled={active || scan.starting || !!scan.retryInS}>
             {scan.starting ? "Starting…" : active ? "Scan running…" : scan.retryInS ? `Try again in ${scan.retryInS}s` : "Start scan"}
           </button>
+          </div>
         </form>
 
         <div className="col-main stack" ref={statusRef}>
@@ -278,7 +360,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           {err?.status === 409 && job && <p className="notice" role="status">You already had a scan running. Showing that one.</p>}
 
           {!job && !err && (
-            <Card><Empty title="Choose a list and start a scan.">Results are ranked by HSF Score and saved to your scan history.</Empty></Card>
+            <Card title="Your scan preview" id="scan-preview"><p className="strong">{scanEstimate} · {session} session · up to {rowsShown} results</p><p className="cap">{universe === "ticker" ? `Ticker: ${ticker || "choose a ticker"}` : universe === "watchlist" ? `Watchlist: ${selectedList?.name || "choose a list"}` : universe === "earnings" ? `Every stock in the earnings calendar that reports ${EARN_TEXT[earnWindow]}, scored with the HSF scanner.` : "Results will be ranked by HSF Score and saved to your scan history."}</p><p className="cap">{universe === "ticker" ? "A single ticker is the quickest scan." : "Large lists can take a few minutes. You can leave while the scan runs."}</p></Card>
           )}
           {job && active && <Card title="Scan in progress"><Progress job={job} onCancel={() => void scan.cancel()} cancelling={scan.cancelling} /></Card>}
           {job && job.status === "failed" && job.error === CANCELLED && (
@@ -299,6 +381,9 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 <Empty title="No setups matched.">Try a larger list or looser filters.</Empty>
               ) : (
                 <div className="flush-inner"><SetupTable rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
+              )}
+              {job.result.total > job.result.setups.length && (
+                <p className="cap">Showing the top {job.result.setups.length} of {job.result.total} scored stocks (your plan&apos;s row limit).</p>
               )}
               <div className="card-foot">
                 <span className="cap">{job.params.session !== job.params.session_requested ? "Outside that session, the regular session was scanned. " : ""}Prices are from the scan.</span>

@@ -32,11 +32,13 @@ class ClientErrorReport(BaseModel):
     digest: Optional[str] = Field(default=None, max_length=64, description="Next.js server error digest")
     stack: Optional[str] = Field(default=None, max_length=2000)
     request_id: Optional[str] = Field(default=None, max_length=64)
+    release: Optional[str] = Field(default=None, max_length=64, pattern=r"^[\w.\-]+$",
+                                   description="The web build's commit, to match uploaded source maps")
 
 
 class UnsubscribeBody(BaseModel):
     token: str = Field(min_length=10, max_length=64)
-    kind: Literal["digest", "evening", "alerts", "all"]
+    kind: Literal["digest", "evening", "alerts", "weekly", "tips", "all"]
 
 
 def register(app: FastAPI) -> None:
@@ -71,7 +73,7 @@ def register(app: FastAPI) -> None:
         when SENTRY_DSN is set. Holds no account, token or query string; always accepted."""
         report = {"event": "web_client_error", "kind": body.kind, "message": body.message,
                   "path": (body.path or "").split("?")[0][:200] or None, "digest": body.digest,
-                  "request_id": body.request_id}
+                  "request_id": body.request_id, "release": body.release}
         log.warning(json.dumps(report))
         from api.monitoring import capture_client_error
 

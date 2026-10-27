@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-import streamlit as st
+from utils.st_compat import st
 
 # Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
 # header never breaks if the new file hasn't been added yet.

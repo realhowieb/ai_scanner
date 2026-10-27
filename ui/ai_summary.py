@@ -43,7 +43,7 @@ _TICKER_SYSTEM_PROMPT = (
 def _current_user() -> str | None:
     """Best-effort current username for per-user AI usage tracking."""
     try:
-        import streamlit as st
+        from utils.st_compat import st
         return st.session_state.get("username")
     except Exception:
         return None
@@ -105,7 +105,7 @@ def render_ai_summary(df: pd.DataFrame, *, context: str = "") -> None:
     more than one place in a single run (e.g. the results tab AND the three-step
     scanner) without colliding on Streamlit element keys.
     """
-    import streamlit as st
+    from utils.st_compat import st
 
     st.markdown("#### 🧠 AI Scan Summary")
     st.caption(
@@ -164,7 +164,7 @@ def render_ticker_analysis(row, ticker: str) -> None:
     """Button-gated single-ticker AI analysis, cached per ticker+metrics."""
     import hashlib as _h
 
-    import streamlit as st
+    from utils.st_compat import st
 
     try:
         fp = _h.sha256(str(dict(row)).encode()).hexdigest()[:12]

@@ -23,7 +23,7 @@ const numMetric = (v: unknown) => (typeof v === "number" ? v : null);
 
 const RANKINGS: { id: Ranking; label: string; note: string }[] = [
   { id: "breakout", label: "Breakout score", note: "Each saved scan's top names by Breakout score" },
-  { id: "prebreakout", label: "PreBreakout", note: "Each saved scan's top names by PreBreakout probability" },
+  { id: "prebreakout", label: "PreBreakout", note: "Top names by the PreBreakout probabilities saved with each scan. Scans without saved predictions are excluded." },
 ];
 
 /** 0.012 -> "+1.20%" (the API sends fractions). */
@@ -82,7 +82,7 @@ function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: bo
 
 function SummaryTable({ rows, minSample }: { rows: TrackRecordSummary[]; minSample: number }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Ranking study table; scroll sideways for more columns">
       <table className="table">
         <thead>
           <tr>
@@ -143,12 +143,12 @@ function Research() {
       {d.summary && Object.keys(d.summary).length > 0 && (
         <Card title="First read" id="first-read">
           <div className="metric-strip" aria-label="Track record summary">
-            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> best slice</span>
+            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> highest observed average</span>
             <span><strong>{numMetric(d.summary.best_horizon_days) ? `${numMetric(d.summary.best_horizon_days)}d` : "—"}</strong> horizon</span>
             <span><strong>{pct(numMetric(d.summary.best_avg_excess_return) != null ? numMetric(d.summary.best_avg_excess_return)! * 100 : null)}</strong> excess</span>
             <span><strong>{metric(d.summary.ready_horizons, 0)}</strong> ready</span>
           </div>
-          <p className="cap">{String(metric(d.summary.read, "Use sample size first, then compare average excess return and win rate."))}</p>
+          <p className="cap">Selected from the available historical slices; this is not an independently validated result. Compare every horizon and its sample size below.</p>
         </Card>
       )}
       <section aria-label="Ranking" className="filters">
@@ -191,8 +191,23 @@ function Research() {
           </Card>
         </>
       )}
-      <p className="cap">Picks are scan results, not trades: no costs, slippage or position sizing. HSF Score is an opportunity ranking, not a probability of profit.</p>
+      <p className="cap">Picks are scan results, not trades: no costs, slippage or position sizing.</p>
     </>
+  );
+}
+
+/** Plain-language method notes: what is counted, when, and what the numbers do not mean. */
+function HowMeasured() {
+  return (
+    <details className="method">
+      <summary>How these results are measured</summary>
+      <dl className="method-body">
+        <div><dt>What counts as a signal</dt><dd>A ticker that appeared in an HSF scan, counted once per ticker per day, with the score and setup it had then. Records are saved at scan time and never revised.</dd></div>
+        <div><dt>When an outcome is measured</dt><dd>Close-to-close return over the holding period (1, 3 or 5 trading days), compared with SPY over the same days. Signals whose period hasn&apos;t ended are pending: they are not wins or losses.</dd></div>
+        <div><dt>What the HSF Score is</dt><dd>An opportunity ranking from 0 to 100. It is not a probability of profit, and these tables are not a model&apos;s training accuracy.</dd></div>
+        <div><dt>What this can&apos;t tell you</dt><dd>No costs, slippage or position sizing are included, and samples are small. Past results describe what happened; they don&apos;t predict future results.</dd></div>
+      </dl>
+    </details>
   );
 }
 
@@ -208,8 +223,8 @@ export function TrackRecordView() {
       </section>
       {can("can_track_record") ? (
         <>
-          <OutcomeEvidence />
-          <section className="stack" aria-label="Ranking study">
+          <nav className="chips" aria-label="Research sections"><a className="chip" href="#overall-record">Overall record</a><a className="chip" href="#ranking-study">Ranking study</a></nav><HowMeasured /><div id="overall-record" className="stack"><OutcomeEvidence /></div>
+          <section id="ranking-study" className="stack" aria-label="Ranking study">
             <h2 className="h2">Ranking study</h2>
             <p className="cap">A separate, narrower study: only each saved scan&apos;s top names under one ranking. It is not the full HSF record above.</p>
             <Research />

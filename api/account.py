@@ -40,7 +40,7 @@ def _link(path: str, token: str) -> str:
 
 
 def _check_password(password: str, *, email: Optional[str], username: Optional[str] = None) -> None:
-    from ui.password_policy import password_problem
+    from domain.password_policy import password_problem
 
     problem = password_problem(password, email=email, username=username)
     if problem:
@@ -61,7 +61,7 @@ def send_verification(email: str) -> bool:
 
 # ---- sign-up -------------------------------------------------------------------------------------
 def signup(email: str, password: str, username: str, accept_terms: bool) -> Dict[str, Any]:
-    """Create a Free account with the web form's rules. Returns {email, verification_sent}."""
+    """Create a Starter (free) account with the web form's rules. Returns {email, verification_sent}."""
     from db import users
 
     email = (email or "").strip().lower()
@@ -102,13 +102,27 @@ def verify_email(token: str) -> str:
     return str(user).strip().lower()
 
 
-def is_verified(email: str) -> bool:
-    try:
-        from db.email_verification import is_email_verified
+class VerificationUnavailable(RuntimeError):
+    """The email verification status couldn't be read right now (503). Not the same
+    as an unverified account: the gate stays closed until the status can be confirmed."""
 
-        return bool(is_email_verified(email))
-    except Exception:
-        return True  # same fail-open rule as the web app's gate
+
+def verification_status(email: str) -> bool:
+    """True when verified, False when not; VerificationUnavailable when the lookup fails."""
+    try:
+        from db.email_verification import email_verification_status
+
+        return bool(email_verification_status(email))
+    except Exception as e:  # db.email_verification.VerificationUnavailable, import or driver errors
+        raise VerificationUnavailable("email verification lookup failed") from e
+
+
+def is_verified(email: str) -> bool:
+    """For display (/v1/me): True only when confirmed. Gates use verification_status."""
+    try:
+        return verification_status(email)
+    except VerificationUnavailable:
+        return False
 
 
 # ---- password reset -------------------------------------------------------------------------------
@@ -144,6 +158,9 @@ def _set_password_and_sign_out(username: str, new_password: str, reason: str) ->
 
     if not update_neon_user_password(username, _hash_password(new_password)):
         raise DatabaseUnavailable("database unavailable")
+    from api.deps import forget_account
+
+    forget_account(username)
     try:  # P1-54: sign the account out everywhere (web sessions and app sessions)
         from ui.auth_sessions import revoke_user_sessions
 
@@ -227,9 +244,13 @@ class BillingUnavailable(RuntimeError):
 def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
     """Stripe checkout (new subscribers) or plan-change portal (existing ones), the
     same call the web Billing page makes. Requires a verified email, as on the web."""
-    if not is_verified(username):
+    if not verification_status(username):  # VerificationUnavailable (503) blocks too
         raise AccountError("Please verify your email before upgrading.", status=403)
-    from ui.checkout import create_checkout_url
+    from api.billing import embedded_enabled, session_for_account
+
+    if embedded_enabled():
+        return session_for_account(username, {"plan": plan, "interval": interval})
+    from services.billing import create_checkout_url
 
     url, err = create_checkout_url(username, plan, interval)
     if not url:
@@ -241,10 +262,15 @@ def checkout_url(username: str, plan: str, interval: str) -> Dict[str, str]:
 def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     """Stripe Customer Portal (manage plan, payment method, invoices; flow='cancel'
     opens the cancellation screen), via the billing service like the web page."""
+    from api.billing import embedded_enabled, session_for_account
+
+    if embedded_enabled():
+        return session_for_account(username, {"flow": flow}, portal=True)
+
     import requests
 
     from config import BILLING_API_BASE
-    from ui.checkout import billing_auth_headers
+    from services.billing import billing_auth_headers
 
     base = (BILLING_API_BASE or "").rstrip("/")
     if not base.startswith(("https://", "http://")):
@@ -256,7 +282,7 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     if flow:
         body["flow"] = flow
     try:
-        from ui.checkout import _build_return_urls
+        from services.billing import _build_return_urls
 
         _success, ret = _build_return_urls(username)
         if ret:
@@ -279,3 +305,37 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
     if not url:
         raise BillingUnavailable("no portal_url")
     return {"url": url, "mode": "portal"}
+
+
+def billing_attention(username: str, tier: str) -> Optional[Dict[str, Any]]:
+    """{"state": "past_due", "grace_ends_at": ...} while a paid plan's last charge failed,
+    for the web app's banner; None otherwise. Only paid accounts are looked up, and a
+    failed lookup is None (the banner is a nudge, never a gate)."""
+    if str(tier or "").lower() not in ("pro", "premium"):
+        return None
+    try:
+        import json as _json
+
+        from api.store import _conn
+
+        conn = _conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT snapshot FROM hsf_billing_state WHERE username = %s",
+                            (str(username).strip().lower(),))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return None
+    if not row:
+        return None
+    snap = list(row.values())[0] if isinstance(row, dict) else row[0]
+    if isinstance(snap, str):
+        try:
+            snap = _json.loads(snap)
+        except ValueError:
+            return None
+    if not isinstance(snap, dict) or snap.get("status") != "past_due" or not snap.get("past_due_since"):
+        return None
+    return {"state": "past_due", "grace_ends_at": snap.get("grace_ends_at")}

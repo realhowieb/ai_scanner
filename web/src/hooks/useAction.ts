@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { ApiError } from "@/api/client";
 
@@ -8,7 +8,10 @@ import { ApiError } from "@/api/client";
 export function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const running = useRef(false);
   const run = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    if (running.current) return undefined;
+    running.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -17,6 +20,7 @@ export function useAction() {
       setError(e instanceof ApiError ? e : new ApiError(0, "Something went wrong.", null, null, null));
       return undefined;
     } finally {
+      running.current = false;
       setBusy(false);
     }
   }, []);

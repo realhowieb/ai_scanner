@@ -188,6 +188,39 @@ class LoadDailyExcessTests(unittest.TestCase):
         self.assertEqual(days, [dt.date(2026, 6, 26), dt.date(2026, 6, 29)])
 
 
+class TrackRecordMethodTests(unittest.TestCase):
+    def test_new_results_are_stored_separately_from_legacy_rescoring(self):
+        from db import track_record as dbtr
+
+        conn = mock.MagicMock()
+        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn), \
+                mock.patch.object(dbtr, "_ensure_schema"):
+            dbtr.save_track_record(horizon_days=5, avg_return=0.01, median_return=0.01,
+                                  win_rate=0.6, sample_size=30, runs_used=6, ranking="prebreakout")
+            self.assertEqual(conn.cursor.return_value.execute.call_args.args[1][-1], dbtr.PREBREAKOUT_SNAPSHOT)
+            dbtr.save_daily_excess("prebreakout", 5, [(dt.date(2026, 10, 1), 0.01, 5)])
+            self.assertEqual(conn.cursor.return_value.execute.call_args.args[1][1], dbtr.PREBREAKOUT_SNAPSHOT)
+
+    def test_reads_select_only_snapshot_method_and_keep_public_ranking_name(self):
+        from db import track_record as dbtr
+
+        conn = mock.MagicMock()
+        cur = conn.cursor.return_value
+        cur.fetchone.return_value = {"horizon_days": 5, "ranking": dbtr.PREBREAKOUT_SNAPSHOT}
+        cur.fetchall.return_value = [cur.fetchone.return_value]
+        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn), \
+                mock.patch.object(dbtr, "_ensure_schema"):
+            single = dbtr.load_latest_track_record(5, "prebreakout")
+            self.assertEqual(single["ranking"], "prebreakout")
+            self.assertEqual(cur.execute.call_args.args[1][1], dbtr.PREBREAKOUT_SNAPSHOT)
+            rows = dbtr.load_latest_track_records()
+            self.assertEqual(rows[0]["ranking"], "prebreakout")
+            self.assertIn("ranking != 'prebreakout'", cur.execute.call_args.args[0])
+            cur.fetchall.return_value = []
+            dbtr.load_daily_excess("prebreakout", 5, 120)
+            self.assertEqual(cur.execute.call_args.args[1][0], dbtr.PREBREAKOUT_SNAPSHOT)
+
+
 @requires_pandas
 class RankedSymbolsTests(unittest.TestCase):
     def _df(self):
@@ -201,34 +234,42 @@ class RankedSymbolsTests(unittest.TestCase):
     def test_breakout_ranking_sorts_by_score(self):
         self.assertEqual(tr._ranked_symbols(self._df(), "breakout", 2), ["HIGH", "MID"])
 
-    def test_prebreakout_ranking_uses_model_probability(self):
-        def fake_score(df):
-            out = df.copy()
-            # Reverse of BreakoutScore so the two rankings must differ.
-            out["PreBreakoutProb%"] = [90.0, 10.0, 50.0]
-            return out
-
-        with mock.patch("ml_prebreakout.score_prebreakout", side_effect=fake_score):
+    def test_prebreakout_ranking_uses_saved_probability_without_loading_model(self):
+        saved = self._df().assign(**{"PreBreakoutProb%": [90.0, 10.0, 50.0]})
+        before = saved.copy(deep=True)
+        with mock.patch("ml_prebreakout.score_prebreakout", side_effect=AssertionError("must not rescore")) as scorer:
             self.assertEqual(
-                tr._ranked_symbols(self._df(), "prebreakout", 2), ["LOW", "MID"]
+                tr._ranked_symbols(saved, "prebreakout", 2), ["LOW", "MID"]
             )
+            scorer.assert_not_called()
+        pd.testing.assert_frame_equal(saved, before)
 
-    def test_prebreakout_ranking_empty_when_model_unavailable(self):
-        with mock.patch(
-            "ml_prebreakout.score_prebreakout", side_effect=RuntimeError("no model")
-        ):
-            self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
+    def test_prebreakout_ranking_empty_without_saved_predictions(self):
+        self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
 
     def test_prebreakout_ranking_empty_on_all_zero_probabilities(self):
-        # score_prebreakout emits all-zero probs when no trained model loads;
-        # zeros are not a ranking and must not fall back to stored order.
-        def zero_score(df):
-            out = df.copy()
-            out["PreBreakoutProb%"] = 0.0
-            return out
+        saved = self._df().assign(**{"PreBreakoutProb%": [0.0, 0.0, 0.0]})
+        self.assertEqual(tr._ranked_symbols(saved, "prebreakout", 2), [])
 
-        with mock.patch("ml_prebreakout.score_prebreakout", side_effect=zero_score):
-            self.assertEqual(tr._ranked_symbols(self._df(), "prebreakout", 2), [])
+    def test_saved_provenance_wins_over_display_and_rejects_unavailable(self):
+        import json
+
+        saved = self._df().assign(**{"PreBreakoutProb%": [95.0, 90.0, 80.0]})
+        saved["ModelProvenance"] = [json.dumps({"prebreakout": v}) for v in [
+            {"status": "captured", "calibrated_probability": 0.2},
+            {"status": "unavailable"},
+            {"status": "captured", "calibrated_probability": 0.9},
+        ]]
+        self.assertEqual(tr._ranked_symbols(saved, "prebreakout", 3), ["MID", "LOW"])
+
+    def test_invalid_saved_probabilities_are_excluded(self):
+        for values in ([float("nan"), float("inf"), -1], [101, "bad", None]):
+            saved = self._df().assign(**{"PreBreakoutProb%": values})
+            self.assertEqual(tr._ranked_symbols(saved, "prebreakout", 3), [])
+
+    def test_saved_fractional_probabilities_are_supported(self):
+        saved = self._df().assign(PreBreakoutProb=[0.9, 0.1, 0.5])
+        self.assertEqual(tr._ranked_symbols(saved, "prebreakout", 2), ["LOW", "MID"])
 
 
 @requires_pandas
@@ -249,10 +290,9 @@ class ComputeTrackRecordTests(unittest.TestCase):
         ), mock.patch(
             "data.price_alpaca.download_multi_alpaca", return_value=bars
         ), mock.patch(
-            # Deterministic across environments: with ML libs installed but no
-            # trained model, the real score_prebreakout returns zero probs.
+            # No current model may fill in this snapshot's missing predictions.
             "ml_prebreakout.score_prebreakout",
-            side_effect=RuntimeError("no model"),
+            side_effect=AssertionError("must not reconstruct historical predictions"),
         ):
             results = tr.compute_track_record(horizon_days=1)
 
@@ -263,7 +303,7 @@ class ComputeTrackRecordTests(unittest.TestCase):
         self.assertAlmostEqual(summary["win_rate"], 0.5)
         self.assertEqual(summary["sample_size"], 2)
         self.assertEqual(summary["benchmark"], "SPY")
-        # prebreakout ranking absent (model unavailable) rather than fabricated.
+        # Prebreakout ranking absent (no saved predictions) rather than fabricated.
         self.assertNotIn("prebreakout", results)
 
     def test_returns_none_without_benchmark_bars(self):

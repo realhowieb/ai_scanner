@@ -671,6 +671,35 @@ def eval_workflows(workflows: Optional[Mapping[str, Optional[Sequence[Mapping[st
                      action="none" if not f else f[0]["recommended_action"], metrics={"workflows": rows})
 
 
+def _api_peak_mb(api: Mapping[str, Any]) -> Any:
+    """The peak Render restarts on (container) when the API reports it, else process RSS."""
+    peak = api.get("container_peak_mb")
+    return peak if peak is not None else api.get("rss_peak_mb")
+
+
+def api_memory_finding(api: Optional[Mapping[str, Any]], now: _dt.datetime) -> Optional[Dict[str, Any]]:
+    """WARNING when the API's memory peak since its last restart reached its warning line
+    (HSF_MEMORY_WARN_MB, default 400 of 512 MB on Render Starter)."""
+    if not api or not api.get("memory_warning"):
+        return None
+    return finding("API_MEMORY_HIGH", "WARNING",
+                   f"API memory peaked at {_api_peak_mb(api)} MB of {api.get('memory_limit_mb')} MB",
+                   evidence={k: api.get(k) for k in ("rss_mb", "rss_peak_mb", "container_mb", "container_peak_mb",
+                                                     "memory_limit_mb", "memory_warn_mb", "price_cache_entries")},
+                   detected_at=now, human="WATCH",
+                   action="check what grew (custom scans, caches) before Render restarts the API for memory")
+
+
+def api_memory_incident(api: Optional[Mapping[str, Any]], now: _dt.datetime) -> Optional[Dict[str, Any]]:
+    """The memory warning as a stand-alone incident. It used to be a Database finding, which
+    turned the Database row Degraded although the database was fine; the subsystem model
+    stays frozen, so it is listed with the incidents only and does not change any row."""
+    f = api_memory_finding(api, now)
+    if not f:
+        return None
+    return build_incidents({"api": {"findings": [f]}}, now)[0]
+
+
 def eval_database(probe: Optional[Mapping[str, Any]], now: _dt.datetime) -> Dict[str, Any]:
     if probe is None:
         return unknown("database probe did not run")
@@ -771,6 +800,9 @@ def evaluate(inputs: Mapping[str, Any]) -> Dict[str, Any]:
     if system == "UNKNOWN" and ACTION_ORDER[human] < ACTION_ORDER["WATCH"]:
         human = "WATCH"
     incidents = build_incidents(subs, now)
+    mem = api_memory_incident(inputs.get("api_ready"), now)
+    if mem:
+        incidents.append(mem)
     score = max(0, 100 - sum(SCORE_PENALTY.get(s["status"], 0) for s in subs.values()))
     report = {
         "schema": SCHEMA,

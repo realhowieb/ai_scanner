@@ -83,7 +83,9 @@ class ExportTests(PaidApiTestCase):
 
         ratelimit.reset()
         wl = {"id": 3, "name": "Main", "is_default": True, "items": [{"ticker": "AAPL", "note": "x"}]}
-        with mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
+        with mock.patch("api.workspace.preferences", return_value={}), \
+                mock.patch("api.alert_delivery.recent", return_value=[]), \
+                mock.patch("api.user_data.list_watchlists", return_value=[{"id": 3, "name": "Main"}]), \
                 mock.patch("api.user_data.get_watchlist", return_value=wl), \
                 mock.patch("api.user_data.list_alerts", return_value=[{"id": 1, "ticker": "AAPL"}]), \
                 mock.patch("api.alert_rules.list_rules", return_value=[]), \
@@ -92,7 +94,7 @@ class ExportTests(PaidApiTestCase):
                 mock.patch("api.account.get_email_prefs", return_value={"digest": True}), \
                 mock.patch("api.devices.list_devices", return_value=[]), \
                 mock.patch("api.history.saved_runs", return_value=[]), \
-                mock.patch("api.account.is_verified", return_value=True):
+                mock.patch("api.account.verification_status", return_value=True):
             r = self.get("pro@example.com", "/v1/me/export")
         self.assertEqual(r.status_code, 200)
         self.assertIn("attachment", r.headers["content-disposition"])
@@ -377,10 +379,14 @@ class JournalAndPaperTests(PaidApiTestCase):
         _cache.clear()
         self.addCleanup(_cache.clear)
         self.trades, self.keys, self.logged = [], {}, []
+        from tests.paper_fakes import MemoryOrders, PaperBroker
+
+        self.order_store, self.broker = MemoryOrders(), PaperBroker()
         df = pd.DataFrame([{"Ticker": "AAPL", "Last": 100.0, "Volatility20D%": 6.0, "BreakoutScore": 80}])
         p = mock.patch
         for target, fn in (
-            ("db.trades.list_trades", lambda u, limit=50: [dict(t) for t in self.trades if t["user"] == u]),
+            ("db.trades.list_trades", lambda u, limit=50, offset=0: [dict(t) for t in self.trades if t["user"] == u][offset:offset + limit]),
+            ("db.trades.get_trade", lambda u, tid: next((dict(t) for t in self.trades if t["user"] == u and t["id"] == tid), None)),
             ("db.trades.log_trade", self._log),
             ("db.trades.close_trade", lambda tid, u, px: [t.update(exit_price=px, closed_at="2026-10-06T15:00:00+00:00")
                                                        for t in self.trades if t["id"] == tid and t["user"] == u]),
@@ -396,8 +402,13 @@ class JournalAndPaperTests(PaidApiTestCase):
             ("data.alpaca_trading._base_url", lambda: "https://paper-api.alpaca.markets"),
             ("data.alpaca_trading.get_account", lambda k, sec: {"status": "ACTIVE", "buying_power": "100000",
                                                                  "cash": "100000", "account_number": "PA123"} if k == "PKGOODKEY1" else None),
-            ("data.alpaca_trading.submit_market_order", lambda k, sec, sym, q, side="buy": {"ok": True, "order_id": "o1",
-                                                                                        "status": "accepted", "filled_avg_price": None}),
+            ("services.paper_orders.store.reserve", self.order_store.reserve),
+            ("services.paper_orders.store.save", self.order_store.save),
+            ("services.paper_orders.store.pending", self.order_store.pending),
+            ("data.alpaca_trading.submit_market_order", self.broker.submit),
+            ("data.alpaca_trading.get_order_by_client_id", self.broker.lookup),
+            ("services.paper_orders.reconcile_paper_fill", lambda u, oid, t, px, q, ctx:
+                self._log(u, t, px, q, source="paper", alpaca_order_id=oid, **ctx)),
             ("data.alpaca_trading.get_positions", lambda k, sec: [{"symbol": "AAPL", "qty": "3"}]),
             ("data.alpaca_trading.get_orders", lambda k, sec, status="all", limit=25: [{"id": "o1"}]),
             ("db.paper_events.sync_orders", lambda u, orders: len(orders)),
@@ -413,6 +424,8 @@ class JournalAndPaperTests(PaidApiTestCase):
                             "shares": shares, "source": source, "entered_at": None, "exit_price": None, "closed_at": None})
 
     def post(self, email, path, body=None):
+        if path == "/v1/paper/orders":
+            body = {"idempotency_key": "test-confirm-123", **(body or {})}
         return self.client.post(path, headers=self.h(email), json=body or {})
 
     def test_journal_read_all_plans_write_pro(self):
@@ -428,6 +441,39 @@ class JournalAndPaperTests(PaidApiTestCase):
         closed = self.get("pro@example.com", "/v1/journal").json()["trades"][0]
         self.assertEqual((closed["open"], closed["pnl"]), (False, 100.0))
         self.assertEqual(self.client.delete(f"/v1/journal/{tid}", headers=self.h("pro@example.com")).status_code, 204)
+
+    def test_journal_pages_and_old_owned_trade_remain_accessible(self):
+        for _ in range(1002):
+            self._log("pro@example.com", "AAPL", 100, 2)
+        response = self.get("pro@example.com", "/v1/journal?limit=2&offset=1000")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([trade["id"] for trade in response.json()["trades"]], [1001, 1002])
+        self.assertFalse(response.json()["has_more"])
+        first = self.get("pro@example.com", "/v1/journal?limit=2").json()
+        self.assertTrue(first["has_more"])
+        self.assertEqual(self.post("pro@example.com", "/v1/journal/1002/close", {"exit_price": 101}).status_code, 204)
+        self.assertEqual(self.client.delete("/v1/journal/1002", headers=self.h("prem@example.com")).status_code, 404)
+        self.assertEqual(self.client.delete("/v1/journal/1002", headers=self.h("pro@example.com")).status_code, 204)
+
+    def test_unavailable_positions_have_unknown_totals_but_empty_positions_are_zero(self):
+        self.keys["prem@example.com"] = {"api_key": "PKGOODKEY1", "api_secret": "fake"}
+        with mock.patch("data.alpaca_trading.get_positions", return_value=None):
+            missing = self.get("prem@example.com", "/v1/paper/activity").json()
+        self.assertFalse(missing["positions_available"])
+        self.assertIsNone(missing["summary"]["positions"])
+        self.assertIsNone(missing["summary"]["market_value"])
+        self.assertIsNone(missing["summary"]["unrealized_pl"])
+        with mock.patch("data.alpaca_trading.get_positions", return_value=[]):
+            empty = self.get("prem@example.com", "/v1/paper/activity").json()
+        self.assertTrue(empty["positions_available"])
+        self.assertEqual(empty["summary"]["market_value"], 0)
+        self.assertEqual(empty["summary"]["unrealized_pl"], 0)
+
+    def test_paginated_journal_keeps_win_rate_based_on_all_closed_trades(self):
+        with mock.patch("db.trades.journal_stats", return_value={"closed": 2, "wins": 1, "avg_return_pct": 10}):
+            result = self.get("pro@example.com", "/v1/journal?limit=1").json()
+        self.assertEqual(result["summary"]["win_rate"], 50)
+        self.assertEqual(result["stats"]["closed"], 2)
 
     def test_trade_plan(self):
         self.assertEqual(self.get("free@example.com", "/v1/stocks/AAPL/plan").status_code, 403)
@@ -462,8 +508,13 @@ class JournalAndPaperTests(PaidApiTestCase):
         r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "aapl", "qty": 2, "confirm": True})
         self.assertEqual(r.status_code, 201, r.text)
         self.assertEqual(r.json()["order_id"], "o1")
+        self.assertFalse(r.json()["journal_synced"])
+        self.assertEqual(self.logged, [])
+        broker_row = next(iter(self.broker.orders.values()))
+        broker_row.update(status="filled", filled_avg_price="101.0", filled_qty="2")
+        act = self.get("prem@example.com", "/v1/paper/activity").json()
         user, ticker, entry, qty, source, kw = self.logged[-1]
-        self.assertEqual((user, ticker, entry, qty, source), ("prem@example.com", "AAPL", 100.0, 2, "paper"))
+        self.assertEqual((user, ticker, entry, qty, source), ("prem@example.com", "AAPL", 101.0, 2, "paper"))
         self.assertEqual((kw["stop_price"], kw["breakout_score"]), (97.0, 80))
         act = self.get("prem@example.com", "/v1/paper/activity").json()
         self.assertEqual((act["connected"], act["positions"][0]["symbol"], act["orders"][0]["order_id"]), (True, "AAPL", "o1"))
@@ -480,10 +531,10 @@ class JournalAndPaperTests(PaidApiTestCase):
 
     def test_rejected_order_is_400_and_not_journaled(self):
         self.keys["prem@example.com"] = {"api_key": "k", "api_secret": "s"}
-        with mock.patch("data.alpaca_trading.submit_market_order", return_value={"ok": False, "error": "insufficient buying power"}):
+        with mock.patch("data.alpaca_trading.submit_market_order", return_value={"ok": False, "status_code": 403, "error": "insufficient buying power"}):
             r = self.post("prem@example.com", "/v1/paper/orders", {"ticker": "AAPL", "qty": 1, "confirm": True})
         self.assertEqual(r.status_code, 400)
-        self.assertIn("insufficient", r.json()["detail"])
+        self.assertIn("rejected", r.json()["detail"].lower())
         self.assertEqual(self.logged, [])
 
 

@@ -16,7 +16,7 @@ SCORE_EPOCH = date(2026, 7, 1)
 def _get(name: str, default: str|None=None):
     # 1) Streamlit secrets if present, 2) env, 3) default
     try:
-        import streamlit as st
+        from utils.st_compat import st
         if "secrets" in dir(st) and st.secrets is not None:
             val = st.secrets.get(name)
             if val is not None:
@@ -51,7 +51,7 @@ def _get_any(names: tuple[str, ...], default: str | None = None):
 
 def _get_db_url() -> str:
     try:
-        import streamlit as st
+        from utils.st_compat import st
         nested = st.secrets["neon"]["database_url"]  # type: ignore[index]
         if nested:
             return str(nested)
@@ -99,7 +99,7 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = 10  # max failures before lockout
 SESSION_TTL_DAYS: int = int(_get("SESSION_TTL_DAYS", "14"))
 
 # --- Billing service ---
-BILLING_API_BASE: str = _get("BILLING_API_BASE", "https://ai-scanner-h2c8.onrender.com")
+BILLING_API_BASE: str = _get("BILLING_API_BASE", "https://hsf-api-v1.onrender.com/billing")
 # Yearly plans ($250 / $400 per year): the Billing page shows a Monthly/Yearly
 # choice only when this is on. Turn it on after the yearly Stripe prices exist
 # and STRIPE_PRICE_PRO_YEARLY / STRIPE_PRICE_PREMIUM_YEARLY are set on Render.
@@ -160,10 +160,10 @@ SMTP_PASS: str | None = _get("SMTP_PASS")
 SMTP_FROM: str = _get("SMTP_FROM", "noreply@ai-scanner.app")
 # Inbox display name for HSF email (used unless SMTP_FROM already includes one).
 SMTP_FROM_NAME: str = _get("SMTP_FROM_NAME", "HSF Alerts")
-# P1-51: links default to the PRODUCTION app. Scheduled emails are built by the
-# GitHub job, which can't read Streamlit secrets, so this default is what they
-# use. The beta app (hsf-beta, deploys from dev) sets its own APP_BASE_URL.
-APP_BASE_URL: str = _get("APP_BASE_URL", "https://hsfinestai.streamlit.app")
+# P1-51: links default to the PRODUCTION web app. Scheduled emails are built by
+# the GitHub job, which sets no APP_BASE_URL, so this default is what they use.
+# A Streamlit deployment that still needs its own links sets APP_BASE_URL.
+APP_BASE_URL: str = _get("APP_BASE_URL", "https://app.hsfinest.com")
 
 # ---------- Stripe Billing Configuration ----------
 STRIPE_MONTHLY_LINKS = {
@@ -181,7 +181,7 @@ STRIPE_YEARLY_LINKS = {
 # ---------- Tier Metadata ----------
 TIERS_CONFIG = {
     "basic": {
-        "name": "Free",
+        "name": "Starter",
         "price_monthly": 0,
         "price_yearly": 0,
         "features": ["SP500 Scan"],

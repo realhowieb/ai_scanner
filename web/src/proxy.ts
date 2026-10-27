@@ -15,6 +15,11 @@ export function proxy(req: NextRequest) {
     // Signed out: the landing page. Its utm tags are read by the page, so keep the query.
     return signedIn ? NextResponse.redirect(new URL("/today", req.url)) : NextResponse.next();
   }
+  if (pathname.startsWith("/share/")) {
+    // A shared stock link: members go straight to the full stock page.
+    const [ticker = "", ...rest] = pathname.slice("/share/".length).split("/");
+    return signedIn && ticker && rest.length === 0 ? NextResponse.redirect(new URL(`/stocks/${ticker}`, req.url)) : NextResponse.next();
+  }
   if (!signedIn) {
     const to = new URL("/login", req.url);
     to.searchParams.set("next", pathname + search);
@@ -24,5 +29,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/signup", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*", "/journal/:path*", "/day-trader/:path*", "/paper/:path*"],
+  matcher: ["/", "/login", "/signup", "/share/:path*", "/today/:path*", "/scanner/:path*", "/stocks/:path*", "/watchlists/:path*", "/alerts/:path*", "/account/:path*", "/track-record/:path*", "/brief/:path*", "/journal/:path*", "/ask/:path*", "/day-trader/:path*", "/paper/:path*", "/admin/:path*"],
 };

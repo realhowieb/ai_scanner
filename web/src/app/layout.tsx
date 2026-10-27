@@ -2,9 +2,11 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { UsageAnalytics } from "@/components/UsageAnalytics";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { NativeApp } from "@/components/NativeApp";
 import { OfflineReady } from "@/components/OfflineReady";
+import { STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
 
 import "./globals.css";
 
@@ -39,6 +41,13 @@ export const metadata: Metadata = {
   title: { default: "HSFinest.AI", template: "%s · HSFinest.AI" },
   description: "HSF AI stock scanner: ranked setups, custom scans and stock intelligence.",
   robots: { index: false, follow: false },
+  // Link previews (iMessage, Telegram, X, Slack). Pages without their own image use app/opengraph-image.tsx.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://app.hsfinest.com"),
+  openGraph: {
+    type: "website", siteName: "HSFinest.AI", title: "HSF AI Stock Scanner",
+    description: "Ranked stock setups from scans of the whole U.S. market, with the reasons and risks behind each score.",
+  },
+  twitter: { card: "summary_large_image" },
   // Opened from the iPhone Home Screen: full screen, named "HSF", dark status bar.
   appleWebApp: { capable: true, title: "HSF", statusBarStyle: "black" },
 };
@@ -48,7 +57,12 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${sora.variable} ${plex.variable} ${mono.variable}`}>
+      <head>
+        {/* Reloads once when a deploy left this page pointing at files that are gone. */}
+        <script dangerouslySetInnerHTML={{ __html: STALE_BUILD_SCRIPT }} />
+      </head>
       <body>
+        <UsageAnalytics />
         <ErrorReporter />
         <OfflineReady />
         <NativeApp />

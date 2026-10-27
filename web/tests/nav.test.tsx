@@ -31,7 +31,7 @@ afterEach(() => vi.unstubAllGlobals());
 const APP = join(__dirname, "..", "src", "app");
 /** A route exists when a page file serves it (route groups like (app) don't add a segment). */
 function routeExists(href: string): boolean {
-  const segs = href.split("?")[0]!.split("/").filter(Boolean);
+  const segs = href.split(/[?#]/)[0]!.split("/").filter(Boolean);
   return [join(APP, ...segs, "page.tsx"), join(APP, "(app)", ...segs, "page.tsx")].some(existsSync);
 }
 
@@ -41,15 +41,16 @@ describe("navigation", () => {
     render(<SessionProvider initialMe={me("pro")}><AppShell><p>body</p></AppShell></SessionProvider>);
     const nav = screen.getByRole("navigation", { name: "Main" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Stocks", "Day Trader", "Watchlists", "Alerts"]);
+    expect(links.map((l) => l.textContent)).toEqual(["Today", "Brief", "Scanner", "Day Trader", "Stocks", "Watchlists", "Alerts", "Track record", "Ask HSF", "Journal", "Paper trading"]);
     for (const l of links) expect(routeExists(l.getAttribute("href")!)).toBe(true);
     expect(within(nav).getByRole("link", { name: "Scanner" })).toHaveAttribute("aria-current", "page");
-    await u.click(within(nav).getByRole("button", { name: "More" }));
-    expect(within(nav).getByRole("menuitem", { name: "Track record" })).toHaveAttribute("href", "/track-record");
+    expect(within(nav).getByRole("link", { name: "Track record" })).toHaveAttribute("href", "/track-record");
+    expect(within(nav).queryByRole("button", { name: "More" })).not.toBeInTheDocument();
+    expect(routeExists("/ask")).toBe(true);
     const tabs = screen.getByRole("navigation", { name: "Sections" });
     expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["Today", "Scanner", "Watchlists", "Alerts"]);
     await u.click(within(tabs).getByRole("button", { name: "More" }));
-    expect(within(tabs).getAllByRole("menuitem").map((l) => l.textContent)).toEqual(["Brief", "Stocks", "Day Trader", "Track record"]);
+    expect(within(tabs).getAllByRole("menuitem").map((l) => l.textContent)).toEqual(["Brief", "Day Trader", "Stocks", "Track record", "Ask HSF", "Journal", "Paper trading"]);
     await u.keyboard("{Escape}");
     expect(within(tabs).queryByRole("menu")).not.toBeInTheDocument();
     for (const l of [...links, ...within(tabs).getAllByRole("link")]) expect(routeExists(l.getAttribute("href")!)).toBe(true);

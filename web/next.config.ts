@@ -1,13 +1,19 @@
 import type { NextConfig } from "next";
+import { posthogHost } from "./src/lib/posthogConfig";
 
-// The browser only ever talks to this origin (the BFF), so connect-src can be 'self'.
+const analyticsOrigin = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim() ? ` ${posthogHost(process.env.NEXT_PUBLIC_POSTHOG_HOST)}` : "";
+// Cloudflare Turnstile (sign-up and password reset) loads a script and an iframe from Cloudflare.
+const turnstile = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ? " https://challenges.cloudflare.com" : "";
+
+// Product data stays same-origin. Optional analytics may contact its configured ingestion origin.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""),
+  "script-src 'self' 'unsafe-inline'" + turnstile + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self'" + analyticsOrigin + turnstile,
+  ...(turnstile ? ["frame-src" + turnstile] : []),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -23,6 +29,11 @@ const nextConfig: NextConfig = {
   // Add more with HSF_DEV_ORIGINS=192.168.1.20,my-laptop.local
   allowedDevOrigins: ["127.0.0.1", ...(process.env.HSF_DEV_ORIGINS || "").split(",").map((h) => h.trim()).filter(Boolean)],
   reactStrictMode: true,
+  // Browser source maps only when they'll be uploaded to Sentry (scripts/sentry-sourcemaps.mjs
+  // uploads, then deletes them from the build so they're never served).
+  productionBrowserSourceMaps: Boolean(process.env.SENTRY_AUTH_TOKEN?.trim()),
+  // Crash reports carry the build's commit so Sentry can match them to those maps.
+  env: { NEXT_PUBLIC_HSF_RELEASE: process.env.RENDER_GIT_COMMIT?.trim() || process.env.HSF_RELEASE?.trim() || "" },
   async headers() {
     return [
       {

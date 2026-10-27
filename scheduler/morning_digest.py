@@ -1,9 +1,10 @@
-"""Pre-open morning digest email (Pro+, structured, no AI dependency).
+"""Pre-open morning digest email (Pro+, structured; Premium adds an optional AI rundown).
 
 For each verified Pro+ user with a watchlist, assemble and send a compact
 pre-open email: their watchlist's overnight move, the day's top market gappers,
 any of their names reporting earnings today, and one PreBreakout pick from the
-latest snapshot. Deterministic (no Claude call) so it can't fail on an AI quota.
+latest snapshot. The sections are deterministic; Premium's AI rundown is optional and
+skipped on any AI failure or quota, so the email never depends on Claude.
 
 Runs headless from the reliable cron (scheduler.cron_runner), throttled to once
 per day. Best-effort throughout — it never raises into the caller.
@@ -174,6 +175,34 @@ def _todays_setups(df, limit: int = 6) -> tuple:
         return [], []
 
 
+def _premarket_gappers(limit: int = 5, now=None) -> Optional[List[Dict[str, Any]]]:
+    """Before the open: today's pre-market gappers over S&P 500 + NASDAQ, the
+    same screen as Day Trader's pre-market gappers (traded today, >=2% vs
+    yesterday's close, clears the pre-market dollar-volume floor). None outside
+    pre-market so the caller uses its regular-session path; [] when nothing
+    qualifies yet. Yesterday's scan GapPct is never shown as today's gap."""
+    if not _premarket_gappers_active(now):
+        return None
+    try:
+        from market_data import build_premarket_gappers
+        from ui.day_trader import _movers_universe
+
+        rows = build_premarket_gappers(_movers_universe(), now=now, limit=limit)
+    except Exception:
+        return []
+    return [{"ticker": r["ticker"], "last": r.get("last"), "chg_pct": r.get("pct"),
+             "gap_pct": None, "session": "premarket"} for r in rows[:limit]]
+
+
+def _premarket_gappers_active(now=None) -> bool:
+    try:
+        from market_data import premarket_session_date
+
+        return premarket_session_date(now) is not None
+    except Exception:
+        return False
+
+
 def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
     """Top gappers over the snapshot universe.
 
@@ -182,6 +211,9 @@ def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
     that path can come back empty. Fall back to the snapshot's own stored GapPct
     (computed at scan time) so the digest's gappers section is never blank.
     """
+    pre = _premarket_gappers(limit)
+    if pre is not None:
+        return pre
     try:
         from market_data import build_day_trader_metrics
 
@@ -279,6 +311,48 @@ def _earnings_today() -> set:
         return set()
 
 
+def _earnings_calendar_rows(df, *, preopen: bool) -> tuple:
+    """(today, week calendar, today's reporters scored) shared by every recipient.
+    Every reporter today is scored once (screens off, like the Earnings tab's
+    "Score all"); names in the latest market scan are marked ranked."""
+    from datetime import timedelta
+
+    from scheduler import earnings_email as ee
+
+    today = et_now().date()
+    week = ee.reporters(today, today + timedelta(days=7))
+    ranked: List[str] = []
+    try:
+        col = _symbol_column(df) if df is not None else None
+        if col:
+            ranked = [str(t) for t in df[col].tolist()]
+    except Exception:
+        ranked = []
+    rows = ee.build_rows([r for r in week if r["date"] == today], premarket=preopen, ranked=ranked)
+    return today, week, rows
+
+
+def _earnings_section(rows, week, today, tickers, *, preopen: bool) -> tuple:
+    """(html, text) "Earnings today" section for one recipient; ('', '') on any error."""
+    try:
+        from scheduler import earnings_email as ee
+
+        return ee.compose_section(
+            rows, title="Earnings today",
+            order=[(today, "bmo", "☀️ Reported before the open"),
+                   (today, "amc", "🌙 Reports after the close"),
+                   (today, None, "🕒 Time not announced")],
+            price_label="Last", pct_label="Pre-mkt %" if preopen else "Chg %",
+            link=ee.scanner_link("today"), link_label="Open the Earnings scanner",
+            watched=tickers, watchlist_line=ee.watchlist_line(tickers, week, today),
+            footnote="Scores from this morning's scan of every reporter. Results can move a stock "
+                     "sharply both ways. Educational only, not financial advice.",
+            sub_suffix="scored this morning", zero_is_missing=preopen,
+        )
+    except Exception:
+        return "", ""
+
+
 def _premarket_movers(now=None, limit: int = 5) -> List[Dict[str, Any]]:
     """P2-74: biggest pre-market moves from this morning's premarket scan
     ({ticker, pct, last, score}), the same list as Today's Before the open card.
@@ -303,55 +377,111 @@ def _premarket_section(rows: List[Dict[str, Any]]) -> tuple[str, str]:
     """(html, text) for the pre-market movers section, or ('', '') when empty."""
     if not rows:
         return "", ""
-    items, lines = [], []
+    from ui import email_kit as k
+
+    lines = []
     for r in rows:
-        color = "#16a34a" if r["pct"] >= 0 else "#dc2626"
         price = f" · ${r['last']:,.2f}" if r.get("last") is not None else ""
         score = f" · HSF Score {r['score']}" if r.get("score") is not None else ""
-        items.append(f"<li><strong>{r['ticker']}</strong> "
-                     f"<span style='color:{color}'>{r['pct']:+.2f}%</span>{price}{score}</li>")
         lines.append(f"  {r['ticker']} {r['pct']:+.2f}%{price}{score}")
-    html = ("<h3 style='margin:16px 0 6px'>🌅 Pre-market movers</h3>"
-            f"<ul style='margin:4px 0 0;padding-left:18px'>{''.join(items)}</ul>"
-            "<p style='margin:4px 0 0;font-size:12px;color:#888'>From the 8:35 AM ET "
-            "pre-market scan, vs the previous close. Pre-market prices keep moving.</p>")
+    table = k.table(["Ticker", "Last", "Pre-mkt %", "HSF Score"],
+                    [[k.ticker(r["ticker"]), k.num(r.get("last")), k.pct(r.get("pct")), k.score_badge(r.get("score"))]
+                     for r in rows])
+    html = k.card("🌅 Pre-market movers", table,
+                  sub="From the 8:35 AM ET pre-market scan, vs the previous close. Pre-market prices keep moving.")
     return html, "\n".join(["Pre-market movers (8:35 AM ET scan, vs previous close):", *lines, ""])
 
 
-def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True) -> str:
+def _movers_table(rows: List[Dict[str, Any]], *, show_gap: bool = True, limit: Optional[int] = None) -> str:
+    from ui import email_kit as k
+
     if not rows:
-        return "<p style='color:#888'>No data.</p>"
-    head = "<tr><th align='left'>Ticker</th><th align='right'>Last</th><th align='right'>Chg %</th><th></th>"
-    if show_gap:
-        head += "<th align='right'>Gap %</th>"
-    head += "</tr>"
-    body = ""
-    for r in rows:
-        chg = r.get("chg_pct")
-        gap = r.get("gap_pct")
-        color = "#16a34a" if (chg is not None and chg >= 0) else "#dc2626"
-        # Email-safe inline bar-let: width scales with |move| (capped at 5%).
-        bar = ""
-        if chg is not None:
-            width = int(min(abs(chg) / 5.0, 1.0) * 48) + 2
-            bar = (
-                f"<div style='height:8px;width:{width}px;border-radius:3px;"
-                f"background:{color};display:inline-block'></div>"
-            )
-        body += (
-            f"<tr><td>{r.get('ticker')}</td>"
-            f"<td align='right'>{r.get('last')}</td>"
-            f"<td align='right' style='color:{color}'>"
-            f"{('%+.2f%%' % chg) if chg is not None else '—'}</td>"
-            f"<td align='left'>{bar}</td>"
-        )
+        return k.empty("No data.")
+    shown, more = _cap(rows, limit)
+    head = ["Ticker", "Last", "Chg %", "Gap %"] if show_gap else ["Ticker", "Last", "Chg %"]
+    body = []
+    for r in shown:
+        cells = [k.flagged_ticker(r.get("ticker"), et_now().date()), k.num(r.get("last")), k.pct(r.get("chg_pct"))]
         if show_gap:
-            body += f"<td align='right'>{('%+.2f%%' % gap) if gap is not None else '—'}</td>"
-        body += "</tr>"
-    return (
-        "<table style='border-collapse:collapse;width:100%;font-size:13px' "
-        "cellpadding='4'>" + head + body + "</table>"
-    )
+            cells.append(k.pct(r.get("gap_pct")))
+        body.append(cells)
+    return k.table(head, body) + _more_line(more)
+
+
+def _cap(rows: List[Dict[str, Any]], limit: Optional[int]) -> tuple:
+    """(rows to show, how many are hidden) when capped: names reporting earnings soon
+    first, then names that traded today, then the biggest moves."""
+    if not limit or len(rows) <= limit:
+        return rows, 0
+
+    def key(r):
+        flagged = " ⚠️E" in str(r.get("ticker") or "")
+        traded = r.get("chg_pct") is not None
+        v = r.get("chg_pct") if traded else r.get("prior_session_chg_pct")
+        try:
+            size = abs(float(v))
+        except (TypeError, ValueError):
+            size = -1.0
+        return (flagged, traded, size)
+    return sorted(rows, key=key, reverse=True)[:limit], len(rows) - limit
+
+
+def _more_line(more: int) -> str:
+    if not more:
+        return ""
+    from ui import email_kit as k
+
+    return k.note(f"+ {more} more on your watchlist (earnings and biggest moves shown first)")
+
+
+def _is_preopen(rows: List[Dict[str, Any]]) -> bool:
+    return any(r.get("session") == "premarket" for r in rows or [])
+
+
+def _preopen_last(r: Dict[str, Any]):
+    """Today's pre-market trade when there is one, else yesterday's close (not
+    a stale after-hours print)."""
+    if r.get("traded_today") is False and r.get("previous_close") is not None:
+        return r.get("previous_close")
+    return r.get("last")
+
+
+def _pct(v) -> str:
+    return ("%+.2f%%" % v) if v is not None else "—"
+
+
+def _preopen_table(rows: List[Dict[str, Any]], *, show_prior: bool, limit: Optional[int] = None) -> str:
+    """Before the open there is no gap or session change yet: show the move vs
+    yesterday's close from today's latest pre-market trade, plus yesterday's
+    own move for watchlist rows."""
+    from ui import email_kit as k
+
+    if not rows:
+        return k.empty("No data.")
+    shown, more = _cap(rows, limit)
+    head = ["Ticker", "Last", "Pre-mkt %", "Yesterday %"] if show_prior else ["Ticker", "Last", "Pre-mkt %"]
+    body = []
+    for r in shown:
+        cells = [k.flagged_ticker(r.get("ticker"), et_now().date()), k.num(_preopen_last(r)), k.pct(r.get("chg_pct"))]
+        if show_prior:
+            cells.append(k.pct(r.get("prior_session_chg_pct")))
+        body.append(cells)
+    return k.table(head, body) + _more_line(more)
+
+
+def _preopen_text(rows: List[Dict[str, Any]], *, show_prior: bool) -> str:
+    if not rows:
+        return "  (none)"
+    out = []
+    for r in rows:
+        line = f"  {r.get('ticker')}: {_preopen_last(r)} (pre-mkt {_pct(r.get('chg_pct'))}"
+        if show_prior:
+            line += f", yesterday {_pct(r.get('prior_session_chg_pct'))}"
+        out.append(line + ")")
+    return "\n".join(out)
+
+
+_PREOPEN_NOTE = "<p style='margin:4px 0 0;font-size:12px;color:#888'>{}</p>"
 
 
 def _movers_text(rows: List[Dict[str, Any]]) -> str:
@@ -381,7 +511,8 @@ def _track_record_line() -> tuple[str, str]:
         bench = tr.get("benchmark") or "SPY"
         top_n = tr.get("top_n") or 5
         html = (
-            f"<p style='color:#166534;background:#f0fdf4;padding:8px 10px;border-radius:6px'>"
+            "<p style='color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;"
+            "border-radius:10px;margin:12px 0 0;font-size:14px'>"
             f"📈 <strong>Track record:</strong> top-{top_n} candidates beat the {bench} by "
             f"<strong>{avg:+.1%}</strong> over {h} trading days · {win:.0%} beat the benchmark.</p>"
         )
@@ -400,7 +531,7 @@ def _watchlist_notes(
     """Short narrative notes: biggest watchlist mover + who reports this week."""
     notes: List[str] = []
     movers = [r for r in watch_rows if r.get("chg_pct") is not None]
-    if movers:
+    if len(movers) >= 2:   # one mover is both "best" and "worst": say nothing
         ranked = sorted(movers, key=lambda r: r["chg_pct"], reverse=True)
         best, worst = ranked[0], ranked[-1]
         up = sum(1 for r in movers if r["chg_pct"] >= 0)
@@ -428,10 +559,16 @@ def _compose(
     golden: Optional[List[str]] = None,
     top_setups: Optional[List[tuple]] = None,
     premarket: Optional[List[Dict[str, Any]]] = None,
+    preopen_gappers: bool = False,
+    earnings_section: Optional[tuple] = None,
+    ai_rundown: Optional[str] = None,
 ) -> tuple[str, str]:
-    """Return (html_inner, text_inner) for one user's digest."""
+    """Return (html_inner, text_inner) for one user's digest: email_kit cards
+    (the shell adds the header and the At a glance band)."""
+    from ui import email_kit as k
+
     date_s = et_now().strftime("%A, %b %d")
-    html = [f"<p style='color:#666;margin:0 0 12px'>Morning snapshot · {date_s}</p>"]
+    html: List[str] = []
     text = [f"Morning snapshot · {date_s}", ""]
 
     tr_html, tr_text = _track_record_line()
@@ -439,72 +576,148 @@ def _compose(
         html.append(tr_html)
         text += [tr_text, ""]
 
-    html.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist</h3>")
-    html.append(_movers_table(watch_rows, show_gap=True))
-    text += ["Your watchlist:", _movers_text(watch_rows), ""]
+    note_html = k.note("📌 " + " · ".join(notes)) if notes else ""
+    if _is_preopen(watch_rows):
+        html.append(k.card("📋 Your watchlist",
+                           _preopen_table(watch_rows, show_prior=True, limit=WATCHLIST_ROWS) + note_html,
+                           sub="Pre-market vs yesterday's close. — means no pre-market trade yet, "
+                               "so Last is yesterday's close."))
+        text += ["Your watchlist (before the open):", _preopen_text(watch_rows, show_prior=True), ""]
+    else:
+        html.append(k.card("📋 Your watchlist", _movers_table(watch_rows, show_gap=True, limit=WATCHLIST_ROWS)
+                           + note_html))
+        text += ["Your watchlist:", _movers_text(watch_rows), ""]
     if notes:
-        joined = " · ".join(notes)
-        html.append(f"<p style='color:#555;margin:4px 0 0'>📌 {joined}</p>")
-        text += [f"Notes: {joined}", ""]
+        text += [f"Notes: {' · '.join(notes)}", ""]
 
-    html.append("<h3 style='margin:16px 0 6px'>🚀 Top market gappers</h3>")
-    html.append(_movers_table(gappers, show_gap=True))
-    text += ["Top market gappers:", _movers_text(gappers), ""]
+    if ai_rundown:   # Premium: Claude's rundown of the default watchlist (api.ai.watchlist_note)
+        html.append(k.card("🤖 AI rundown", "<p style='margin:0;line-height:1.5'>"
+                           + k.esc(ai_rundown).replace("\n", "<br>") + "</p>"
+                           + k.note("Written by Claude from HSF's scan data only. AI can be wrong; "
+                                    "research only, not investment advice."),
+                           sub="What changed on your watchlist since the previous scan"))
+        text += ["AI rundown (Premium):", ai_rundown, ""]
+
+    if preopen_gappers:
+        body = (_preopen_table(gappers, show_prior=False) if gappers else
+                k.empty("No S&amp;P 500 or NASDAQ stock is gapping 2% or more on enough pre-market volume yet."))
+        html.append(k.card("🚀 Top market gappers", body,
+                           sub="S&amp;P 500 and NASDAQ stocks moving 2%+ before the open, with enough "
+                               "pre-market volume to trade."))
+        text += ["Top market gappers (pre-market vs yesterday's close):",
+                 _preopen_text(gappers, show_prior=False), ""]
+    else:
+        html.append(k.card("🚀 Top market gappers", _movers_table(gappers, show_gap=True)))
+        text += ["Top market gappers:", _movers_text(gappers), ""]
 
     pm_html, pm_text = _premarket_section(premarket or [])
     if pm_html:
         html.append(pm_html)
         text.append(pm_text)
 
-    if earnings_hits:
+    if earnings_section and earnings_section[0]:
+        html.append(earnings_section[0])
+        text.append(earnings_section[1])
+    elif earnings_hits:
         names = ", ".join(sorted(earnings_hits))
-        html.append(
-            "<h3 style='margin:16px 0 6px'>📅 Earnings today (your watchlist)</h3>"
-            f"<p>{names}</p>"
-        )
+        html.append(k.card("📅 Earnings today (your watchlist)", f"<p style='margin:0'>{k.esc(names)}</p>"))
         text += ["Earnings today (your watchlist):", f"  {names}", ""]
 
-    # 🎯 Today's setups — actionable candidates for the open (mirrors the evening
-    # wrap's forward-looking section).
+    # 🎯 Today's setups — actionable candidates for the open, with the PreBreakout picks.
+    setup_parts: List[str] = []
     if golden or top_setups:
-        html.append("<h3 style='margin:16px 0 6px'>🎯 Today's setups</h3>")
         text += ["Today's setups:"]
         if golden:
-            names = ", ".join(golden)
-            html.append(f"<p><b>📈 Fresh EMA 9/21 golden crosses:</b> {names}</p>")
-            text += [f"  Fresh golden crosses: {names}"]
+            text += [f"  Fresh golden crosses: {', '.join(golden)}"]
         if top_setups:
-            ts = ", ".join(f"{t} ({s:g})" for t, s in top_setups)
-            html.append(f"<p><b>🚀 Top breakout scores:</b> {ts}</p>")
-            text += [f"  Top breakout scores: {ts}"]
-        html.append(
-            "<p style='color:#888;font-size:12px'>Educational only — not financial "
-            "advice; confirm setups yourself at the open.</p>"
-        )
+            text += [f"  Top breakout scores: {', '.join(f'{t} ({s:g})' for t, s in top_setups)}"]
         text += [""]
-
+    if top_setups:
+        setup_parts.append(k.group("🚀 Top breakout scores")
+                           + k.chips((t, k.chip_score(s)) for t, s in top_setups))
+    if golden:
+        setup_parts.append(k.group("📈 Fresh EMA 9/21 golden crosses") + k.chips((g, None) for g in golden))
     if picks:
-        def _pick_price(p):
-            return f" &middot; ${p['last']:.2f}" if p.get("last") is not None else ""
-        items = "".join(
-            f"<li><strong>{p['symbol']}</strong>{_pick_price(p)} — "
-            f"{p['prob']:.1f}% PreBreakout likelihood</li>"
-            for p in picks
-        )
         label = "🧠 PreBreakout picks" if len(picks) > 1 else "🧠 PreBreakout pick"
-        html.append(
-            f"<h3 style='margin:16px 0 6px'>{label}</h3>"
-            f"<ul style='margin:4px 0 0;padding-left:18px'>{items}</ul>"
-            "<p style='margin:4px 0 0;font-size:12px;color:#888'>Calibrated model "
-            "likelihood of setup follow-through — not a price forecast.</p>"
-        )
+        rows = [[k.flagged_ticker(p["symbol"], et_now().date()), k.num(p.get("last"), money=True),
+                 f"{p['prob']:.1f}% likelihood"] for p in picks]
+        setup_parts.append(k.group(label) + k.table(["", "", ""], rows)
+                           + k.note("Calibrated model likelihood of setup follow-through, not a price forecast."))
         text += ["PreBreakout picks:"]
         text += [f"  {p['symbol']}"
                  + (f" ${p['last']:.2f}" if p.get('last') is not None else "")
                  + f" — {p['prob']:.1f}% likelihood" for p in picks]
         text += [""]
+    if setup_parts:
+        html.append(k.card("🎯 Today's setups", "".join(setup_parts)
+                           + k.note("Educational only, not financial advice. Confirm setups yourself at the open.")
+                           + k.button(_app_url("/today"), "Open Today in HSF →"),
+                           sub="Highest HSF breakout scores from the latest scan"))
 
     return "".join(html), "\n".join(text)
+
+
+WATCHLIST_ROWS = 6
+
+
+def _app_url(path: str) -> str:
+    try:
+        from services.lifecycle_emails import _base_url
+
+        return _base_url() + path
+    except Exception:
+        return "https://app.hsfinest.com" + path
+
+
+def _fmt_move(v) -> str:
+    return f"{v:+.1f}%"
+
+
+def digest_glance(watch_rows: List[Dict[str, Any]], gappers: List[Dict[str, Any]], *,
+                  preopen: bool = False, earnings_count: int = 0,
+                  week_earnings: Optional[Dict[str, int]] = None,
+                  top_setups: Optional[List[tuple]] = None) -> str:
+    """The 'At a glance' line under the header: watchlist mood, the biggest gapper,
+    how many report today (and which watchlist names report soon), the top setup."""
+    from ui import email_kit as k
+
+    parts: List[str] = []
+    movers = [r for r in watch_rows if r.get("chg_pct") is not None]
+    if watch_rows:
+        if not movers:
+            parts.append("No pre-market trades on your watchlist yet." if preopen
+                         else "Your watchlist hasn't traded yet.")
+        else:
+            big = max(movers, key=lambda r: abs(r["chg_pct"]))
+            name = k.split_flag(big["ticker"])[0]
+            if len(movers) <= 2 and abs(big["chg_pct"]) < 1:
+                when = " before the open" if preopen else ""
+                parts.append(f"Your watchlist is quiet{when} ({k.esc(name)} {_fmt_move(big['chg_pct'])}).")
+            else:
+                up = sum(1 for r in movers if r["chg_pct"] >= 0)
+                parts.append(f"Your watchlist: {up} up, {len(movers) - up} down; biggest move "
+                             f"<b style='color:#fff'>{k.esc(name)}</b> {_fmt_move(big['chg_pct'])}.")
+    moved = [g for g in gappers if g.get("chg_pct") is not None]
+    if moved:
+        g = max(moved, key=lambda r: abs(r["chg_pct"]))
+        name = k.esc(k.split_flag(g["ticker"])[0])
+        lead = "is the only big gapper" if len(moved) == 1 else "leads the gappers"
+        parts.append(f"<b style='color:#fff'>{name}</b> {lead} ({_fmt_move(g['chg_pct'])}).")
+    earn = []
+    if earnings_count:
+        earn.append(f"<b style='color:#fff'>{earnings_count} compan{'y' if earnings_count == 1 else 'ies'}</b> "
+                    "report today")
+    soon = [s for s, _ in sorted((week_earnings or {}).items(), key=lambda kv: kv[1])][:3]
+    if soon:
+        names = " and ".join(", ".join(f"<b style='color:#fff'>{k.esc(s)}</b>" for s in soon).rsplit(", ", 1))
+        verb = "reports" if len(soon) == 1 else "report"
+        earn.append(f"{names} on your watchlist {verb} this week")
+    if earn:
+        parts.append("; ".join(earn) + ".")
+    if top_setups:
+        t, sc = top_setups[0]
+        parts.append(f"Top setup: <b style='color:#fff'>{k.esc(t)}</b> (score {sc:g}).")
+    return k.glance_text(parts)
 
 
 def record_email_job(job: str, stats: Dict[str, Any]) -> None:
@@ -576,6 +789,19 @@ def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[st
     return key
 
 
+def _premium_rundown(email: str, tier_key: str, has_min_tier) -> Optional[str]:
+    """Premium (and admin): the default watchlist's AI rundown (api.ai_premium.digest_rundown),
+    or None. The digest never waits on or fails because of it."""
+    try:
+        if not has_min_tier(tier_key, "premium"):
+            return None
+        from api.ai_premium import digest_rundown
+
+        return digest_rundown(email)
+    except Exception:
+        return None
+
+
 def run_morning_digest(force: bool = False) -> None:
     """Assemble and email the pre-open digest to eligible Pro+ users."""
     try:
@@ -607,10 +833,16 @@ def run_morning_digest(force: bool = False) -> None:
 
     df = _latest_snapshot_df()
     gappers = _market_gappers(df)
+    preopen_gappers = _premarket_gappers_active()
     premarket = _premarket_movers()
     picks = _prebreakout_picks(df) if df is not None else []
     golden, top_setups = _todays_setups(df) if df is not None else ([], [])
     earnings_today = _earnings_today()
+    try:
+        earn_today, earn_week, earn_rows = _earnings_calendar_rows(df, preopen=preopen_gappers)
+    except Exception as e:
+        print(f"[morning_digest] earnings section unavailable: {type(e).__name__}")
+        earn_today, earn_week, earn_rows = et_now().date(), [], []
 
     # Earnings safety rail (shared across all users): flag gappers and the picks
     # when they report within days, so nobody trades the digest blind to it.
@@ -680,24 +912,34 @@ def run_morning_digest(force: bool = False) -> None:
             week_earnings = _earnings_days_map(tickers, flag_days=7)
             _flag_earnings_rows(watch_rows, {k: v for k, v in week_earnings.items() if v <= 5})
             earnings_hits = [t for t in tickers if t in earnings_today]
-            notes = _watchlist_notes(watch_rows, week_earnings)
+            section = _earnings_section(earn_rows, earn_week, earn_today, tickers, preopen=preopen_gappers)
+            # the section's watchlist line names this week's reporters; keep notes to the recap then
+            notes = _watchlist_notes(watch_rows, {} if section[0] and earn_week else week_earnings)
 
             # Run 85D: PreBreakout candidates are a Premium feature (Pro gets the rest).
             try:
                 user_picks = picks if has_min_tier(tier_key, "premium") else []
             except Exception:
                 user_picks = []
+            ai_rundown = _premium_rundown(email, tier_key, has_min_tier)
             html_inner, text_inner = _compose(
                 email, watch_rows, gappers, earnings_hits, user_picks, notes=notes,
                 golden=golden, top_setups=top_setups, premarket=premarket,
+                preopen_gappers=preopen_gappers, earnings_section=section, ai_rundown=ai_rundown,
             )
             # Count only sends the mail service accepted.
+            glance = digest_glance(
+                watch_rows, gappers, preopen=preopen_gappers or _is_preopen(watch_rows),
+                earnings_count=len(earn_rows), week_earnings=week_earnings, top_setups=top_setups)
             if send_digest_email(
                 to_address=email,
                 subject="Your morning market digest",
                 html_inner=html_inner,
                 text_inner=text_inner,
                 unsubscribe_url=unsubscribe_link(email, "digest"),
+                title_line=f"Morning snapshot · {et_now():%A, %b %-d}"
+                           + (" · before the open" if preopen_gappers else ""),
+                glance_html=glance,
             ):
                 sent += 1
             else:

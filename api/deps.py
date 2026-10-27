@@ -4,6 +4,7 @@ Route modules live in api/routes/; api/main.py builds the app from them."""
 from __future__ import annotations
 
 import datetime as dt
+import hmac
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -26,10 +27,14 @@ def _settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def _token_pair(username: str, settings: Settings, client: Optional[str]) -> Dict[str, Any]:
+def _token_pair(username: str, settings: Settings, client: Optional[str],
+                account: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    account = account if account is not None else store.get_account(username)
+    if not account or account.get("is_active") is False or not account.get("password"):
+        raise HTTPException(401, _UNAUTHORIZED)
     refresh = tokens.new_refresh_token()
     store.save_refresh_token(tokens.hash_refresh_token(refresh), username, settings.refresh_ttl_s, client)
-    return {"access_token": tokens.create_access_token(username, settings), "token_type": "bearer",
+    return {"access_token": tokens.create_access_token(username, settings, password_hash=account["password"]), "token_type": "bearer",
             "expires_in": settings.access_ttl_s, "refresh_token": refresh}
 
 
@@ -44,15 +49,34 @@ def current_account(request: Request,
     token = (creds.credentials if creds and (creds.scheme or "").lower() == "bearer" else "").strip()
     if not token:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
-    username = tokens.verify_access_token(token, _settings(request))
-    account = _recent_account(username) if username else None
+    settings = _settings(request)
+    claims = tokens.access_claims(token, settings)
+    username = str(claims.get("sub") or "").strip().lower() if claims else None
+    # Security state must be fresh on every server. A cached row would preserve
+    # access after a password reset, deactivation, or permission change elsewhere.
+    account = store.get_account(username) if username else None
     if not account or account.get("is_active") is False:
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
-    return account
+    expected = tokens.credential_version(username, account.get("password") or "", settings)
+    if not hmac.compare_digest(claims["cv"], expected):
+        raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
+    from api import referrals
+
+    _note_activity(username)
+    return referrals.apply_to_account({k: v for k, v in account.items() if k != "password"})
 
 
-# Every signed-in request reads the account row; the database is a cross-region
-# round trip or three away, so the row is reused for a few seconds per process.
+def _note_activity(username: str) -> None:
+    """Last-active time for the come-back email (db/user_activity.py: one write an hour at most)."""
+    try:
+        from db.user_activity import touch
+
+        touch(username)
+    except Exception:
+        pass
+
+
+# Compatibility cache for non-authorizing callers; current_account bypasses it.
 # Plan, admin and active-flag changes show up within ACCOUNT_CACHE_S. The password
 # hash is never cached: endpoints that check a password read the row fresh.
 ACCOUNT_CACHE_S = 15
@@ -90,8 +114,7 @@ def _fresh_account(account: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def entitlements_for(account: Dict[str, Any]) -> Dict[str, Any]:
-    from auth.tiering import TIER_ORDER, has_min_tier
-    from ui.app_session import ALERT_LIMIT_BY_TIER, compute_entitlements
+    from domain.plans import ALERT_LIMIT_BY_TIER, TIER_ORDER, compute_entitlements, has_min_tier
 
     is_admin = bool(account.get("is_admin"))
     tier = str(account.get("tier") or "basic").strip().lower()
@@ -137,7 +160,7 @@ _OWNED = {**_AUTH, 404: {"description": "Not found (or not yours)"}}
 
 
 def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
-    from ui.plan_labels import plan_label
+    from domain.plan_labels import plan_label
 
     ent = entitlements_for(account)
     return {"email": str(account["username"]).strip().lower(),
@@ -145,7 +168,9 @@ def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
             "plan": ent["tier"], "plan_label": plan_label(ent["tier"]),
             "is_admin": ent["is_admin"], "alert_limit": ent["alert_limit"],
             "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
-            "entitlements": ent["entitlements"]}
+            "entitlements": ent["entitlements"],
+            "pro_trial_until": account.get("pro_trial_until"),
+            "billing_attention": acct.billing_attention(str(account["username"]), ent["tier"])}
 
 
 def _user(account: Dict[str, Any]) -> str:
@@ -157,7 +182,7 @@ def require_feature(account: Dict[str, Any], feature: str) -> Dict[str, Any]:
     ent = entitlements_for(account)
     if not ent["entitlements"].get(feature):
         try:
-            from ui.pricing import upgrade_message
+            from domain.upgrades import upgrade_message
 
             msg = upgrade_message(feature)
         except Exception:
@@ -167,7 +192,7 @@ def require_feature(account: Dict[str, Any], feature: str) -> Dict[str, Any]:
 
 
 def require_min_plan(account: Dict[str, Any], plan: str, message: str) -> Dict[str, Any]:
-    from auth.tiering import has_min_tier
+    from domain.plans import has_min_tier
 
     ent = entitlements_for(account)
     if not (ent["is_admin"] or has_min_tier(ent["tier"], plan)):

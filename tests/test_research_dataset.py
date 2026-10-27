@@ -62,6 +62,33 @@ class TemporalJoinTest(unittest.TestCase):
     def _join(self, observed, scans, **kw):
         return rd.match_scan_observation("AAA", ts(observed), rd.index_scan_records(scans), **kw)
 
+    def test_source_scan_id_links_own_scan_written_seconds_later(self):
+        own = scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:05")   # written after T
+        best, info = self._join("2026-09-15T16:40:00", [own], source_scan_id="2026-09-15 16:35:00+00:00")
+        self.assertIsNotNone(best)
+        self.assertEqual(info["status"], rd.JOIN_MATCHED)
+        self.assertEqual(info["link"], rd.LINK_SOURCE_SCAN)
+        self.assertFalse(info["known_at_verified"])
+        # Without the id the same record is still refused (backward join unchanged).
+        _b, plain = self._join("2026-09-15T16:40:00", [own])
+        self.assertEqual(plain["status"], rd.JOIN_FUTURE_ONLY)
+
+    def test_source_scan_id_never_links_a_scan_started_after_T_or_another_scan(self):
+        later = scan("AAA", "2026-09-15T16:45:00")
+        _b, info = self._join("2026-09-15T16:40:00", [later], source_scan_id=ts("2026-09-15T16:45:00").isoformat())
+        self.assertNotEqual(info["status"], rd.JOIN_MATCHED)
+        other = scan("AAA", "2026-09-15T16:00:00", written="2026-09-15T16:41:00")
+        _b, info = self._join("2026-09-15T16:40:00", [other], source_scan_id=ts("2026-09-15T16:35:00").isoformat())
+        self.assertEqual(info["status"], rd.JOIN_FUTURE_ONLY)
+
+    def test_build_records_uses_the_row_scan_id(self):
+        row = opp(1, "AAA", "2026-09-15T16:40:00")
+        row["raw_signal"]["source_scan_id"] = ts("2026-09-15T16:35:00").isoformat()
+        own = scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:05", price=12.5)
+        f = rd.build_records([row], [own])[0]["features"]
+        self.assertEqual(f.join["status"], rd.JOIN_MATCHED)
+        self.assertEqual(f.values["price"], 12.5)
+
     def test_boundary_written_exactly_at_T_is_included(self):
         best, info = self._join("2026-09-15T16:40:00",
                                 [scan("AAA", "2026-09-15T16:35:00", written="2026-09-15T16:40:00")])
@@ -402,6 +429,38 @@ class ScanRecordReadTest(unittest.TestCase):
         rec = rd.build_records([opp(1, "AAA", "2026-09-15T16:50:00")], got)[0]
         self.assertEqual(rec["features"].join["status"], rd.JOIN_FUTURE_ONLY)
         self.assertIsNone(rec["features"].values["price"])
+
+
+class ScannerSupersedesBriefReadTest(unittest.TestCase):
+    """Research readers keep one score source per snapshot, as the Track record readers:
+    a Brief row is dropped once its snapshot has Scanner rows (no double-counted tickers)."""
+
+    def _sqls(self, call):
+        from db import research_datasets as rdb
+
+        cur = mock.MagicMock()
+        cur.description = []
+        cur.fetchall.return_value = []
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(rdb, "_present_optional_columns", return_value=[]), \
+                mock.patch.object(rdb, "_rows", return_value=[{"fired_at": ts("2026-10-14T13:40:07")}]):
+            call(rdb, conn)
+        return [c[0][0] for c in cur.execute.call_args_list]
+
+    def test_readers_apply_the_filter(self):
+        from db.signal_outcomes import _SCANNER_SUPERSEDES_BRIEF
+
+        lo, hi = ts("2026-10-01T00:00:00"), ts("2026-10-16T00:00:00")
+        for call in (lambda rdb, c: rdb.fetch_readiness_rows(lo, hi, conn=c),
+                     lambda rdb, c: rdb.fetch_opportunity_rows(lo, hi, conn=c),
+                     lambda rdb, c: rdb.fetch_opportunity_rows(lo, hi, ids=[1], conn=c)):
+            sql = self._sqls(call)[-1]
+            self.assertIn(_SCANNER_SUPERSEDES_BRIEF, sql)
+            self.assertLess(sql.index(_SCANNER_SUPERSEDES_BRIEF), sql.index("ORDER BY"))
+        one, snap = self._sqls(lambda rdb, c: rdb.fetch_opportunity_row(5, conn=c))
+        self.assertNotIn(_SCANNER_SUPERSEDES_BRIEF, one)  # a row asked for by id is still returned
+        self.assertIn(_SCANNER_SUPERSEDES_BRIEF, snap)
 
 
 class RegistryImmutabilityTest(unittest.TestCase):

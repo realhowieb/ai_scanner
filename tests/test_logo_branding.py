@@ -20,18 +20,6 @@ class LogoBrandingTests(unittest.TestCase):
         fallback_candidate = source.index('"assets/hsfailogo_transparent_opt.png"')
         self.assertLess(first_candidate, fallback_candidate)
 
-    def test_standalone_pages_render_shared_logo(self):
-        for path in (
-            "pages/alerts.py",
-            "pages/day_trader.py",
-            "pages/billing.py",
-            "pages/reset_password.py",
-            "pages/verify_email.py",
-        ):
-            with self.subTest(path=path):
-                source = Path(path).read_text()
-                self.assertIn("render_page_logo", source)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,23 +8,30 @@
 // rather than a made-up quote. GET /v1/watchlists/{id}/intelligence adds what changed since
 // the previous scan (score, rank), PreBreakout (Premium), RVOL and alert counts; all of it
 // is computed by the API, and an API without that route just leaves those facts out.
-import Link from "next/link";
+// GET /v1/quotes gives each ticker's latest trade (Alpaca, shared about a minute), shown in
+// place of the scan's price; without it the scan price or the daily bar is shown, labelled.
+import Link from "@/components/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
+import type { Schemas } from "@/api/client";
 import { alertRules, parseTickers, watchlists } from "@/api/userData";
 import type { WatchlistDetail, WatchlistIntelItem } from "@/api/userData";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
+import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, RefreshStatus, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
-import { num, pct, price, setupLabel, shortDate } from "@/lib/format";
+import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
-import { DailySpark, useDailySparks } from "./Sparks";
+import { DailySpark, useDailyBarsState } from "./Sparks";
+import { StarterWatchlistButton } from "./Starters";
+import { WatchlistAINote } from "./WatchlistAINote";
+import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
+const tone = (v: number | null | undefined) => ((v ?? 0) > 0 ? "up" : (v ?? 0) < 0 ? "down" : "");
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
 type NameProps = {
@@ -162,7 +169,7 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   const add = useAction();
   const rm = useAction();
   if (rules.error || types.error || !rules.data || !types.data) return null; // an API without rules: no card
-  const available = types.data.filter((t) => t.available);
+  const available = types.data.filter((t) => t.available && t.scope !== "market");
   const spec = available.find((t) => t.type === type) ?? available[0];
   if (!spec) return null;
   const mine = rules.data.rules.filter((r) => r.watchlist_id === wl);
@@ -211,11 +218,43 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   );
 }
 
+type Change = Schemas["WatchlistChange"];
+const titleCase = (v: string) => v.charAt(0) + v.slice(1).toLowerCase();
+
+/** One readable chip per change the count includes, e.g. "BRZE score 88 → 76" and "BRZE Strong → Watch". */
+function describeChange(c: Change): string {
+  const from = c.previous_score, to = c.current_score;
+  const scores = from != null && to != null ? ` ${Math.round(from)} → ${Math.round(to)}` : "";
+  switch (c.event_type) {
+    case "NEW_OPPORTUNITY": return `${c.ticker} newly ranked${to != null ? ` at ${Math.round(to)}` : ""}`;
+    case "DROPPED": return `${c.ticker} left the ranked list`;
+    case "RISING": return `${c.ticker} score${scores || " rising"}`;
+    case "FALLING": return `${c.ticker} score${scores || " falling"}`;
+    case "FADING": return `${c.ticker} fading`;
+    case "STATUS_UPGRADE":
+    case "STATUS_DOWNGRADE":
+      return c.previous_status && c.current_status ? `${c.ticker} ${titleCase(c.previous_status)} → ${titleCase(c.current_status)}`
+        : `${c.ticker} status ${c.event_type === "STATUS_UPGRADE" ? "up" : "down"}`;
+    case "SIGNAL_ADDED": return `${c.ticker} new signal${c.signal ? `: ${c.signal.replace(/_/g, " ")}` : ""}`;
+    case "SIGNAL_REMOVED": return `${c.ticker} lost signal${c.signal ? `: ${c.signal.replace(/_/g, " ")}` : ""}`;
+    default: return `${c.ticker} ${c.event_type.replace(/_/g, " ").toLowerCase()}`;
+  }
+}
+
+function changeTone(t: string): "up" | "down" | undefined {
+  if (t === "NEW_OPPORTUNITY" || t === "RISING" || t === "STATUS_UPGRADE" || t === "SIGNAL_ADDED") return "up";
+  if (t === "DROPPED" || t === "FALLING" || t === "STATUS_DOWNGRADE" || t === "SIGNAL_REMOVED" || t === "FADING") return "down";
+  return undefined;
+}
+
 function WatchlistChangesCard({ id }: { id: number }) {
   const changes = useApi(`wl-changes:${id}`, (signal) => watchlists.changes(id, signal));
   if (changes.error || !changes.data) return null;
   const data = changes.data;
   const s = data.summary ?? {};
+  if (data.changes.length === 0 && data.alerts.length === 0 && data.headline.length === 0 && !Number(s.total_changes)) {
+    return <p className="cap watchlist-quiet" role="status">{data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list."}</p>;
+  }
   return (
     <Card title="Since last scan" id="wl-changes" aside={data.has_baseline ? undefined : "Waiting for a baseline"}>
       <div className="metric-strip" aria-label="Watchlist changes summary">
@@ -225,7 +264,12 @@ function WatchlistChangesCard({ id }: { id: number }) {
         <span><strong>{metric(s.falling, 0)}</strong> falling</span>
         <span><strong>{metric(s.alerts, data.alerts.length)}</strong> alerts</span>
       </div>
-      {data.headline.length ? (
+      {data.changes.length ? (
+        <div className="chips">
+          {data.changes.slice(0, 12).map((c, i) => <Pill key={`${c.ticker}-${c.event_type}-${i}`} tone={changeTone(c.event_type)}>{describeChange(c)}</Pill>)}
+          {data.changes.length > 12 && <span className="cap">+{data.changes.length - 12} more</span>}
+        </div>
+      ) : data.headline.length ? (
         <div className="chips">
           {data.headline.slice(0, 8).map((h) => <Pill key={`${h.ticker}-${h.event_type}`}>{h.ticker} {h.event_type.replace(/_/g, " ").toLowerCase()}</Pill>)}
         </div>
@@ -242,6 +286,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const legacy = !!detail.data && detail.data.scan_at === undefined;
   const scan = useApi(legacy ? "wl-scan" : null, (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
   const [byScore, setByScore] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -255,17 +300,30 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
     if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
-  const series = useDailySparks((detail.data?.items ?? []).map((i) => i.ticker));
+  const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
+  const daily = bars.data;
+  const tickerKey = [...new Set((detail.data?.items ?? []).map((i) => i.ticker))].sort().slice(0, 50).join(",");
+  const quotes = useApi(tickerKey ? `wl-quotes:${tickerKey}` : null, (signal) =>
+    unwrap(api.GET("/v1/quotes", { params: { query: { symbols: tickerKey } }, signal })));
+  const quoteBy = quotes.data?.quotes ?? {};
+  // Refresh re-reads the list (with each ticker's latest scan row), its changes, the latest
+  // trades and the daily bars in place. Prices are the provider's latest trade (shared by the
+  // API for about a minute); scores change only when a new scan has run.
+  const refreshing = detail.refreshing || intel.refreshing || bars.refreshing || quotes.refreshing || (legacy && scan.refreshing);
+  const refresh = () => { detail.reload(); intel.reload(); bars.reload(); quotes.reload(); if (legacy) scan.reload(); };
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
   const w: WatchlistDetail = detail.data;
+  const series = daily?.series ?? {};
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
   const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
   const ranked = w.items.filter((i) => scores.has(i.ticker)).length;
   const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
   const notes = w.items.filter((i) => i.note).length;
+  const hasQuotes = Object.keys(quoteBy).length > 0;
+  const feed = quotes.data?.feed === "iex" ? " Prices come from one exchange (IEX), so they can differ slightly from the consolidated price." : "";
 
   return (
     <div className="stack">
@@ -277,28 +335,46 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <span><strong>{attention}</strong> need attention</span>
           <span><strong>{notes}</strong> with notes</span>
         </div>
-        <AddTickers wl={w.id} onAdded={reload} />
-        <div className="row-actions wl-manage" aria-label="Watchlist management">
-          <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
-          <button type="button" className="btn" disabled={w.is_default || act.busy}
-            onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
-            {w.is_default ? "Default list" : "Make default"}
-          </button>
-          <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
+        <div className="row-actions watchlist-actions">
+          <button type="button" className="btn" aria-expanded={manageOpen || !w.items.length} aria-controls="watchlist-add" onClick={() => setManageOpen((v) => !v)}>Add tickers</button>
+          <details className="watchlist-management">
+            <summary>Manage list</summary>
+            <div className="row-actions wl-manage" aria-label="Watchlist management">
+              <button type="button" className="btn" onClick={() => { ren.clear(); setRenaming(true); }}>Rename</button>
+              <button type="button" className="btn" disabled={w.is_default || act.busy}
+                onClick={() => void act.run(async () => { await watchlists.makeDefault(w.id); reload(); return true; })}>
+                {w.is_default ? "Default list" : "Make default"}
+              </button>
+              <button type="button" className="btn btn-danger-outline" onClick={() => setDeleting(true)}>Delete</button>
+            </div>
+            <ErrorLine error={act.error} />
+          </details>
         </div>
-        <ErrorLine error={act.error} />
+        <div id="watchlist-add" hidden={!manageOpen && w.items.length > 0}><AddTickers wl={w.id} onAdded={reload} /></div>
       </Card>
 
       <WatchlistChangesCard id={w.id} />
 
       <Card title="Tickers" id="wl-items" aside={scanAt ? <Freshness at={scanAt} label="HSF Scores from the scan" stale={stale} /> : undefined}>
-        {w.items.length > 1 && (
-          <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
-            {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
-              <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
-                <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
-              </label>
-            ))}
+        {w.items.length > 0 && (
+          <div className="wl-toolbar">
+            {w.items.length > 1 && (
+              <div className="seg-group sort-toggle" role="radiogroup" aria-label="Sort tickers">
+                {([[false, "A to Z"], [true, "HSF Score"]] as const).map(([v, label]) => (
+                  <label key={label} className={`seg${byScore === v ? " on" : ""}`}>
+                    <input type="radio" className="sr-only" name={`wl-sort-${w.id}`} checked={byScore === v} onChange={() => setByScore(v)} />{label}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="wl-status">
+              <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
+                sourceNote={hasQuotes ? `Prices are the latest trade, up to a minute old.${feed} Scores change when a new scan runs.`
+                  : "Live prices aren't available right now; daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs."} />
+            </div>
+            <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
           </div>
         )}
         {w.items.length === 0 ? (
@@ -307,6 +383,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           <ul className="wl-items">
             {items.map((it) => {
               const s = scores.get(it.ticker);
+              const bar = daily?.last_bar?.[it.ticker];
+              const q = quoteBy[it.ticker];
               const rank = !legacy ? it.latest?.rank : undefined;
               return (
                 <li key={it.ticker} className="wl-item">
@@ -328,13 +406,20 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                     </span>
                   </div>
                   <div className="wl-facts">
-                    {s && (
+                    {q ? (
+                      <>
+                        <span className="mono">{price(q.last)}</span>
+                        <span className={`mono ${tone(q.chg_pct)}`}>{pct(q.chg_pct)}</span>
+                        <span className="cap">{q.at ? `last trade ${etTime(q.at)}` : "latest trade"}</span>
+                      </>
+                    ) : s ? (
                       <>
                         <span className="mono">{price(s.last)}</span>
-                        <span className={`mono ${(s.chg_pct ?? 0) > 0 ? "up" : (s.chg_pct ?? 0) < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</span>
-                        {rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
+                        <span className={`mono ${tone(s.chg_pct)}`}>{pct(s.chg_pct)}</span>
+                        <span className="cap">at the scan</span>
                       </>
-                    )}
+                    ) : bar ? <span className="mono">{price(bar.close)} <span className="cap">daily bar {shortDate(bar.session)} · may be in progress; not live</span></span> : null}
+                    {s && rank && <span>#{rank}{w.scan_total ? ` of ${w.scan_total}` : ""}</span>}
                     {intelBy.get(it.ticker) && <IntelFacts x={intelBy.get(it.ticker)!} />}
                     {it.added_at && <span>Added {shortDate(it.added_at)}{it.price_when_added ? ` at ${price(it.price_when_added)}` : ""}</span>}
                   </div>
@@ -345,8 +430,11 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           </ul>
         )}
         {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
-        {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? "Score, setup, price and change are from that scan, not live quotes. The rank is the ticker's place among the scan's ranked setups." : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
+        {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? `Score, setup and rank are from that scan. ${hasQuotes ? "Price and change are the latest trade vs the previous close." : "Price and change are from that scan, not live quotes."} The rank is the ticker's place among the scan's ranked setups.` : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
+
+      <WatchlistAINote id={w.id} name={w.name} empty={w.items.length === 0} />
+      <WatchlistPerformanceCard id={w.id} version={w.items.length} />
 
       <WatchlistRules wl={w.id} onChanged={intel.reload} />
 
@@ -392,10 +480,16 @@ export function WatchlistsView() {
         lists.loading && !lists.data ? <Skeleton rows={5} label="Loading watchlists" /> :
         all.length === 0 ? (
           <Card><Empty title="No watchlists yet.">
-            <button type="button" className="btn btn-primary" onClick={() => { create.clear(); setCreating(true); }}>Create your first watchlist</button>
+            <div className="stack-sm">
+              <StarterWatchlistButton onDone={(id) => { lists.reload(); select(id); }} />
+              <div className="row-actions">
+                <button type="button" className="btn" onClick={() => { create.clear(); setCreating(true); }}>Create an empty watchlist</button>
+              </div>
+            </div>
           </Empty></Card>
         ) : (
-          <div className="split">
+          <div className="split watchlists-split">
+            <label className="field only-narrow">Current watchlist<select value={selected?.id ?? ""} onChange={(e) => select(Number(e.target.value))}>{all.map((w) => <option key={w.id} value={w.id}>{w.name}{w.is_default ? " · Default" : ""} ({w.symbol_count})</option>)}</select></label>
             <nav className="col-side card wl-nav" aria-label="Your watchlists">
               <ul className="pick-list">
                 {all.map((w) => (
@@ -427,7 +521,7 @@ export function WatchlistsView() {
           select(wl.id);
           return true;
         }} />
-      <p className="cap">Changes here also show in the classic app (it may take up to 2 minutes there). <Link href="/alerts">Alerts</Link> can watch these lists.</p>
+      <p className="cap">Lists sync to your account. <Link href="/alerts">Alerts</Link> can watch these lists.</p>
     </div>
   );
 }

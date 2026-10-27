@@ -22,7 +22,7 @@ class ScanFilters(BaseModel):
     session: Literal["regular", "premarket", "afterhours"] = Field("regular", description="premarket / afterhours: Pro+")
     profile: Literal["regular", "aggressive", "conservative"] = "regular"
     top_n: Optional[int] = Field(None, ge=5, le=10_000,
-                                 description="Rows to return; at most the plan's cap (Free 25, Pro 100, Premium 200). "
+                                 description="Rows to return; at most the plan's cap (Starter 25, Pro 100, Premium 200). "
                                              "Default min(25, cap)")
     max_nasdaq: Optional[int] = Field(None, ge=100, le=100_000,
                                       description="NASDAQ ticker cap, Pro up to 4000 (default 1200); "
@@ -33,12 +33,14 @@ class ScanFilters(BaseModel):
 
 
 class ScanCreate(BaseModel):
-    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"] = Field(
+    universe: Literal["sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"] = Field(
         description="sp500 (every plan) · nasdaq, combo (Pro+) · us_market (Premium+) · "
-                    "watchlist (one of yours) · ticker (one symbol)")
+                    "watchlist (one of yours) · ticker (one symbol) · earnings (stocks reporting in earnings_window)")
     ticker: Optional[str] = Field(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$", description="For universe=ticker")
     watchlist_id: Optional[int] = Field(None, ge=1, description="For universe=watchlist")
-    score_all: bool = Field(False, description="Watchlist only: score every symbol, ignoring the screens (as on the web)")
+    earnings_window: Optional[Literal["today", "tomorrow", "week"]] = Field(
+        None, description="For universe=earnings: today (default, every plan), tomorrow or week = next 7 days (Pro)")
+    score_all: bool = Field(False, description="Watchlist and earnings: score every symbol, ignoring the screens (as on the web)")
     filters: ScanFilters = Field(default_factory=ScanFilters)
 
 

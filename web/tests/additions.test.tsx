@@ -50,7 +50,7 @@ function serve(routes: Record<string, Response | ((c: Call) => Response)>) {
 
 const PLANS = {
   tiers: [
-    { id: "basic", name: "Free", price: "Free", yearly_price: null, tagline: "Discover.", alert_limit: 1, highlights: ["HSF Score"] },
+    { id: "basic", name: "Starter", price: "Free", yearly_price: null, tagline: "Discover.", alert_limit: 1, highlights: ["HSF Score"] },
     { id: "pro", name: "Pro", price: "$25/mo", yearly_price: "$250/yr", tagline: "Monitor.", alert_limit: 5, highlights: ["Day Trader"] },
     { id: "premium", name: "Premium", price: "$40/mo", yearly_price: "$400/yr", tagline: "Research.", alert_limit: 25, highlights: ["AI scan summaries"] },
   ],
@@ -78,9 +78,9 @@ describe("landing and pricing", () => {
     const { unmount } = render(<Landing />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Turn the whole market into a short list.");
     expect(await screen.findByText("$25/mo")).toBeInTheDocument();
-    expect(screen.getByText("or $250/yr (two months free)")).toBeInTheDocument();
+    expect(screen.getByText("or $250/yr with yearly billing")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Day Trader" }));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "/landing/day-trader-stair-stepper.webp");
+    expect(screen.getByRole("img")).toHaveAttribute("src", "/landing/day-current.jpg");
     await u.click(screen.getByRole("link", { name: "Create a free account" }));
     await waitFor(() => expect(events().map((e) => e.event)).toEqual(["landing_visit", "primary_cta_click"]));
     expect(events()[0]!.attribution).toEqual({ utm_source: "reddit", utm_campaign: "launch" });
@@ -108,16 +108,49 @@ describe("landing and pricing", () => {
     expect((await screen.findAllByText("$40/mo")).length).toBeGreaterThan(0);
   });
 
-  it("offers a frontend-only demo with sample product state", () => {
+  it("switches pricing cards and comparison to yearly, and remembers the choice", async () => {
+    serve({ "GET /v1/plans": jsonResponse(PLANS), "POST /v1/events": new Response(null, { status: 202 }) });
+    const u = userEvent.setup();
+    const view = render(<PricingPage />);
+    await screen.findAllByText("$25/mo");
+    await u.click(screen.getByRole("radio", { name: "Yearly" }));
+    expect(screen.getByRole("radio", { name: "Yearly" })).toBeChecked();
+    expect(screen.getAllByText("$250/yr")).toHaveLength(2);
+    expect(screen.getAllByText("$400/yr")).toHaveLength(2);
+    expect(screen.getByRole("table")).toHaveTextContent("$250/yr");
+    view.unmount();
+    render(<PricingPage />);
+    expect(await screen.findByRole("radio", { name: "Yearly" })).toBeChecked();
+    expect(screen.getAllByText("$400/yr")).toHaveLength(2);
+    await u.click(screen.getByRole("radio", { name: "Monthly" }));
+    expect(screen.getAllByText("$25/mo")).toHaveLength(2);
+  });
+
+  it("offers a guided sample scan with working stock selection", () => {
     render(<DemoPage />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("See HSF with polished sample data.");
-    expect(screen.getByRole("status")).toHaveTextContent("fixed sample data");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Explore a sample scan.");
+    expect(screen.getByRole("status")).toHaveTextContent("Sample data — not live");
     expect(screen.getByRole("table", { name: "Demo ranked setups" })).toHaveTextContent("NVDA");
     expect(screen.getByRole("heading", { name: "Stock detail" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Watchlist intelligence" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Alerts and AI research" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create a free account" })).toHaveAttribute("href", "/signup");
   });
+});
+
+it("opens each sample stock's evidence and keeps the preview linked to NVDA", async () => {
+  const u = userEvent.setup();
+  render(<DemoPage />);
+  await u.click(screen.getByRole("link", { name: "Review AMD sample" }));
+  expect(screen.getByText("Why AMD matters in this sample")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Review AMD sample" })).toHaveAttribute("aria-current", "true");
+  const detail = screen.getByRole("region", { name: "Stock detail" });
+  expect(detail).toHaveTextContent("1.8x");
+  expect(detail).toHaveTextContent("moving-average cross can lag");
+  expect(document.getElementById("demo-stock")).toBeInTheDocument();
+  expect(document.getElementById("demo-scanner")).toBeInTheDocument();
+  await u.click(screen.getByRole("link", { name: /Explore the sample evidence/ }));
+  expect(screen.getByText("Why NVDA matters in this sample")).toBeInTheDocument();
 });
 
 describe("Stock Intelligence", () => {
@@ -130,14 +163,14 @@ describe("Stock Intelligence", () => {
     expect(screen.getByText(/Each review opens the score/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Review" })[0]).toHaveAttribute("href", "/stocks/AAA");
     expect(screen.getAllByText("STRONG · 2 confirming signals").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Open any ticker")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search ticker or company")).toBeInTheDocument();
     expect(calls[0]!.query.get("limit")).toBe("12");
-    await u.type(screen.getByLabelText("Open any ticker"), "not a ticker");
+    await u.type(screen.getByLabelText("Search ticker or company"), "not a ticker");
     await u.click(screen.getByRole("button", { name: "Open" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Enter a ticker symbol");
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a suggested company");
     expect(push).not.toHaveBeenCalled();
-    await u.clear(screen.getByLabelText("Open any ticker"));
-    await u.type(screen.getByLabelText("Open any ticker"), "nvda");
+    await u.clear(screen.getByLabelText("Search ticker or company"));
+    await u.type(screen.getByLabelText("Search ticker or company"), "nvda");
     await u.click(screen.getByRole("button", { name: "Open" }));
     expect(push).toHaveBeenCalledWith("/stocks/NVDA");
   });
@@ -192,6 +225,7 @@ describe("Paper trading", () => {
   it("connects keys, then sends an order only after the confirmation", async () => {
     search = new URLSearchParams("ticker=aaa");
     let connected = false;
+    let submissions = 0;
     const status = () => (connected ? { connected: true, connected_at: new Date().toISOString(), account: { status: "ACTIVE", buying_power: "20000", cash: "10000" } } : { connected: false });
     serve({
       "GET /v1/paper/account": () => jsonResponse(status()),
@@ -204,10 +238,12 @@ describe("Paper trading", () => {
         positions: [{ symbol: "AAA", qty: "3", avg_entry_price: "10", current_price: "11", market_value: "33", unrealized_pl: "3", unrealized_plpc: "0.1" }],
         orders: [{ order_id: "o1", symbol: "AAA", side: "buy", qty: "3", filled_qty: "3", status: "filled", filled_avg_price: "10", submitted_at: new Date().toISOString() }] }),
       "GET /v1/stocks/AAA": jsonResponse({ ticker: "AAA", price: 12.5 }),
-      "POST /v1/paper/orders": (c) => jsonResponse({ order_id: "o2", status: "accepted", ticker: "AAA", qty: (c.body as { qty: number }).qty, filled_avg_price: null }, 201),
+      "POST /v1/paper/orders": (c) => ++submissions === 1
+        ? jsonResponse({ detail: "Order status is uncertain. Retry this confirmation." }, 503)
+        : jsonResponse({ order_id: "o2", status: "accepted", ticker: "AAA", qty: (c.body as { qty: number }).qty, filled_avg_price: null, journal_synced: false }, 201),
     });
     const u = userEvent.setup();
-    render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
+    const mounted = render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
     await u.type(await screen.findByLabelText("API key ID"), "PKBADKEY99");
     await u.type(screen.getByLabelText("API secret"), "secret-123456");
     await u.click(screen.getByRole("button", { name: "Connect paper account" }));
@@ -225,8 +261,21 @@ describe("Paper trading", () => {
     expect(await within(dialog).findByText("$50.00")).toBeInTheDocument();
     expect(calls.some((c) => c.path === "/v1/paper/orders")).toBe(false);
     await u.click(within(dialog).getByRole("button", { name: "Buy 4 AAA" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Order status is uncertain");
+    // A remount drops component refs; the confirmation must survive in storage.
+    mounted.unmount();
+    render(<SessionProvider initialMe={me("premium")}><PaperView /></SessionProvider>);
+    await u.clear(await screen.findByLabelText("Shares"));
+    await u.type(screen.getByLabelText("Shares"), "4");
+    await u.click(screen.getByRole("button", { name: "Review order" }));
+    const retried = await screen.findByRole("dialog");
+    await u.click(within(retried).getByRole("button", { name: "Buy 4 AAA" }));
     expect(await screen.findByText(/Sent: buy 4 AAA \(accepted\)/)).toBeInTheDocument();
-    expect(calls.find((c) => c.path === "/v1/paper/orders")!.body).toEqual({ ticker: "AAA", qty: 4, confirm: true });
+    expect(calls.find((c) => c.path === "/v1/paper/orders")!.body).toEqual({ ticker: "AAA", qty: 4, confirm: true, idempotency_key: expect.any(String) });
+    const sent = calls.filter((c) => c.path === "/v1/paper/orders");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.body).toEqual(sent[0]!.body);
+    expect(screen.getByText(/Journal sync pending/)).toBeInTheDocument();
   });
 });
 

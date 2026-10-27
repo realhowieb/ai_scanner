@@ -1,12 +1,13 @@
 "use client";
+import { tabKey } from "@/lib/tabs";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import Link from "@/components/Link";
+import { useEffect, useId, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
-import { alerts, emailPrefs } from "@/api/userData";
+import { alerts, alertRules, emailPrefs } from "@/api/userData";
 import type { Alert } from "@/api/userData";
-import { ConfirmDialog } from "@/components/Dialog";
+import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -18,7 +19,11 @@ import type { FiredItem } from "@/lib/alertEvents";
 import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
-import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
+import { NotificationDelivery } from "./NotificationDelivery";
+import { SmartAlerts } from "./SmartAlerts";
+import { StarterAlerts } from "./Starters";
+import { AlertComposer } from "./AlertComposer";
+import { TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 
 function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
   const toggle = useAction();
@@ -48,7 +53,6 @@ function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
 }
 
 const FIRED_SHOWN = 8;
-const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
 function FiredRowItem({ item }: { item: FiredItem }) {
   const [open, setOpen] = useState(false);
@@ -121,11 +125,14 @@ const NATIVE_DENIED = "Notifications are off for HSF. Turn them on in Settings >
 export function PushToggle() {
   const cfg = useApi("web-push-config", (signal) => unwrap(api.GET("/v1/web-push/config", { signal })));
   const [state, setState] = useState<PushState | null>(null);
+  const descriptionId = useId();
   const act = useAction();
   useEffect(() => {
     let live = true;
-    currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
-    return () => { live = false; };
+    const refresh = () => void currentPushState().then((s) => live && setState(s), () => live && setState("unsupported"));
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { live = false; window.removeEventListener("focus", refresh); };
   }, []);
   const native = isNativeApp();
   const data = cfg.data;
@@ -148,11 +155,13 @@ export function PushToggle() {
   return (
     <div className="stack-sm">
       <label className="check">
-        <input type="checkbox" checked={on} disabled={act.busy || state === "unsupported"}
+        <input type="checkbox" checked={on} aria-describedby={descriptionId} disabled={act.busy || state === "unsupported" || state === "denied"}
           onChange={(e) => change(e.target.checked)} />
         <span>Notify me {native ? "on this iPhone" : "in this browser"} when an alert fires{act.busy ? " (saving…)" : ""}</span>
       </label>
-      {PUSH_COPY[state] && <p className="cap">{native && state === "denied" ? NATIVE_DENIED : PUSH_COPY[state]}</p>}
+      <p className="cap" id={descriptionId}>{(native && state === "denied" ? NATIVE_DENIED : PUSH_COPY[state])
+        || (native ? "Uses your existing alert rules and quiet hours. Delivery depends on your iPhone's notification settings."
+          : "Uses your existing alert rules and quiet hours. Turn this on separately in each browser. Delivery depends on your browser and device settings.")}</p>
       <ErrorLine error={act.error} />
     </div>
   );
@@ -161,91 +170,74 @@ export function PushToggle() {
 export function AlertsView() {
   const { me } = useSession();
   const list = useApi("alerts", (signal) => alerts.list(signal));
+  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
   const types = useApi("alert-types", (signal) => alerts.types(signal));
   const events = useApi("alert-events", (signal) => alerts.events(signal));
+  const [view, setView] = useState<"activity" | "rules" | "delivery">("activity");
+  const [newOpen, setNewOpen] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
-  const reload = () => { list.reload(); events.reload(); };
-
+  const reload = () => { list.reload(); rules.reload(); events.reload(); };
+  // Links from the Getting started card: /alerts?new=1 opens New alert, /alerts#delivery the Delivery tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- applies the link's target once on arrival
+    if (window.location.hash === "#delivery") setView("delivery");
+    if (new URLSearchParams(window.location.search).get("new") === "1") setNewOpen(true);
+  }, []);
   const data = list.data;
   const full = !!data && data.used >= data.limit;
+  const smart = rules.data?.rules ?? [];
+  const active = (data?.alerts.filter((a) => a.enabled).length ?? 0) + smart.filter((a) => a.enabled).length;
+  const paused = (data?.alerts.filter((a) => !a.enabled).length ?? 0) + smart.filter((a) => !a.enabled).length;
   const nextPlan = me?.plan === "basic" ? "pro" : me?.plan === "pro" ? "premium" : null;
-
-  return (
-    <div className="stack">
-      <section className="page-head">
-        <div>
-          <h1 className="h1">Alerts</h1>
-          <p className="cap">HSF checks your alerts automatically: scan-based ones a few times a day, live ones about every minute.</p>
-        </div>
+  return <div className="stack">
+    <section className="page-head"><div><h1 className="h1">Alerts</h1><p className="cap">Scan-based alerts run after market scans; price alerts are checked about every minute.</p></div>
+      <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>New alert</button>
+    </section>
+    {created && <p className="notice" role="status">Created: {created}.</p>}
+    {list.error && !data ? <ErrorState error={list.error} onRetry={list.reload} what="your alerts" /> : !data ? <Skeleton rows={6} label="Loading alerts" /> : <>
+      <div className="metric-strip" aria-label="Alert summary">
+        <span><strong>{active}</strong> active</span>
+        <span><strong>{paused}</strong> paused</span>
+        <span><strong>{data.used} / {data.limit}</strong> saved price/technical alerts (including paused)</span>
+        {rules.data && <span><strong>{rules.data.used} / {rules.data.limit}</strong> active alert allowance</span>}
+        <span><strong>{data.email_enabled ? "Available" : "Pro"}</strong> email delivery</span>
+      </div>
+      <div className="chips" role="tablist" onKeyDown={tabKey} aria-label="Alert views">{(["activity", "rules", "delivery"] as const).map((v) =>
+        <button type="button" role="tab" tabIndex={view === v ? 0 : -1} id={`alert-tab-${v}`} aria-controls={`alert-panel-${v}`} aria-selected={view === v} className="chip" key={v} onClick={() => setView(v)}>{v[0]!.toUpperCase() + v.slice(1)}</button>)}</div>
+      <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"} className="stack">
+        {data.alerts.length === 0 && smart.length === 0 && rules.data && <StarterAlerts onDone={(label) => { setCreated(label); reload(); }} />}
+        <Card title="Recently fired" id="events">{events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="No recent triggers.">
+          {active > 0 ? "Your alert is active; no trigger has been recorded yet."
+            : paused > 0 ? "Your saved alerts are paused. View rules to manage them."
+            : rules.error && !typesUnavailable(rules.error.status) ? "HSF rule status could not be loaded. View rules to retry."
+            : !rules.data && !rules.error ? "Loading rule status…" : "Create an alert using New alert or from a stock page."}
+          {(active > 0 || paused > 0 || !!rules.error && !typesUnavailable(rules.error.status)) && <div><button type="button" className="btn btn-sm" onClick={() => { setView("rules"); document.getElementById("alert-tab-rules")?.focus(); rules.reload(); }}>View rules</button></div>}
+        </Empty> : <ul className="fired-list">{groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}</ul>}</Card>
       </section>
-
-      {list.error && !data ? <ErrorState error={list.error} onRetry={list.reload} what="your alerts" /> : !data ? <Skeleton rows={6} label="Loading alerts" /> : (
-        <div className="split">
-          <div className="col-main">
-            <Card title="Alert center" id="summary" aside={`${data.used} of ${data.limit} used`}>
-              <div className="metric-strip" aria-label="Alert summary">
-                <span><strong>{metric(data.summary?.active, data.alerts.filter((a) => a.enabled).length)}</strong> active</span>
-                <span><strong>{metric(data.summary?.paused, data.alerts.filter((a) => !a.enabled).length)}</strong> paused</span>
-                <span><strong>{metric(data.summary?.fired_recently, data.alerts.filter((a) => a.last_fired_at).length)}</strong> fired</span>
-                <span><strong>{data.email_enabled ? "On" : "Pro"}</strong> email</span>
-              </div>
-              <p className="cap">Create alerts on the right, then use this page to pause, delete and review what fired.</p>
-            </Card>
-            <Card title="Your alerts" id="mine" aside={`Using ${data.used} of ${data.limit} on your ${me?.plan_label ?? ""} plan`}>
-              <div className="track cap-track" aria-hidden="true"><div className="fill" style={{ width: `${Math.min(100, (data.used / Math.max(1, data.limit)) * 100)}%` }} /></div>
-              {data.alerts.length === 0 ? (
-                <Empty title="No alerts yet.">Create one here or from a stock page.</Empty>
-              ) : (
-                <ul className="alert-list">{data.alerts.map((a) => <AlertRow key={a.id} a={a} onChanged={reload} />)}</ul>
-              )}
-              {data.used > data.limit && <p className="cap">Only your newest {data.limit} alert{data.limit === 1 ? "" : "s"} can fire on this plan. Delete some or upgrade.</p>}
-            </Card>
-
-            <Card title="Recently fired" id="events">
-              {events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> :
-                events.data.length === 0 ? <Empty title="Nothing has fired yet.">When an alert&apos;s condition is met it shows here.</Empty> : (
-                  <ul className="fired-list">
-                    {groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}
-                  </ul>
-                )}
-            </Card>
-          </div>
-
-          <aside className="col-side">
-            <Card title="New alert" id="new">
-              {full ? (
-                <div className="locked">
-                  <p className="strong">You&apos;re using all {data.limit} alert{data.limit === 1 ? "" : "s"} on your plan.</p>
-                  <p className="cap">Delete one to add another{nextPlan ? ", or upgrade for more" : ""}.</p>
-                  {nextPlan && <UpgradeButton plan={nextPlan} />}
-                </div>
-              ) : types.error && typesUnavailable(types.error.status) ? <p className="notice" role="note">{TYPES_UNAVAILABLE}</p>
-                : types.error ? <ErrorLine error={types.error} /> : !types.data ? <Skeleton rows={4} label="Loading alert types" /> : (
-                <>
-                  <AlertForm key={formKey} types={types.data} onCreated={(a) => { setCreated(describeAlert(a)); setFormKey((k) => k + 1); reload(); }} />
-                  {created && <p className="notice" role="status">Created: {created}.</p>}
-                </>
-              )}
-            </Card>
-
-            <Card title="How you're notified" id="delivery">
-              <p className="body-sm">Fired alerts appear under Recently fired here and in the classic app.</p>
-              <PushToggle />
-              {data.email_enabled ? (
-                <EmailToggle />
-              ) : (
-                <div className="stack-sm">
-                  <p className="body-sm">Email alerts are part of Pro.</p>
-                  <UpgradeButton plan="pro" />
-                </div>
-              )}
-              <p className="cap">Phone push notifications aren&apos;t available yet.</p>
-              <Link href="/watchlists" className="cap">Manage the watchlists your alerts use →</Link>
-            </Card>
-          </aside>
-        </div>
-      )}
-    </div>
-  );
+      <section id="alert-panel-rules" role="tabpanel" aria-labelledby="alert-tab-rules" hidden={view !== "rules"} className="stack">
+        <Card title="Your alerts" id="mine" aside={`${data.used} saved price/technical · ${smart.length} HSF rules`}>
+          <p className="cap">Paused price/technical alerts still use saved slots. Pausing an HSF rule frees an active slot.</p>
+          {data.alerts.length ? <ul className="alert-list">{data.alerts.map((a) => <AlertRow key={a.id} a={a} onChanged={reload} />)}</ul> : smart.length === 0 && (!rules.error || typesUnavailable(rules.error.status)) && !rules.loading ? <Empty title="No alerts yet.">Choose New alert to get started.</Empty> : null}
+          {rules.error && !typesUnavailable(rules.error.status) && <ErrorState error={rules.error} onRetry={rules.reload} what="HSF alert rules" />}
+          {data.used > data.limit && <p className="cap">Only your newest {data.limit} alerts can fire on this plan. Delete some or upgrade.</p>}
+        </Card>
+        <SmartAlerts onChanged={reload} folded />
+      </section>
+      <section id="alert-panel-delivery" role="tabpanel" aria-labelledby="alert-tab-delivery" hidden={view !== "delivery"} className="stack">
+        <Card title="How you're notified" id="delivery"><p className="body-sm">Fired alerts appear in Activity.</p><PushToggle />
+          {data.email_enabled ? <EmailToggle /> : <div className="stack-sm"><p className="body-sm">Email alerts are part of Pro.</p><UpgradeButton plan="pro" /></div>}
+          <p className="cap">Browser notifications depend on this device’s permissions.</p><Link href="/watchlists">Manage alert watchlists →</Link>
+        </Card>
+        <NotificationDelivery events={events.data ?? []} />
+      </section>
+    </>}
+    <Dialog open={newOpen} title="New alert" onClose={() => setNewOpen(false)}>
+      {!data ? <Skeleton rows={3} label="Loading your alert allowance" /> : full && rules.error && typesUnavailable(rules.error.status) ? <div className="locked"><p className="strong">You&apos;re using all {data.limit} alert{data.limit === 1 ? "" : "s"} on your plan.</p><p className="cap">Delete one to add another{nextPlan ? ", or upgrade for more" : ""}.</p>{nextPlan && <UpgradeButton plan={nextPlan} />}</div>
+        : types.error && typesUnavailable(types.error.status) ? <p className="notice" role="note">{TYPES_UNAVAILABLE}</p>
+        : types.error ? <ErrorLine error={types.error} /> : !types.data ? <Skeleton rows={4} label="Loading alert types" />
+        : <AlertComposer key={formKey} types={types.data} legacyFull={full} smartFull={!!rules.data && rules.data.used >= rules.data.limit} onCreated={(description) => { setCreated(description); setFormKey((k) => k + 1); setNewOpen(false); setView("rules"); reload(); }} />}
+    </Dialog>
+  </div>;
 }

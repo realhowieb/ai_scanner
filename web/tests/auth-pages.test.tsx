@@ -52,6 +52,26 @@ describe("sign-up and account recovery pages", () => {
     localStorage.clear();
   });
 
+  it("keeps password guidance available and reveals both fields without submitting", async () => {
+    const u = userEvent.setup();
+    render(<SignupForm />);
+    const password = screen.getByLabelText("Password");
+    const repeat = screen.getByLabelText("Repeat password");
+    expect(password).toHaveAccessibleDescription(/at least 10 characters/);
+    expect(screen.getByLabelText("Display name")).toHaveAccessibleDescription(/use it to sign in/);
+    expect(screen.getByRole("link", { name: "HSFinest.AI home" })).toHaveAttribute("href", "/");
+    await u.type(password, "example-passphrase");
+    await u.type(repeat, "example-passphrase");
+    await u.click(screen.getByRole("button", { name: "Show passwords" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(repeat).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("example-passphrase");
+    await u.click(screen.getByRole("button", { name: "Hide passwords" }));
+    expect(password).toHaveAttribute("type", "password");
+    expect(repeat).toHaveAttribute("type", "password");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("forgot password: same answer either way", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: true, message: "If that email is registered, a reset link has been sent." }));
     const u = userEvent.setup();

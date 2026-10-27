@@ -4,6 +4,7 @@
 import createClient from "openapi-fetch";
 import type { Middleware } from "openapi-fetch";
 
+import { resetUsageIdentity } from "@/lib/usageAnalytics";
 import { parseRetryAfter } from "@/lib/retryAfter";
 import { clearCachedMe } from "@/session/meCache";
 
@@ -23,6 +24,14 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 
+  readonly receivedAt = Date.now();
+
+  get fields(): Record<string, string> {
+    const fields = (this.body as { fields?: unknown } | null)?.fields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) return {};
+    return Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  }
+
   get code(): string | null {
     const b = this.body as { code?: unknown } | null;
     return b && typeof b.code === "string" ? b.code : null;
@@ -32,6 +41,7 @@ export class ApiError extends Error {
 let onSessionExpired: () => void = () => {
   if (typeof window === "undefined") return;
   clearCachedMe();
+  resetUsageIdentity();
   const here = window.location.pathname + window.location.search;
   // A full page load on purpose: it drops every piece of client state from the old session.
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
@@ -59,7 +69,7 @@ const requestIds: Middleware = {
 export function messageFrom(body: unknown, status: number): string {
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string" && detail) return detail;
-  if (Array.isArray(detail)) return "Some of the values aren't valid.";
+  if (Array.isArray(detail)) return "Check the fields below and try again.";
   if (status === 503) return "The HSF service is unavailable right now.";
   if (status === 429) return "Too many requests. Wait a moment and try again.";
   return `Something went wrong (HTTP ${status}).`;

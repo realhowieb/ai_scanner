@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,8 @@ class SignupBody(BaseModel):
     client: Optional[str] = Field(default=None, max_length=80)
     attribution: Optional[Dict[str, str]] = Field(
         default=None, description="Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel")
+    turnstile_token: Optional[str] = Field(default=None, max_length=2048, description=(
+        "Cloudflare Turnstile token from the sign-up form; required when the server has Turnstile on"))
 
 
 class TokenBody(BaseModel):
@@ -40,6 +42,11 @@ class TokenBody(BaseModel):
 
 class EmailBody(BaseModel):
     email: str = Field(min_length=3, max_length=254)
+
+
+class ResetRequestBody(EmailBody):
+    turnstile_token: Optional[str] = Field(default=None, max_length=2048, description=(
+        "Cloudflare Turnstile token from the form; required when the server has Turnstile on"))
 
 
 class ResetConfirmBody(BaseModel):
@@ -56,6 +63,8 @@ class EmailPrefsUpdate(BaseModel):
     digest: Optional[bool] = None
     evening: Optional[bool] = None
     alerts: Optional[bool] = None
+    weekly: Optional[bool] = None
+    tips: Optional[bool] = None
 
 
 class CheckoutBody(BaseModel):
@@ -72,30 +81,66 @@ _RESET_SENT = ("If that email is registered, a reset link has been sent. "
 
 
 def register(app: FastAPI) -> None:
+    @app.get("/v1/me/referrals", response_model=models.Referrals,
+             responses={**_AUTH, 503: {"description": "Invites are switched off or storage is unavailable"}},
+             summary="Your invite link")
+    def my_referrals(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Your invite code and sign-up link, how many people joined with it, and your free Pro
+        time. Each friend who signs up with the link and confirms their email gives you both
+        `reward_days` of Pro."""
+        from api import referrals
+
+        if not referrals.enabled():
+            raise HTTPException(503, "Invites are switched off right now.")
+        try:
+            return referrals.summary(_user(account))
+        except Exception as e:
+            raise HTTPException(503, "Your invite link isn't available right now. Try again later.") from e
+
     @app.post("/v1/auth/signup", response_model=models.SignupResult, status_code=201,
-              responses={400: {"description": "Invalid input or password rule"}, 409: {"description": "Email or username taken"},
+              responses={400: {"description": "Invalid input, password rule or failed security check"}, 409: {"description": "Email or username taken"},
                          429: {"description": "Too many sign-ups from this address"}})
     def signup(body: SignupBody, request: Request, _l: None = Depends(ratelimit.limit("signup"))) -> Dict[str, Any]:
-        """Create a Free account (same rules as the web form) and sign in. A verification
+        """Create a Starter (free) account (same rules as the web form) and sign in. A verification
         email is sent; verifying is needed to upgrade and for alert emails."""
+        from api import turnstile
+
+        turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="signup")
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
         if body.attribution is not None:
             _track(body.attribution, "signup_completed", username=res["email"], plan="basic")
+            from api import referrals
+
+            referrals.credit_signup(body.attribution, res["email"])
         return {**_token_pair(res["email"], _settings(request), body.client),
                 "email": res["email"], "verification_sent": res["verification_sent"]}
 
     @app.post("/v1/auth/verify-email", response_model=models.Message,
               responses={400: {"description": "Invalid or expired link"}})
-    def verify_email(body: TokenBody, _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
-        """Confirm an email address with the token from the verification link."""
-        acct.verify_email(body.token)
+    def verify_email(body: TokenBody, background: BackgroundTasks,
+                     _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
+        """Confirm an email address with the token from the verification link. An account that
+        signed up with an invite link starts the free Pro month for both people here. The
+        welcome email (once per account) goes out after the response."""
+        from api import referrals
+        from services.lifecycle_emails import send_welcome
+
+        email = acct.verify_email(body.token)
+        rewarded = referrals.reward_on_verify(email)
+        background.add_task(send_welcome, email)
+        if rewarded:
+            forget_account(email)
+            return {"message": f"Email verified. You and your friend each get {referrals.reward_days()} days of Pro."
+                    if referrals.reward_days() else "Email verified."}
         return {"message": "Email verified."}
 
-    @app.post("/v1/me/verify-email", response_model=models.Message, responses={401: {"description": "Not signed in"}})
+    @app.post("/v1/me/verify-email", response_model=models.Message,
+              responses={401: {"description": "Not signed in"},
+                         503: {"description": "Email verification status or sending temporarily unavailable"}})
     def resend_verification(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Send a new verification link to the signed-in account's email (3 per hour)."""
         user = _user(account)
-        if acct.is_verified(user):
+        if acct.verification_status(user):  # VerificationUnavailable answers 503
             return {"message": "Your email is already verified."}
         ratelimit.check("verify_resend", user)
         if not acct.send_verification(user):
@@ -103,9 +148,14 @@ def register(app: FastAPI) -> None:
         return {"message": "Verification email sent. Check your inbox (and spam)."}
 
     @app.post("/v1/auth/password-reset", response_model=models.Message, status_code=202,
-              responses={429: {"description": "Too many requests from this address"}})
-    def password_reset(body: EmailBody, _l: None = Depends(ratelimit.limit("password_reset"))) -> Dict[str, Any]:
+              responses={400: {"description": "Security check failed (Turnstile)"},
+                         429: {"description": "Too many requests from this address"}})
+    def password_reset(body: ResetRequestBody, request: Request,
+                       _l: None = Depends(ratelimit.limit("password_reset"))) -> Dict[str, Any]:
         """Email a reset link. Same answer whether or not the account exists."""
+        from api import turnstile
+
+        turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="password_reset")
         acct.request_password_reset(body.email)
         return {"message": _RESET_SENT}
 
@@ -152,7 +202,8 @@ def register(app: FastAPI) -> None:
 
     @app.post("/v1/billing/checkout", response_model=models.BillingLink,
               responses={**_AUTH, 403: {"description": "Verify your email first"},
-                         502: {"description": "Billing service unavailable"}})
+                         502: {"description": "Billing service unavailable"},
+                         503: {"description": "Email verification can't be confirmed right now; try again"}})
     def billing_checkout(body: CheckoutBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing
         subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser."""
@@ -163,6 +214,31 @@ def register(app: FastAPI) -> None:
     def billing_portal(body: PortalBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stripe Customer Portal: payment method, invoices, plan, cancellation (flow=cancel)."""
         return acct.portal_url(_user(account), body.flow)
+
+    @app.get("/v1/billing/status", response_model=models.BillingStatus, responses=_AUTH)
+    def billing_status(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The account's last confirmed billing status. Does not contact Stripe."""
+        from api.billing import status_for_account
+
+        return status_for_account(_user(account))
+
+    @app.post("/v1/billing/checkout/cancel", response_model=models.Message, responses={**_AUTH, 409: {"description": "Payment processing"}})
+    def billing_checkout_cancel(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Expire only this account's unfinished checkout, without canceling a subscription."""
+        from api.billing import cancel_checkout
+
+        ratelimit.check("billing_sync", _user(account))
+        return cancel_checkout(_user(account))
+
+    @app.post("/v1/billing/sync", response_model=models.BillingStatus,
+              responses={**_AUTH, 409: {"description": "Subscription configuration needs review"},
+                         429: {"description": "Too many refreshes"}, 502: {"description": "Billing unavailable"}})
+    def billing_sync(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Refresh the signed-in account from its Stripe customer. Does not create or change a subscription."""
+        from api.billing import sync_account
+
+        ratelimit.check("billing_sync", _user(account))
+        return sync_account(_user(account))
 
 
 class DeleteAccountBody(BaseModel):

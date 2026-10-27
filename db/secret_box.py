@@ -22,7 +22,7 @@ def _secret_source() -> Optional[str]:
             return val
     # Streamlit secrets fallback (cloud), best-effort.
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
 
         for name in ("APP_ENCRYPTION_KEY", "COOKIE_PASSWORD"):
             val = str(st.secrets.get(name, "") or "").strip()  # type: ignore[attr-defined]

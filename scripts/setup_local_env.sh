@@ -37,16 +37,15 @@ grep -v -E '^(nvidia-|triton==)' requirements.lock > "$LOCK_LOCAL"
 .venv/bin/python -m pip install --upgrade --quiet pip
 echo "Installing pinned dependencies from requirements.lock"
 .venv/bin/python -m pip install --quiet -r "$LOCK_LOCAL"
+echo "Installing API runtime"
+.venv/bin/python -m pip install --quiet -r api/requirements.txt
 echo "Installing developer tools"
 .venv/bin/python -m pip install --quiet -r requirements-dev.txt
 .venv/bin/python -m pip check
 
-if [[ ! -f .streamlit/secrets.toml ]]; then
-  echo
-  echo "No .streamlit/secrets.toml yet: copy .streamlit/secrets.toml.example and fill it in."
-fi
-
 echo
 echo "Done: $(.venv/bin/python --version) in .venv"
-echo "Run the app:   .venv/bin/streamlit run app.py"
+echo "Configure environment variables as described in docs/API.md."
+echo 'Run the API: .venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000'
+echo 'Run the web app from web/: npm ci && npm run dev'
 echo "Run the tests: .venv/bin/python -m pytest -q"

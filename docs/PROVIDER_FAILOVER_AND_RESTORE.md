@@ -22,7 +22,7 @@ secrets, Render environment). Changing a key in one does not change the others.
    per area; the Email setup card shows all three environments.
 2. **Sentry** for new errors (`component=cron` is the scheduled job).
 3. **GitHub → Actions → Scheduled Scans**: did the last run start, and did it pass?
-4. **Billing:** `https://ai-scanner-h2c8.onrender.com/health` (`ok`, `db`, `email`).
+4. **Billing:** `https://hsf-api-v1.onrender.com/billing/health` (`ok`, `db`, `email`).
 
 ## Provider by provider
 

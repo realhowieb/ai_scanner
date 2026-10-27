@@ -134,6 +134,7 @@ export function Sparkline({ points, ticker }: { points: number[] | undefined; ti
 }
 
 function Score({ r }: { r: Row }) {
+  if (r.traded_today === false) return <span className="cap" title="No trade yet today. The score starts with today's first trade.">Waiting</span>;
   if (r.day_trade_score == null) return <span className="cap" title="Too little evidence to score">—</span>;
   // A flagged quote's score rests on numbers we already say not to trust: show it muted, with no tier.
   if (flagged(r)) {
@@ -171,7 +172,8 @@ function Why({ r }: { r: Row }) {
   return (
     <div className="dt-why">
       <p className="cap">
-        {r.day_trade_score == null ? "Too little evidence to score this setup."
+        {r.traded_today === false ? "No trade yet today. The score starts with today's first trade, so yesterday's session can't rank this name."
+          : r.day_trade_score == null ? "Too little evidence to score this setup."
           : flagged(r) ? "No tier while the quote is flagged: check it before relying on this score."
           : `${QUALITY[r.dt_quality]?.label ?? "Unrated"} ${r.dt_direction} setup.`}
       </p>
@@ -347,8 +349,8 @@ function Live() {
   const visible = useVisible();
   // `at` is when this device received the answer. Timing uses it rather than the server's
   // as_of, so a phone whose clock runs ahead of the server doesn't refresh nonstop.
-  const dt = useApi(`dt:${source}:${tick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
-    .then((data) => ({ data, at: Date.now() })));
+  const dt = useApi(`dt:${source}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
+    .then((data) => ({ data, at: Date.now() })), tick);
   const d = dt.data?.data ?? null;
   const gotAt = dt.data?.at ?? 0;
   const failed = !!dt.error && !!d;
@@ -358,11 +360,11 @@ function Live() {
   // quotes are already older than that); nothing is scheduled while a request is in flight.
   // A failed refresh keeps the last quotes on screen and retries after DT_RETRY_MS.
   useEffect(() => {
-    if (!live || dt.loading) return;
+    if (!live || dt.loading || dt.refreshing) return;
     const wait = failed ? DT_RETRY_MS : Math.min(DT_REFRESH_MS, Math.max(0, DT_REFRESH_MS - (Date.now() - gotAt)));
     const t = setTimeout(() => setTick((n) => n + 1), wait);
     return () => clearTimeout(t);
-  }, [live, dt.loading, gotAt, failed]);
+  }, [live, dt.loading, dt.refreshing, gotAt, failed]);
   const now = useNow(live);
   // The previous refresh, kept alongside the current one to show what moved.
   const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null }>({ cur: null, prev: null });
@@ -375,12 +377,22 @@ function Live() {
     const sorted = sortRows(applyFilters(all, filters), sort.key, sort.desc);
     return held ? holdOrder(sorted, held) : sorted;
   }, [all, filters, sort, held]);
+  const [showAll, setShowAll] = useState(false);
+  const shownRows = showAll ? rows : rows.slice(0, 15);
+  const candidate = (side: "long" | "short", value: unknown) => {
+    const row = all.find((r) => r.ticker === value);
+    const hasStrong = all.some((r) => r.dt_direction === (side === "long" ? "bullish" : "bearish") && r.dt_quality === "strong" && !flagged(r));
+    if (!row) return <span>{hasStrong ? `See ${side} setups for candidates` : `No strong ${side} setup`}</span>;
+    const quality = row.dt_quality;
+    const strong = quality === "strong" && !flagged(row);
+    return <span className="dt-candidate">{!strong && !hasStrong && <>No strong {side} setup · </>}<strong>{row.ticker}</strong> {strong ? `top ${side} candidate` : `highest-ranked ${side}`} · DT {row.day_trade_score == null ? "—" : Math.round(row.day_trade_score)} · {quality ?? "unrated"}</span>;
+  };
   const listRef = useRef<HTMLElement>(null);
   useSlide(listRef, rows.map((r) => r.ticker).join(","));
   // Sparklines for the top names; 1-minute bars change slowly, so reload every third quote refresh.
   const sparkSyms = all.slice(0, SPARK_MAX).map((r) => r.ticker).join(",");
-  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}:${Math.floor(tick / SPARK_EVERY)}` : null, (signal) =>
-    unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })));
+  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}` : null, (signal) =>
+    unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })), Math.floor(tick / SPARK_EVERY));
   const series = spark.data?.series ?? {};
   const sortBy = (key: SortKey) => {
     setHeld(null);
@@ -392,18 +404,20 @@ function Live() {
 
   return (
     <>
+      <DayTraderHeading state={d?.state} />
       <section className="filters" aria-label="Source">
         <label className="inline-field">Symbols
           <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
             {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
+        {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
         <span className="grow" />
         {d && (live
           ? failed
-            ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · quotes {etTime(d.as_of)}</span>
-            : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · updated {ago}s ago</span>
-          : <span className="cap">{STATE[d.state] ?? d.state} · quotes {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
+            ? <span className="cap dt-live dt-stale" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Couldn&apos;t refresh, retrying · checked {etTime(d.as_of)}</span>
+            : <span className="cap dt-live" role="status"><span className="dt-dot" aria-hidden="true" />{STATE[d.state] ?? d.state} · Live · checked {ago}s ago</span>
+          : <span className="cap">{STATE[d.state] ?? d.state} · checked {etTime(d.as_of)}{trading ? " · paused while this tab is hidden" : ""}</span>)}
         {trading && <button type="button" className="btn btn-sm" aria-pressed={!!held} onClick={togglePause}
           title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
         <button type="button" className="btn btn-sm" onClick={() => setTick((n) => n + 1)} disabled={dt.loading}>Refresh</button>
@@ -413,14 +427,17 @@ function Live() {
           <span><strong>{metric(d.summary?.strong, all.filter((r) => r.dt_quality === "strong").length)}</strong> strong</span>
           <span><strong>{metric(d.summary?.developing, all.filter((r) => r.dt_quality === "developing").length)}</strong> developing</span>
           <span><strong>{metric(d.summary?.flagged, all.filter((r) => (r.quote_flags ?? []).length).length)}</strong> flagged</span>
-          <span><strong>{metric(d.summary?.best_long, "—")}</strong> best long</span>
-          <span><strong>{metric(d.summary?.best_short, "—")}</strong> best short</span>
+          {candidate("long", d.summary?.best_long)}
+          {candidate("short", d.summary?.best_short)}
         </div>
       )}
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
-      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: Chg % and DT score use the regular session; AH shows the move since the close.</p>}
+      {d?.state === "premarket" && all.length > 0 && <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>}
+      {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. The API does not supply the session date or individual trade timestamps; they cannot be verified here. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
+        : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
+          ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick My default watchlist to see last night&apos;s prices.</Empty></Card>
         : all.length === 0 ? <Card><Empty title={d.symbols.length ? "No live quotes for these symbols right now." : "No symbols in this source."}>
             {source === "watchlist" ? "Add tickers to your default watchlist, or pick another source." : "Try another source."}</Empty></Card>
         : rows.length === 0 ? <Card><Empty title="No rows match these filters."><button type="button" className="btn btn-sm" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button></Empty></Card>
@@ -433,7 +450,7 @@ function Live() {
                 </button>
               ))}
             </div>
-            {rows.map((r) => (
+            {shownRows.map((r) => (
               <article key={r.ticker} data-t={r.ticker} className={`card dt-card${flagged(r) ? " row-muted" : ""}`}>
                 <div className="dt-card-head">
                   <TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
@@ -462,7 +479,7 @@ function Live() {
           </section>
         ) : (
           <section ref={listRef} className={`card flush${switching ? " dim" : ""}`}>
-            <div className="table-wrap">
+            <div className="table-wrap dt-scroll" tabIndex={0} role="region" aria-label="Day Trader candidates; scroll for more rows and columns">
               <table className="table dt-table">
                 <thead><tr>
                   {COLS.map((c) => (
@@ -477,7 +494,7 @@ function Live() {
                   <th scope="col"><span className="sr-only">Actions</span></th>
                 </tr></thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {shownRows.map((r) => (
                     <Fragment key={r.ticker}>
                       <tr data-t={r.ticker} className={flagged(r) ? "row-muted" : undefined}>
                         <td><span className="dt-ticker"><TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
@@ -503,7 +520,8 @@ function Live() {
           </section>
         )}
       {d && d.missing > 0 && <p className="cap"><Pill tone="warn">{d.missing} missing</Pill> {d.missing} symbol{d.missing === 1 ? " has" : "s have"} no live quote right now.</p>}
-      {rows.length > 0 && <StairSteppers symbols={rows.map((r) => r.ticker)} />}
+      {rows.length > 15 && <div><button type="button" className="btn" onClick={() => setShowAll((v) => !v)}>{showAll ? "Show first 15" : `Show all ${rows.length} candidates`}</button></div>}
+      {rows.length > 0 && <section id="stair-steppers"><StairSteppers symbols={rows.map((r) => r.ticker)} /></section>}
       <details className="card dt-help">
         <summary className="strong">How the DT score works</summary>
         <div className="stack-sm">
@@ -521,17 +539,20 @@ function Live() {
   );
 }
 
+function DayTraderHeading({ state }: { state?: Data["state"] }) {
+  return <section className="page-head"><div><h1 className="h1">Day Trader</h1>
+    <p className="cap">{state === "closed" ? "Last-session intraday rankings · market closed."
+      : state === "afterhours" ? "Completed-session rankings with after-hours prices."
+      : state === "premarket" ? "Pre-market quotes ranked by day-trade score."
+      : state === "open" ? "Live intraday quotes ranked by day-trade score."
+      : "Intraday quotes and rankings for the current market session."}</p>
+  </div></section>;
+}
+
 export function DayTraderView() {
   const { can } = useSession();
-  return (
-    <div className="stack">
-      <section className="page-head">
-        <div>
-          <h1 className="h1">Day Trader</h1>
-          <p className="cap">Live intraday quotes ranked by day-trade score.</p>
-        </div>
-      </section>
-      {can("can_day_trader") ? <Live /> : <Card><Locked title="Day Trader is part of Pro" plan="pro">Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>}
-    </div>
-  );
+  return <div className="stack">{can("can_day_trader") ? <Live /> : <>
+    <DayTraderHeading />
+    <Card><Locked title="Day Trader is part of Pro" plan="pro">Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>
+  </>}</div>;
 }

@@ -7,6 +7,7 @@ venv/
 env/
 .env
 .env.*
+!api/.env.example
 
 # Local SSH/private key material
 id_rsa

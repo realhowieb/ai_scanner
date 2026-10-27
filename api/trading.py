@@ -18,18 +18,17 @@ ALPACA_BASE_URL can never route a customer's order to a live account.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+
+from services.paper_orders import (
+    OrderConflict,
+    PaperRejected,
+    PaperUnavailable,
+    reconcile_pending,
+    require_paper_endpoint,
+)
 
 PAPER_HOST = "paper-api.alpaca.markets"
 MAX_ORDER_QTY = 100_000
-
-
-class PaperUnavailable(RuntimeError):
-    """Paper trading can't run on this server (503)."""
-
-
-class PaperRejected(ValueError):
-    """Alpaca or the request rejected the order / keys (400)."""
 
 
 class TradeClosed(ValueError):
@@ -47,11 +46,13 @@ def _quotes(tickers: List[str]) -> Dict[str, float]:
         return {}
 
 
-def journal(username: str) -> Dict[str, Any]:
+def journal(username: str, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
     """Trades (open first), open ones marked to live quotes, plus closed-trade stats."""
     from db.trades import journal_stats, list_trades
 
-    trades = list_trades(username, limit=200)
+    _reconcile(username)
+    page = list_trades(username, limit=limit + 1, offset=offset)
+    trades = page[:limit]
     live = _quotes([t["ticker"] for t in trades if not t.get("closed_at")])
     out = []
     for t in trades:
@@ -65,24 +66,37 @@ def journal(username: str) -> Dict[str, Any]:
     stats = journal_stats(username)
     open_trades = [t for t in out if t.get("open")]
     closed = [t for t in out if not t.get("open")]
-    return {"trades": out, "stats": stats,
+    return {"trades": out, "stats": stats, "limit": limit, "offset": offset, "has_more": len(page) > limit,
             "summary": {"open": len(open_trades), "closed": len(closed),
-                        "win_rate": (stats or {}).get("win_rate"),
+                        "win_rate": (100.0 * stats["wins"] / stats["closed"]) if stats and stats.get("closed") else None,
                         "avg_return_pct": (stats or {}).get("avg_return_pct"),
                         "open_pnl": sum(float(t.get("pnl") or 0) for t in open_trades if t.get("pnl") is not None),
                         "total_pnl": sum(float(t.get("pnl") or 0) for t in out if t.get("pnl") is not None)}}
 
 
 def _owned_trade(username: str, trade_id: int) -> Optional[Dict[str, Any]]:
-    from db.trades import list_trades
+    from db.trades import get_trade
 
-    return next((t for t in list_trades(username, limit=1000) if int(t["id"]) == int(trade_id)), None)
+    return get_trade(username, trade_id)
+
+
+def _entry_score(ticker: str) -> Optional[float]:
+    """The ticker's HSF Score in the latest market scan (None when it isn't a ranked setup),
+    stored with the trade so journal insights can group results by score at entry."""
+    try:
+        from api.scans import watchlist_scan_state
+
+        row = watchlist_scan_state([ticker], {})["rows"].get(ticker.upper()) or {}
+        score = row.get("score")
+        return float(score) if score is not None else None
+    except Exception:
+        return None
 
 
 def log(username: str, ticker: str, entry_price: float, shares: int) -> None:
     from db.trades import log_trade
 
-    log_trade(username, ticker, float(entry_price), int(shares), source="api")
+    log_trade(username, ticker, float(entry_price), int(shares), source="api", hsf_score=_entry_score(ticker))
 
 
 def close(username: str, trade_id: int, exit_price: float) -> bool:
@@ -104,6 +118,105 @@ def delete(username: str, trade_id: int) -> bool:
         return False
     delete_trade(int(trade_id), username)
     return True
+
+
+# ---- journal insights -----------------------------------------------------------------------------
+SCORE_BANDS = (("80+", 80.0), ("60-79", 60.0), ("Under 60", float("-inf")))
+HOLD_BANDS = (("Same day", 1), ("1-5 days", 5), ("6-20 days", 20), ("Over 20 days", None))  # upper bound, days
+SOURCE_LABELS = {"api": "Logged by hand", "scan": "From a scan", "paper": "Paper trading", "manual": "Logged by hand"}
+
+
+def _ts(v: Any):
+    import datetime as dt
+
+    if isinstance(v, dt.datetime):
+        return v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)
+    try:
+        t = dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def _score_band(t: Dict[str, Any]) -> str:
+    s = t.get("hsf_score")
+    if s is None:
+        return "Not recorded"
+    return next(label for label, floor in SCORE_BANDS if float(s) >= floor)
+
+
+def _hold_band(days: Optional[float]) -> str:
+    if days is None:
+        return "Unknown"
+    for label, top in HOLD_BANDS:
+        if top is None or (days < top if label == "Same day" else days <= top):
+            return label
+    return HOLD_BANDS[-1][0]
+
+
+def _group(rows: List[Dict[str, Any]], key, order: List[str]) -> List[Dict[str, Any]]:
+    by: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by.setdefault(key(r), []).append(r)
+    out = []
+    for label in [o for o in order if o in by] + sorted(k for k in by if k not in order):
+        g = by[label]
+        wins = sum(1 for r in g if r["return_pct"] > 0)
+        out.append({"label": label, "count": len(g), "wins": wins, "win_rate": round(100.0 * wins / len(g), 1),
+                    "avg_return_pct": round(sum(r["return_pct"] for r in g) / len(g), 2),
+                    "pnl": round(sum(r["pnl"] for r in g), 2)})
+    return out
+
+
+def insights(username: str) -> Dict[str, Any]:
+    """Closed-trade analytics: win/loss profile, a running P&L curve, and results by score at
+    entry, by holding time and by where the trade came from. Closed trades only (open
+    ones have no result yet); a trade without a recorded score reads 'Not recorded'."""
+    from db.trades import closed_trades
+
+    rows = []
+    for t in closed_trades(username):
+        entry, exit_, shares = float(t.get("entry_price") or 0), t.get("exit_price"), int(t.get("shares") or 0)
+        if not entry or exit_ is None:
+            continue
+        exit_ = float(exit_)
+        opened, closed = _ts(t.get("entered_at")), _ts(t.get("closed_at"))
+        hold = (closed - opened).total_seconds() / 86400.0 if opened and closed else None
+        rows.append({"ticker": t.get("ticker"), "pnl": (exit_ - entry) * shares,
+                     "return_pct": (exit_ - entry) / entry * 100.0, "closed_at": closed.isoformat() if closed else None,
+                     "hold_days": hold, "source": str(t.get("source") or "api"), "hsf_score": t.get("hsf_score")})
+    out: Dict[str, Any] = {"closed": len(rows), "summary": None, "curve": [], "by_score": [], "by_hold": [],
+                           "by_source": []}
+    if not rows:
+        return out
+    wins = [r for r in rows if r["return_pct"] > 0]
+    losses = [r for r in rows if r["return_pct"] < 0]
+    gross_win = sum(r["pnl"] for r in rows if r["pnl"] > 0)
+    gross_loss = -sum(r["pnl"] for r in rows if r["pnl"] < 0)
+    holds = [r["hold_days"] for r in rows if r["hold_days"] is not None]
+    best = max(rows, key=lambda r: r["return_pct"])
+    worst = min(rows, key=lambda r: r["return_pct"])
+    out["summary"] = {
+        "wins": len(wins), "losses": len(losses), "win_rate": round(100.0 * len(wins) / len(rows), 1),
+        "avg_return_pct": round(sum(r["return_pct"] for r in rows) / len(rows), 2),
+        "avg_win_pct": round(sum(r["return_pct"] for r in wins) / len(wins), 2) if wins else None,
+        "avg_loss_pct": round(sum(r["return_pct"] for r in losses) / len(losses), 2) if losses else None,
+        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss > 0 else None,
+        "total_pnl": round(sum(r["pnl"] for r in rows), 2),
+        "avg_hold_days": round(sum(holds) / len(holds), 1) if holds else None,
+        "best": {"ticker": best["ticker"], "return_pct": round(best["return_pct"], 2)},
+        "worst": {"ticker": worst["ticker"], "return_pct": round(worst["return_pct"], 2)},
+    }
+    running = 0.0
+    for r in rows:
+        running += r["pnl"]
+        out["curve"].append({"closed_at": r["closed_at"], "ticker": r["ticker"], "pnl": round(r["pnl"], 2),
+                             "cumulative_pnl": round(running, 2)})
+    out["by_score"] = _group(rows, _score_band, [b[0] for b in SCORE_BANDS] + ["Not recorded"])
+    out["by_hold"] = _group(rows, lambda r: _hold_band(r["hold_days"]), [b[0] for b in HOLD_BANDS] + ["Unknown"])
+    out["by_source"] = _group(rows, lambda r: SOURCE_LABELS.get(r["source"], r["source"].title()),
+                              ["Logged by hand", "From a scan", "Paper trading"])
+    return out
 
 
 # ---- trade plan -----------------------------------------------------------------------------------
@@ -130,11 +243,7 @@ def plan(ticker: str, account_size: float, risk_pct: float) -> Optional[Dict[str
 
 
 # ---- paper trading --------------------------------------------------------------------------------
-def _require_paper_endpoint() -> None:
-    from data.alpaca_trading import _base_url
-
-    if (urlparse(_base_url()).hostname or "").lower() != PAPER_HOST:
-        raise PaperUnavailable("Paper trading is unavailable right now.")
+_require_paper_endpoint = require_paper_endpoint
 
 
 def _require_encryption() -> None:
@@ -188,6 +297,7 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
     from db.paper_events import list_events, sync_orders
     from db.paper_trading import get_paper_account
 
+    _reconcile(username)
     acct = get_paper_account(username)
     if not acct:
         orders = list_events(username, limit)
@@ -212,34 +322,37 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
             return None
     return {"connected": True, "positions": pos, "positions_available": positions is not None,
             "orders": orders_out,
-            "summary": {"positions": len(pos), "orders": len(orders_out),
-                        "market_value": sum(n(p.get("market_value")) or 0 for p in pos) if pos else 0,
-                        "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if pos else 0}}
+            "summary": {"positions": len(pos) if positions is not None else None, "orders": len(orders_out),
+                        "market_value": sum(n(p.get("market_value")) or 0 for p in pos) if positions is not None else None,
+                        "unrealized_pl": sum(n(p.get("unrealized_pl")) or 0 for p in pos) if positions is not None else None}}
 
 
-def order(username: str, ticker: str, qty: int) -> Dict[str, Any]:
-    """Whole-share market BUY to the user's paper account, imported into the journal
-    with the plan's stop/target and the scan's score, like the web."""
-    from data.alpaca_trading import submit_market_order
-    from db.paper_trading import get_paper_account
-    from db.trades import log_trade
+def order(username: str, ticker: str, qty: int, idempotency_key: str) -> Dict[str, Any]:
+    from services.paper_orders import submit
 
     _require_paper_endpoint()
-    acct = get_paper_account(username)
-    if not acct:
-        raise PaperRejected("Connect your Alpaca paper account first (POST /v1/paper/account).")
-    res = submit_market_order(acct["api_key"], acct["api_secret"], ticker, int(qty), side="buy")
-    if not res.get("ok"):
-        raise PaperRejected(f"Order rejected: {str(res.get('error') or 'unknown error')[:200]}")
-    row = latest_row(ticker) or {}
-    p = plan(ticker, 10_000.0, 1.0) or {}
-    filled = res.get("filled_avg_price")
-    entry = float(filled) if filled not in (None, "") else float(row.get("Last") or 0.0)
     try:
-        log_trade(username, ticker, entry, int(qty), source="paper", alpaca_order_id=res.get("order_id"),
-                  stop_price=p.get("stop"), target_price=(p.get("targets") or [None])[0],
-                  breakout_score=row.get("BreakoutScore"), ai_confidence=row.get("AI Confidence"))
+        row = latest_row(ticker) or {}
+        p = plan(ticker, 10_000.0, 1.0) or {}
     except Exception:
-        pass
-    return {"order_id": res.get("order_id"), "status": res.get("status") or "submitted", "ticker": ticker,
-            "qty": int(qty), "filled_avg_price": filled}
+        row, p = {}, {}  # a scan outage must not prevent recovering an accepted order
+    def number(value):
+        import math
+
+        try:
+            value = float(value)
+            return value if math.isfinite(value) else None
+        except (TypeError, ValueError):
+            return None
+    context = {"stop_price": number(p.get("stop")), "target_price": number((p.get("targets") or [None])[0]),
+               "breakout_score": number(row.get("BreakoutScore")), "ai_confidence": number(row.get("AI Confidence"))}
+    return submit(username, ticker, qty, idempotency_key, context)
+
+
+def _reconcile(username):
+    import logging
+
+    try:
+        reconcile_pending(username)
+    except Exception:
+        logging.getLogger(__name__).warning("paper_reconciliation_unavailable")

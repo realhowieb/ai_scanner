@@ -120,6 +120,24 @@ def _split_flag(label: Any) -> tuple:
     return m.group(1), int(m.group(2)) if m.group(2) else None
 
 
+def _brief_freshness(snapshot_time: Any) -> Dict[str, Any]:
+    """Freshness for the Brief's scan, with the run's own market-data and completion
+    times (api.today.run_freshness, as Today shows). The Brief data carries only the
+    saved time, so without the run its market-data time would always read unavailable."""
+    from analytics.data_freshness import describe, timestamp
+
+    try:
+        from api.today import market_runs, run_freshness
+
+        saved = timestamp(snapshot_time)
+        for run in market_runs()[:5]:
+            if saved is not None and timestamp(run.get("created_at")) == saved:
+                return run_freshness(run)
+    except Exception:  # unknown times stay unknown; never fail the Brief
+        pass
+    return describe(snapshot_time)
+
+
 def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     from analytics.data_freshness import describe
     from ui.entitlement_view import redact_prebreakout_rows
@@ -144,7 +162,7 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {
         "available": True,
         "snapshot_time": d.get("snapshot_time"),
-        'freshness': describe(d.get('snapshot_time'), market_data_at=d.get('market_data_at')),
+        'freshness': _brief_freshness(d.get('snapshot_time')),
         "phase": core["phase"],
         "market": [{"label": lbl, "last": last, "chg_pct": chg} for lbl, last, chg in d.get("market_close") or []],
         "breadth": {"advancers": breadth[0], "decliners": breadth[1]} if breadth else None,
@@ -229,6 +247,76 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             "rows": rows}
 
 
+# Keep the shared "Top movers" table warm while the market is open, so the first visitor
+# after a quiet spell isn't the one who waits for the full rebuild (~10 s). Each pass
+# stays inside DT_MOVERS_STALE_S, so visitors get the stale-while-reloading path at worst.
+# HSF_DT_KEEP_WARM=0 (or HSF_WARM_DAY_TRADER=0) turns it off.
+DT_KEEP_WARM_S = 240
+DT_KEEP_WARM_STATES = ("premarket", "open")
+
+
+def _keep_warm_enabled() -> bool:
+    import os
+
+    return (os.environ.get("HSF_DT_KEEP_WARM", "1").strip() != "0"
+            and os.environ.get("HSF_WARM_DAY_TRADER", "1").strip() != "0")
+
+
+def keep_day_trader_warm_once(now: Optional[dt.datetime] = None) -> bool:
+    """One keep-warm pass: rebuild the movers table when the market is in a warm state.
+    Uses the clock-free time check, so a closed-market pass makes no network call."""
+    from ui import day_trader as dtm
+
+    if not _keep_warm_enabled() or dtm.market_state(now) not in DT_KEEP_WARM_STATES:
+        return False
+    day_trader("movers")
+    return True
+
+
+def start_day_trader_keep_warm() -> None:
+    """Run keep_day_trader_warm_once every DT_KEEP_WARM_S on a daemon thread (Render only)."""
+    import logging
+    import os
+    import threading
+    import time
+
+    if os.environ.get("RENDER", "").strip().lower() != "true" or not _keep_warm_enabled():
+        return
+    log = logging.getLogger("hsf_api.market")
+
+    def run() -> None:
+        while True:
+            time.sleep(DT_KEEP_WARM_S)
+            try:
+                keep_day_trader_warm_once()
+            except Exception as e:  # best effort; a visitor builds it instead
+                log.warning("day trader keep-warm failed: %s", type(e).__name__)
+
+    threading.Thread(target=run, name="day-trader-keep-warm", daemon=True).start()
+
+
+PM_GAPPERS_TTL_S = 180      # the whole-market pre-market screen (~4,000 snapshots) reloads every 3 minutes
+PM_GAPPERS_STALE_S = 600
+
+
+def premarket_gappers(limit: int = 25) -> Dict[str, Any]:
+    """Today's pre-market gappers over S&P 500 + NASDAQ: biggest % moves vs
+    yesterday's close among names that traded today and clear the pre-market
+    dollar-volume floor. Empty outside pre-market (4:00 ET to the open)."""
+    from api.today import _cached
+    from market_data import _get_alpaca_data_feed, build_premarket_gappers, premarket_session_date
+    from ui import day_trader as dtm
+
+    now = dt.datetime.now(dt.timezone.utc)
+    day = premarket_session_date(now)
+    rows: List[Dict[str, Any]] = []
+    if day is not None:
+        rows = _cached(("pm_gappers", day.isoformat()),
+                       lambda: build_premarket_gappers(dtm._movers_universe(), limit=40),
+                       ttl_s=PM_GAPPERS_TTL_S, stale_s=PM_GAPPERS_STALE_S) or []
+    return {"active": day is not None, "as_of": now, "feed": _get_alpaca_data_feed(),
+            "rows": [{k: v for k, v in r.items() if k != "market_data_feed"} for r in rows[:limit]]}
+
 def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:
     """Latest-session 1-minute closes per symbol for the Day Trader row sparklines.
     Shares the stair-stepper check's minute-bar cache."""
@@ -238,9 +326,18 @@ def day_trader_sparklines(symbols: Sequence[str]) -> Dict[str, Any]:
     from ui.stair_stepper import MAX_CHECK, fetch_recent_minute_bars
 
     checked = _parse_symbols(",".join(symbols), MAX_CHECK)
-    bars = _cached(("dt_minute", tuple(sorted(set(checked)))), lambda: fetch_recent_minute_bars(checked),
-                   ttl_s=DT_MOVERS_TTL_S) if checked else {}
-    return {"checked": checked, "series": {s: sparkline((bars or {}).get(s) or []) for s in checked}}
+    key = tuple(sorted(set(checked)))
+
+    def load() -> Dict[str, Any]:
+        bars = _cached(("dt_minute", key), lambda: fetch_recent_minute_bars(checked), ttl_s=DT_MOVERS_TTL_S)
+        return {s: sparkline((bars or {}).get(s) or []) for s in checked}
+
+    # Sparklines are a glance: past the TTL, show the last ones while one background reload
+    # runs. Only the small series are kept stale; the raw minute bars (shared with the
+    # stair-stepper check) stay fresh-only.
+    series = _cached(("dt_sparklines", key), load, ttl_s=DT_MOVERS_TTL_S,
+                     stale_s=DT_MOVERS_STALE_S) if checked else {}
+    return {"checked": checked, "series": {s: (series or {}).get(s) or [] for s in checked}}
 
 
 def stair_steppers(symbols: Sequence[str], *, window: int, direction: str, r2_min: float,

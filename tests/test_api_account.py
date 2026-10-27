@@ -3,7 +3,7 @@ email preferences, billing links, per-IP limits.
 
 The web app's account functions are mocked at their module boundary (db.users,
 db.password_reset, db.email_verification, db.email_prefs, ui.email_utils,
-ui.checkout, ui.auth_sessions), so these tests check the API's wiring and rules
+services.billing, ui.auth_sessions), so these tests check the API's wiring and rules
 against the same functions the Streamlit pages call.
 """
 import json
@@ -21,6 +21,7 @@ class AccountApiTestCase(ApiTestCase):
     def setUp(self):
         super().setUp()
         self.created, self.sent, self.verified = [], [], set()
+        self.verification_down = False
         self.reset_tokens = {}       # token -> username
         self.password_updates, self.web_signouts, self.app_signouts = [], [], []
         self.prefs = {}
@@ -33,7 +34,7 @@ class AccountApiTestCase(ApiTestCase):
             ("db.users.update_neon_user_password", self._update_pw),
             ("db.email_verification.create_verification_token", lambda u: f"verify-{u}-token"),
             ("db.email_verification.consume_verification_token", self._consume_verify),
-            ("db.email_verification.is_email_verified", lambda u: u in self.verified),
+            ("db.email_verification.email_verification_status", self._verification_status),
             ("ui.email_utils.send_verification_email", lambda to_address, verify_url: self.sent.append(("verify", to_address, verify_url)) or True),
             ("ui.email_utils.send_password_reset_email", lambda to, url: self.sent.append(("reset", to, url)) or True),
             ("db.password_reset.create_reset_token", self._new_reset),
@@ -41,12 +42,19 @@ class AccountApiTestCase(ApiTestCase):
             ("db.password_reset.consume_reset_token", lambda t: self.reset_tokens.pop(t, None)),
             ("ui.auth_sessions.revoke_user_sessions", lambda u: self.web_signouts.append(u) or 1),
             ("api.store.revoke_all_refresh_tokens", self._revoke_all),
-            ("db.email_prefs.get_prefs", lambda u: {"digest": True, "evening": True, "alerts": True, **self.prefs}),
+            ("db.email_prefs.get_prefs", lambda u: {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True, **self.prefs}),
             ("db.email_prefs.set_prefs", lambda u, **ch: self.prefs.update(ch) or True),
         ):
             p(target, side_effect=fn).start()
 
     # fakes ---------------------------------------------------------------------------------------
+    def _verification_status(self, username):
+        if self.verification_down:
+            from db.email_verification import VerificationUnavailable
+
+            raise VerificationUnavailable("database unavailable")
+        return username in self.verified
+
     def _create(self, email, password_hash, tier="basic", full_name=None):
         self.created.append({"email": email, "hash": password_hash, "tier": tier, "name": full_name})
         self.accounts[email] = {"username": email, "full_name": full_name, "password": password_hash,
@@ -156,6 +164,18 @@ class VerificationTests(AccountApiTestCase):
         self.assertIn("already verified", self.client.post("/v1/me/verify-email", headers=h).json()["message"])
         self.assertEqual(self.client.post("/v1/me/verify-email").status_code, 401)
 
+    def test_verification_outage_is_unavailable_not_verified(self):
+        h = self.auth(self.login().json()["access_token"])
+        self.verified.add("pro@example.com")
+        self.verification_down = True
+        r = self.client.post("/v1/me/verify-email", headers=h)
+        self.assertEqual(r.status_code, 503)                      # not "already verified", no email sent
+        self.assertEqual(r.json()["code"], "verification_unavailable")
+        self.assertEqual(self.sent, [])
+        me = self.client.get("/v1/me", headers=h)
+        self.assertEqual(me.status_code, 200)                     # signing in still works
+        self.assertFalse(me.json()["email_verified"])             # never shown verified when unconfirmed
+
 
 class PasswordResetTests(AccountApiTestCase):
     def test_same_answer_whether_or_not_the_account_exists(self):
@@ -169,6 +189,13 @@ class PasswordResetTests(AccountApiTestCase):
 
     def test_confirm_sets_the_password_and_signs_out_everywhere(self):
         pair = self.login().json()
+        other_pair = self.login("boss@example.com").json()
+        old_auth = self.auth(pair["access_token"])
+        self.assertEqual(self.client.get("/v1/me", headers=old_auth).status_code, 200)
+        # A different process can still hold a warm pre-reset account row.
+        from api.deps import _recent_account
+
+        _recent_account("pro@example.com")
         self.client.post("/v1/auth/password-reset", json={"email": "pro@example.com"})
         token = next(iter(self.reset_tokens))
         weak = self.client.post("/v1/auth/password-reset/confirm", json={"token": token, "new_password": "password123"})
@@ -178,8 +205,17 @@ class PasswordResetTests(AccountApiTestCase):
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(self.web_signouts, ["pro@example.com"])
         self.assertEqual(self.app_signouts, [("pro@example.com", "password_reset")])
+        # Simulate an independent server retaining stale cached account metadata.
+        import time
+
+        from api.deps import _account_cache
+
+        _account_cache["pro@example.com"] = (time.monotonic() + 900, {"username": "pro@example.com", "tier": "pro"})
+        self.assertEqual(self.client.get("/v1/me", headers=old_auth).status_code, 401)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(other_pair["access_token"])).status_code, 200)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]}).status_code, 401)
-        self.assertEqual(self.login(password=NEW).status_code, 200)
+        new_pair = self.login(password=NEW).json()
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(new_pair["access_token"])).status_code, 200)
         again = self.client.post("/v1/auth/password-reset/confirm", json={"token": token, "new_password": NEW})
         self.assertEqual(again.status_code, 400)
 
@@ -199,6 +235,8 @@ class PasswordChangeTests(AccountApiTestCase):
         ok = self.client.post("/v1/me/password", headers=h, json={"current_password": "right pw", "new_password": NEW})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(self.app_signouts, [("pro@example.com", "password_change")])
+        self.assertEqual(self.client.get("/v1/me", headers=h).status_code, 401)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(ok.json()["access_token"])).status_code, 200)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]}).status_code, 401)
         self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": ok.json()["refresh_token"]}).status_code, 200)
         self.assertEqual(self.login(password=NEW).status_code, 200)
@@ -211,24 +249,48 @@ class PrefsAndBillingTests(AccountApiTestCase):
 
     def test_email_preferences(self):
         self.assertEqual(self.client.get("/v1/me/email-preferences", headers=self.h).json(),
-                         {"digest": True, "evening": True, "alerts": True})
+                         {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
         r = self.client.patch("/v1/me/email-preferences", headers=self.h, json={"evening": False})
-        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True})
+        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True, "weekly": True, "tips": True})
 
     def test_checkout_needs_a_verified_email(self):
         r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 403)
         self.verified.add("pro@example.com")
-        with mock.patch("ui.checkout.create_checkout_url",
+        with mock.patch("services.billing.create_checkout_url",
                         return_value=("https://checkout.stripe.com/c/pay/cs_test_1", None)) as m:
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "premium", "interval": "year"})
         self.assertEqual(r.json(), {"url": "https://checkout.stripe.com/c/pay/cs_test_1", "mode": "checkout"})
         m.assert_called_once_with("pro@example.com", "premium", "year")
         self.assertEqual(self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "gold"}).status_code, 422)
 
+    def test_checkout_blocked_while_verification_is_unavailable(self):
+        """A failed lookup is a 503 with its own code, distinct from the 403 for an unverified email."""
+        self.verified.add("pro@example.com")                      # verified, but the lookup can't say so
+        self.verification_down = True
+        with mock.patch("services.billing.create_checkout_url") as m:
+            r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.json()["code"], "verification_unavailable")
+        self.assertIn("can't confirm your email verification", r.json()["detail"])
+        self.assertEqual(r.headers.get("Retry-After"), "30")
+        m.assert_not_called()
+        self.verification_down = False
+        self.verified.discard("pro@example.com")
+        r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual((r.status_code, r.json()["detail"]), (403, "Please verify your email before upgrading."))
+
+    def test_checkout_blocked_when_the_verification_module_fails(self):
+        self.verified.add("pro@example.com")
+        with mock.patch("db.email_verification.email_verification_status", side_effect=ImportError("psycopg")), \
+                mock.patch("services.billing.create_checkout_url") as m:
+            r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
+        self.assertEqual(r.status_code, 503)
+        m.assert_not_called()
+
     def test_billing_failures_never_leak_details(self):
         self.verified.add("pro@example.com")
-        with mock.patch("ui.checkout.create_checkout_url", return_value=(None, "sk_live_secret stack trace")):
+        with mock.patch("services.billing.create_checkout_url", return_value=(None, "sk_live_secret stack trace")):
             r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})
         self.assertEqual(r.status_code, 502)
         self.assertNotIn("sk_live", r.text)
@@ -240,7 +302,7 @@ class PrefsAndBillingTests(AccountApiTestCase):
             calls.append((url, json, headers))
             return mock.Mock(status_code=200, json=lambda: {"portal_url": "https://billing.stripe.com/p/session/x"})
 
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "billing-token"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "billing-token"}), \
                 mock.patch("requests.post", side_effect=fake_post):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={"flow": "cancel"})
         self.assertEqual(r.json(), {"url": "https://billing.stripe.com/p/session/x", "mode": "portal"})
@@ -248,11 +310,11 @@ class PrefsAndBillingTests(AccountApiTestCase):
         self.assertTrue(url.endswith("/create-portal-session"))
         self.assertEqual((body["email"], body.get("flow"), headers), ("pro@example.com", "cancel", {"X-HSF-Auth": "billing-token"}))
 
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
                 mock.patch("requests.post", return_value=mock.Mock(status_code=400)):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={})
         self.assertEqual(r.status_code, 404)
-        with mock.patch("ui.checkout.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
+        with mock.patch("services.billing.billing_auth_headers", return_value={"X-HSF-Auth": "t"}), \
                 mock.patch("requests.post", return_value=mock.Mock(status_code=500)):
             r = self.client.post("/v1/billing/portal", headers=self.h, json={})
         self.assertEqual(r.status_code, 502)

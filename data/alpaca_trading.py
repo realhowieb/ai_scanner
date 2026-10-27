@@ -130,7 +130,7 @@ def get_orders(api_key: str, api_secret: str, status: str = "all", limit: int = 
 
 
 def submit_market_order(
-    api_key: str, api_secret: str, symbol: str, qty: int, side: str = "buy"
+    api_key: str, api_secret: str, symbol: str, qty: int, side: str = "buy", *, client_order_id: str | None = None
 ) -> Dict[str, Any]:
     """Submit a whole-share market DAY order.
 
@@ -158,6 +158,8 @@ def submit_market_order(
         "type": "market",
         "time_in_force": "day",
     }
+    if client_order_id:
+        payload["client_order_id"] = client_order_id
     try:
         r = requests.post(
             f"{_base_url()}/v2/orders",
@@ -166,17 +168,21 @@ def submit_market_order(
             timeout=_TIMEOUT,
         )
     except Exception as e:
-        return {"ok": False, "error": f"Network error: {type(e).__name__}"}
+        return {"ok": False, "uncertain": True, "error": f"Network error: {type(e).__name__}"}
     if r.status_code not in (200, 201):
         try:
             msg = (r.json() or {}).get("message") or r.text
         except Exception:
             msg = r.text
-        return {"ok": False, "error": f"Alpaca {r.status_code}: {msg}"}
+        return {"ok": False, "status_code": r.status_code, "error": f"Alpaca {r.status_code}: {msg}"}
     try:
         d = r.json() or {}
     except Exception:
-        return {"ok": False, "error": "Unexpected response from Alpaca."}
+        return {"ok": False, "uncertain": True, "error": "Unexpected response from Alpaca."}
+    return _order_result(d)
+
+
+def _order_result(d):
     return {
         "ok": True,
         "order_id": d.get("id"),
@@ -184,4 +190,31 @@ def submit_market_order(
         "filled_avg_price": d.get("filled_avg_price"),
         "symbol": d.get("symbol"),
         "qty": d.get("qty"),
+        "filled_qty": d.get("filled_qty"),
+        "side": d.get("side"),
+        "client_order_id": d.get("client_order_id"),
     }
+
+
+def get_order_by_client_id(api_key: str, api_secret: str, client_order_id: str, *, timeout_s: Optional[float] = None) -> Dict[str, Any]:
+    """Only a broker 404 proves the order is absent; transport errors are uncertain."""
+    if requests is None:
+        return {"ok": False}
+    try:
+        if timeout_s is not None and timeout_s <= 0:
+            return {"ok": False}
+        timeout = _TIMEOUT
+        if timeout_s is not None:
+            from urllib3.util import Timeout
+
+            timeout = Timeout(total=min(timeout_s, _TIMEOUT))
+        r = requests.get(f"{_base_url()}/v2/orders:by_client_order_id",
+                         headers=_headers(api_key, api_secret),
+                         params={"client_order_id": client_order_id}, timeout=timeout)
+        if r.status_code == 404:
+            return {"ok": False, "not_found": True}
+        if r.status_code != 200:
+            return {"ok": False}
+        return _order_result(r.json())
+    except Exception:
+        return {"ok": False}

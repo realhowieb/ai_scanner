@@ -43,7 +43,7 @@ def _secret(key: str) -> Optional[str]:
     if val:
         return val
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
 
         v = getattr(st, "secrets", {}).get(key)
         return str(v) if v else None

@@ -18,6 +18,8 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   intel?: Record<string, Record<string, unknown>>;
   /** Serve the alert-rule routes (an in-memory rule list). */
   rules?: boolean;
+  /** Serve GET /v1/quotes with these latest trades (else 404, like an older API). */
+  quotes?: Record<string, { last: number; chg_pct: number | null; at: string }>;
   /** GET /v1/alerts/events returns these (newest first). */
   events?: Record<string, unknown>[] } = {}) {
   let nextId = 1;
@@ -55,6 +57,10 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       return jsonResponse(x!.body, x!.status, { "x-request-id": "srv-injected", ...(x!.headers ?? {}) });
     }
     let m: RegExpMatchArray | null;
+    if (path === "/v1/quotes" && opts.quotes) {
+      const want = (url.searchParams.get("symbols") ?? "").split(",");
+      return jsonResponse({ feed: "iex", quotes: Object.fromEntries(Object.entries(opts.quotes).filter(([t]) => want.includes(t))) });
+    }
     if (path === "/v1/scans/latest") {
       return jsonResponse({ scan_at: scanAt, total: (opts.scan ?? []).length, max_results: 100, limited: false,
         setups: (opts.scan ?? []).map((s) => ({ ticker: s.ticker, score: s.score, last: s.last, primary_setup: "breakout", status: "STRONG",

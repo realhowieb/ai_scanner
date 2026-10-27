@@ -11,7 +11,8 @@ from __future__ import annotations
 import html
 from typing import Dict, List, Optional, Tuple
 
-from ui.app_session import ALERT_LIMIT_BY_TIER, FEATURE_MIN_TIER, TIER_ORDER
+from domain.plans import ALERT_LIMIT_BY_TIER, FEATURE_MIN_TIER, TIER_ORDER
+from domain.upgrades import UPGRADE_MESSAGES, required_tier, upgrade_message
 
 TIERS = ("basic", "pro", "premium")
 from ui.plan_labels import PLAN_LABELS  # noqa: E402  (Run 85B: one source of plan names)
@@ -35,73 +36,19 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Your own S&P 500 scans", "can_scan_sp500"),
     ("Alerts (Breakout / Watchlist / Price)", ALERTS),
     ("Email alert delivery", "can_email_alerts"),
+    ("Scan alerts: get told when new stocks match your Scanner filters", "can_scan_alerts"),
+    ("Insider-buy alerts from SEC filings", "can_insider_alerts"),
     ("CSV export & interactive results table", "can_export_csv"),
     ("Your own Nasdaq and combined-market scans", "can_scan_nasdaq"),
     ("Premarket, after-hours and unusual-volume filters", "can_premarket"),
     ("Live Day Trader monitor: intraday movers, VWAP, relative volume and stair-steppers", "can_day_trader"),
     ("Earnings calendar & filters", "can_earnings"),
     ("Scan history & historical research", "can_scan_history"),
-    ("AI scan summaries and results chat, plus setup notes on each result", "can_ai_notes"),
+    ("AI scan summaries and results chat, setup notes on each result and watchlist rundowns", "can_ai_notes"),
     ("Early Breakout candidate research", "can_early_breakout"),
     ("Full-market custom scanning workflow", "can_full_universe"),
     ("Alpaca paper-trading workflow", "can_paper_trade"),
 ]
-
-UPGRADE_MESSAGES = {
-    "can_export_csv": (
-        "Pro unlocks the interactive results grid and CSV export so you can select, "
-        "compare and investigate scan results efficiently."
-    ),
-    "can_email_alerts": (
-        "Pro adds email delivery so HSF can notify you when an alert you created fires."
-    ),
-    "can_scan_nasdaq": (
-        "Pro adds your own Nasdaq and combined-market scans for broader discovery."
-    ),
-    "can_premarket": (
-        "Pro adds premarket, after-hours and unusual-volume filters for deeper investigation."
-    ),
-    "can_day_trader": (
-        "Pro adds the live Day Trader monitor: intraday movers, VWAP, relative volume and the stair-stepper check."
-    ),
-    "can_earnings": (
-        "Pro adds earnings timing and filters so you can investigate event risk around a setup."
-    ),
-    "can_scan_history": (
-        "Pro adds scan history and historical research so you can compare current opportunities with prior runs."
-    ),
-    "can_track_record": (
-        "Pro adds historical research so you can inspect how prior HSF observations evolved."
-    ),
-    "can_ai_notes": (
-        "Premium adds AI scan summaries and results chat, plus setup notes on each result, for a deeper research workflow."
-    ),
-    "can_early_breakout": (
-        "Premium adds Early Breakout candidate research for investigating setups before they fully form."
-    ),
-    "can_full_universe": (
-        "Premium adds the full-market custom scanning workflow for advanced research."
-    ),
-    "can_paper_trade": (
-        "Premium adds an Alpaca paper-trading workflow so you can practice and journal setups without real-money orders."
-    ),
-}
-
-
-def required_tier(flag: str) -> Optional[str]:
-    tier = FEATURE_MIN_TIER.get(flag)
-    return tier if tier in TIERS else None
-
-
-def upgrade_message(flag: str) -> str:
-    """Capability-specific, truthful upgrade copy from the entitlement source."""
-    tier = required_tier(flag)
-    if tier is None:
-        return "This capability is not available as a customer plan upgrade."
-    return UPGRADE_MESSAGES.get(
-        flag,
-        f"{TIER_NAMES[tier]} unlocks this capability.",
-    )
 
 
 def alert_upgrade_message(current_tier: str) -> str:
@@ -131,7 +78,7 @@ def cell(flag: Optional[str], tier: str) -> str:
 
 def pricing_markdown() -> str:
     """The comparison table (Markdown) for the Billing page."""
-    lines = ["| Feature | Free | Pro | Premium |", "|---|---:|---:|---:|",
+    lines = [f"| Feature | {TIER_NAMES['basic']} | Pro | Premium |", "|---|---:|---:|---:|",
              f"| **Price** | **{PRICES['basic']}** | **{PRICES['pro']}** | **{PRICES['premium']}** |"]
     for label, flag in ROWS:
         lines.append(f"| {label} | " + " | ".join(cell(flag, t) for t in TIERS) + " |")
@@ -159,7 +106,7 @@ def benefits_markdown() -> str:
     """Short 'what each plan adds' text for the Billing page."""
     h = plan_highlights()
     return "\n".join([
-        f"- **Free — Discover:** {'; '.join(h['basic'])}.",
+        f"- **{TIER_NAMES['basic']} — Discover:** {'; '.join(h['basic'])}.",
         f"- **Pro — Monitor & investigate:** {'; '.join(h['pro'])}.",
         f"- **Premium — Research & workflow:** {'; '.join(h['premium'])}.",
     ])

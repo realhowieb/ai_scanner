@@ -7,6 +7,7 @@ are filled later once the 1/3/5 trading-day windows have completed.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, Dict, List, Optional
 
 from db.engine import get_neon_conn, schema_once
@@ -68,6 +69,37 @@ def _ensure_schema(conn) -> None:
     cur.close()
 
 
+def _strict_json(value: Any) -> Any:
+    """Make a payload valid for Postgres jsonb, recursively.
+
+    Postgres rejects NaN/Infinity tokens, which json.dumps writes for float NaN
+    (e.g. PMLast before pre-market prints exist). Those become null; numpy
+    scalars/arrays become plain Python values. Anything else unknown is left
+    for json.dumps(default=str).
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(k): _strict_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_strict_json(v) for v in value]
+    if hasattr(value, "tolist") and not isinstance(value, (str, bytes)):  # numpy arrays/scalars
+        try:
+            return _strict_json(value.tolist())
+        except Exception:
+            return value
+    if hasattr(value, "item") and not isinstance(value, (str, bytes)):
+        try:
+            return _strict_json(value.item())
+        except Exception:
+            return value
+    return value
+
+
+def _jsonb_param(payload: Optional[Dict[str, Any]]) -> str:
+    return json.dumps(_strict_json(payload or {}), default=str, allow_nan=False)
+
+
 def freeze_signal(
     *,
     source: str,
@@ -112,8 +144,8 @@ def freeze_signal(
             setup_score,
             ai_confidence,
             prebreakout_prob,
-            json.dumps(indicators or {}, default=str),
-            json.dumps(raw_signal or {}, default=str),
+            _jsonb_param(indicators),
+            _jsonb_param(raw_signal),
         ),
     )
     conn.commit()
@@ -229,6 +261,12 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any], *,
         "status": opp.get("status"),
         "score_source": "scanner" if signal_type == SCANNER_SIGNAL_TYPE else "brief",
     }
+    # Point-in-time provenance, only when the caller has it (Scanner freezes):
+    # the row's own scan id, the served PreBreakout version, and the AI
+    # Confidence model version. Absent keys stay absent; nothing is guessed.
+    for k in ("source_scan_id", "prebreakout_model_version", "ai_confidence_model_version"):
+        if opp.get(k):
+            raw_signal[k] = str(opp[k])
     return freeze_signal(
         source="opportunity",
         source_event_id=event_id,
@@ -239,7 +277,7 @@ def freeze_opportunity(snapshot_time: Any, opp: Dict[str, Any], *,
         fired_at=snapshot_time,
         entry_price=None,
         setup_score=opp.get("breakout_score"),
-        ai_confidence=None,
+        ai_confidence=opp.get("ai_confidence"),
         prebreakout_prob=opp.get("prob"),
         indicators=indicators,
         raw_signal=raw_signal,
@@ -650,7 +688,9 @@ def outcome_dataset_stamp() -> Optional[tuple]:
         _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
-            "SELECT COUNT(*), MAX(outcome_computed_at), MAX(benchmark_computed_at) "
+            # Named columns: Neon rows are dicts, so two unnamed MAX()es would collapse into one key.
+            "SELECT COUNT(*) AS n, MAX(outcome_computed_at) AS last_outcome, "
+            "MAX(benchmark_computed_at) AS last_benchmark "
             "FROM signal_outcomes WHERE source = 'opportunity'"
         )
         row = cur.fetchone()

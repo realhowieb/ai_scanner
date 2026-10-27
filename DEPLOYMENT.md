@@ -2,11 +2,12 @@
 
 ## Runtime dependency shape
 
-`requirements.txt` is the Streamlit Cloud install file for the full app. It now
-delegates to smaller dependency groups:
+The Streamlit app was retired on 2026-10-21. Users are on the web app (`web/`,
+hsf-web-v1) backed by the API (`api/`, hsf-api-v1); scans and emails run on GitHub
+Actions. `requirements.txt` is the full install. It delegates to smaller groups:
 
-- `requirements-core.txt` for the Streamlit scanner, yfinance, DB, scheduler,
-  auth, charting, and direct Yahoo endpoint parsing runtime
+- `requirements-core.txt` for the scanner, yfinance, DB, scheduler, auth and
+  direct Yahoo endpoint parsing runtime (the API adds `api/requirements.txt`)
 - `requirements-ml.txt` for ML-assisted scanner features
 - `requirements-extended.txt` for optional integrations
 
@@ -29,15 +30,11 @@ while ML and extended integrations live under optional dependency groups.
 they are not imported by the app, and their transitive dependencies can downgrade
 `websockets` below the version required by modern `yfinance`.
 
-## Recommended next split
+## Dependency groups
 
-Keep `requirements.txt` as the production Streamlit file. As features become
-more modular, the next step is to make optional UI paths degrade cleanly when
-their optional dependency group is not installed.
-
-- `requirements-core.txt`: Streamlit, pandas, numpy, yfinance, requests, DB
+- `requirements-core.txt`: pandas, numpy, yfinance, requests, DB
 - `requirements-ml.txt`: xgboost, scikit-learn, joblib
-- `requirements-extended.txt`: alpaca-py
+- `requirements-extended.txt`: alpaca-py, anthropic, pyarrow (parquet export)
 - `billing_service/requirements.txt`: billing service dependencies
 - future `requirements-dev.txt`: test/lint tooling
 
@@ -59,10 +56,10 @@ Alpaca market data credentials must use the same names read by the scanner:
 - `ALPACA_API_SECRET_KEY`
 - optional `ALPACA_DATA_URL`
 
-## Secrets required for production (Streamlit Cloud)
+## Settings for production
 
-Set these in **Settings → Secrets** for the Streamlit Cloud app. The app reads
-them via `st.secrets` first, then falls back to environment variables.
+Set these as environment variables on the Render services (and as GitHub Actions
+secrets for scheduled jobs). The old Streamlit `st.secrets` file is no longer read.
 
 ### Database (required)
 - `NEON_DATABASE_URL` — Neon/Postgres connection string
@@ -81,7 +78,7 @@ them via `st.secrets` first, then falls back to environment variables.
 - `SMTP_PASS` — Resend API key
 - `SMTP_FROM` — From address, e.g. `alerts@ai.hsfinest.com`
 - `SMTP_FROM_NAME` — optional display name (default: `HSF Alerts`)
-- `APP_BASE_URL` — full URL of the app, e.g. `https://hsfinestai.streamlit.app`
+- `APP_BASE_URL` — full URL of the app, e.g. `https://app.hsfinest.com`
 - `RESET_TOKEN_TTL_MINUTES` — how long reset links are valid (default: 30)
 
 ### Billing service
@@ -125,3 +122,11 @@ A third service on Render. Setup, endpoints and its env vars
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` — extended market data
 - `SHOW_DIAGNOSTICS=1` — enable scan diagnostics panel by default
 - `SESSION_TTL_DAYS` — override default 14-day session lifetime
+
+
+### Analytics, monitoring and browser notifications
+
+See [the integration guide](docs/INTEGRATIONS_2026-10-21.md) for the separate
+web/API settings, privacy boundaries, readiness command and delivery verification.
+PostHog browser keys must be set before a web rebuild; server monitoring and push
+keys belong on the Python API service.

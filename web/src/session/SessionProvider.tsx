@@ -3,13 +3,17 @@
 // Session restoration: /v1/me through the BFF (which refreshes the cookie session if
 // the access token expired). Plan labels and feature availability come only from
 // the server's answer; the client never decides what a plan includes.
-import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
+import { account } from "@/api/account";
 import type { ApiError, Schemas } from "@/api/client";
 import { useApi } from "@/hooks/useApi";
 import { disablePush } from "@/lib/webPush";
+import { BILLING_STARTED, beginBilling, finishBilling, pendingBilling } from "@/lib/billingReturn";
+
+import { captureUsage, resetUsageIdentity } from "@/lib/usageAnalytics";
 
 import { clearCachedMe, readCachedMe, subscribeCachedMe, writeCachedMe } from "./meCache";
 
@@ -36,11 +40,18 @@ type Ctx = {
   can: (feature: string) => boolean;
   signOut: () => Promise<void>;
   reload: () => void;
+  syncBilling: () => Promise<void>;
+  billingBusy: boolean;
+  billingStatus: string | null;
+  billingError: ApiError | null;
+  billingRevision: number;
 };
 
 const SessionContext = createContext<Ctx | null>(null);
 
 export async function signOut(): Promise<void> {
+  resetUsageIdentity();
+  finishBilling();
   clearCachedMe();
   // A signed-out browser must stop getting this account's alerts; never hold sign-out up for it.
   await Promise.race([disablePush().catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
@@ -54,17 +65,79 @@ export async function signOut(): Promise<void> {
 }
 
 export function SessionProvider({ children, initialMe = null }: { children: ReactNode; initialMe?: Me | null }) {
-  const state = useApi<Me>(initialMe ? null : "me", (signal) => unwrap(api.GET("/v1/me", { signal })));
+  const [revalidate, setRevalidate] = useState(false);
+  const state = useApi<Me>(initialMe && !revalidate ? null : "me", (signal) => unwrap(api.GET("/v1/me", { signal })));
+  const reloadMe = state.reload;
+  const reload = useCallback(() => { setRevalidate(true); reloadMe(); }, [reloadMe]);
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingStatus, setBillingStatus] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<ApiError | null>(null);
+  const [billingRevision, setBillingRevision] = useState(0);
+  const syncing = useRef<Promise<void> | null>(null);
+  const syncBilling = useCallback((): Promise<void> => {
+    if (syncing.current) return syncing.current;
+    setBillingBusy(true);
+    setBillingError(null);
+    const request = account.syncBilling().then((result) => {
+      setBillingStatus(result.message);
+      reload();
+    }).catch((error: unknown) => {
+      setBillingStatus(null);
+      setBillingError(error as ApiError);
+      // Still refresh the server's current plan if Stripe is unavailable.
+      reload();
+    }).finally(() => { syncing.current = null; setBillingBusy(false); setBillingRevision((v) => v + 1); });
+    syncing.current = request;
+    return request;
+  }, [reload]);
   // This tab's last answer lets the page render (and fetch its data) while /v1/me revalidates.
   const cached = useSyncExternalStore(subscribeCachedMe, readCachedMe, () => null);
   useEffect(() => {
     if (state.data) writeCachedMe(state.data);
     else if (state.error?.status === 401) clearCachedMe();
   }, [state.data, state.error]);
-  const me = initialMe ?? state.data ?? cached;
+  const me = state.data ?? initialMe ?? cached;
+  useEffect(() => {
+    const pending = pendingBilling();
+    if (state.data && pending && (pending.expected ? state.data.plan === pending.expected
+      : pending.previous !== null && state.data.plan !== pending.previous)) {
+      finishBilling();
+      const plan = state.data.plan;
+      if (plan === "pro" || plan === "premium") captureUsage("checkout_completed", { plan });
+    }
+  }, [state.data]);
+  useEffect(() => {
+    // Safari may open Stripe outside an installed Mac web app. Refresh the
+    // original app on focus as well as on the return page; never depend on opener.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    let cycle = 0;
+    const check = async (attempt: number, currentCycle: number) => {
+      if (disposed || currentCycle !== cycle || !pendingBilling() || document.visibilityState === "hidden") return;
+      await syncBilling();
+      if (!disposed && currentCycle === cycle && attempt < 2) {
+        timer = setTimeout(() => void check(attempt + 1, currentCycle), 5000);
+      }
+    };
+    const resume = () => { clearTimeout(timer); void check(0, ++cycle); };
+    window.addEventListener("focus", resume);
+    window.addEventListener(BILLING_STARTED, resume);
+    document.addEventListener("visibilitychange", resume);
+    if (new URLSearchParams(window.location.search).get("billing") === "return" && !pendingBilling()) {
+      beginBilling(null);
+    } else resume();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener(BILLING_STARTED, resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [syncBilling]);
   const can = useCallback((feature: string) => !!me?.entitlements?.[feature], [me]);
-  const value = useMemo<Ctx>(() => ({ me, loading: !me && state.loading, error: state.error, can, signOut, reload: state.reload }),
-    [me, state.loading, state.error, can, state.reload]);
+  const value = useMemo<Ctx>(() => ({ me, loading: !me && state.loading, error: state.error, can, signOut, reload,
+    syncBilling, billingBusy, billingStatus, billingError, billingRevision }),
+    [me, state.loading, state.error, can, reload, syncBilling, billingBusy, billingStatus, billingError, billingRevision]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

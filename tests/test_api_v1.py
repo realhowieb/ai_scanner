@@ -124,6 +124,29 @@ class HealthAndSettingsTests(ApiTestCase):
         self.assertIn(r.status_code, (302, 307))
         self.assertEqual(r.headers["location"], "/docs")
 
+    def test_every_answer_carries_security_headers(self):
+        r = self.client.get("/healthz")
+        self.assertEqual(r.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(r.headers["x-frame-options"], "DENY")
+        self.assertIn("max-age=", r.headers["strict-transport-security"])
+
+    def test_docs_are_hidden_on_render(self):
+        import os
+
+        from api.main import create_app
+
+        with mock.patch.dict(os.environ, {"RENDER": "true", "HSF_API_DOCS": ""}):
+            app = create_app(self.client.app.state.settings)
+        from fastapi.testclient import TestClient
+
+        c = TestClient(app)
+        self.assertEqual(c.get("/docs").status_code, 404)
+        self.assertEqual(c.get("/openapi.json").status_code, 404)
+        self.assertEqual(c.get("/").json()["ok"], True)
+        self.assertIn("/v1/me", app.openapi()["paths"])  # scripts/export_openapi.py still works
+        with mock.patch.dict(os.environ, {"RENDER": "true", "HSF_API_DOCS": "1"}):
+            self.assertEqual(TestClient(create_app(self.client.app.state.settings)).get("/openapi.json").status_code, 200)
+
     def test_short_secret_refuses_to_start(self):
         from api.settings import load_settings
 
@@ -331,7 +354,8 @@ class TokenTests(ApiTestCase):
 
         self.assertEqual(self.client.get("/v1/me").status_code, 401)
         self.assertEqual(self.client.get("/v1/me", headers=self.auth("garbage")).status_code, 401)
-        old = tokens.create_access_token("pro@example.com", self.settings, now=time.time() - 3600)
+        old = tokens.create_access_token("pro@example.com", self.settings,
+                                         password_hash=self.accounts["pro@example.com"]["password"], now=time.time() - 3600)
         self.assertEqual(self.client.get("/v1/me", headers=self.auth(old)).status_code, 401)
         forged = jwt.encode({"sub": "pro@example.com", "iat": int(time.time()), "exp": int(time.time()) + 600,
                              "iss": "hsf-api", "typ": "access"}, "another-secret-" + "y" * 40, algorithm="HS256")
@@ -343,6 +367,20 @@ class TokenTests(ApiTestCase):
         token = self.login().json()["access_token"]
         self.accounts["pro@example.com"]["is_active"] = False
         self.assertEqual(self.client.get("/v1/me", headers=self.auth(token)).status_code, 401)
+
+    def test_legacy_access_token_can_refresh_to_credential_bound_token(self):
+        import jwt
+
+        pair = self.login().json()
+        claims = jwt.decode(pair["access_token"], self.settings.jwt_secret, algorithms=["HS256"],
+                            issuer=self.settings.issuer)
+        self.assertNotIn(self.accounts["pro@example.com"]["password"], json.dumps(claims))
+        claims.pop("cv")
+        legacy = jwt.encode(claims, self.settings.jwt_secret, algorithm="HS256")
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(legacy)).status_code, 401)
+        rotated = self.client.post("/v1/auth/refresh", json={"refresh_token": pair["refresh_token"]})
+        self.assertEqual(rotated.status_code, 200)
+        self.assertEqual(self.client.get("/v1/me", headers=self.auth(rotated.json()["access_token"])).status_code, 200)
 
     def test_plan_change_applies_to_existing_token(self):
         token = self.login().json()["access_token"]
@@ -400,10 +438,11 @@ class TodayEndpointTests(ApiTestCase):
     def test_market_tape(self):
         token = self.login().json()["access_token"]
         quotes = [{"symbol": "SPY", "last": 777.3, "chg_pct": -0.23}, {"symbol": "DIA", "last": 511.0, "chg_pct": None}]
-        with mock.patch("api.today.tape_quotes", return_value=quotes):
+        with mock.patch("api.today.tape_quotes", return_value=quotes), \
+                mock.patch("api.today.market_phase", return_value="afterhours"):
             r = self.client.get("/v1/market/tape", headers=self.auth(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"quotes": quotes})
+        self.assertEqual(r.json(), {"quotes": quotes, "phase": "afterhours"})
         self.assertEqual(self.client.get("/v1/market/tape").status_code, 401)
 
     def test_today_personal_passes_the_user_and_marker(self):

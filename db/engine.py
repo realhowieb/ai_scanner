@@ -6,7 +6,7 @@ from pathlib import Path
 from db.traffic import connect_options, count
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:  # pragma: no cover - depends on optional UI dependency
     class _StreamlitShim:
         secrets: dict = {}
@@ -30,11 +30,15 @@ DB_PATH = Path(__file__).resolve().parent.parent / "scanner.sqlite"
 # Connection reuse: 40+ call sites open a Neon connection, use it once, and
 # close it — each open is a full TCP+TLS+auth handshake (~200-500ms) to a
 # remote Postgres. Keep one warm connection per thread behind a proxy whose
-# close() only ends the transaction (rollback); checkout validates it with rollback() (one cheap round
-# trip that also clears any dangling transaction) and reconnects when dead.
+# close() only ends the transaction (rollback). Checkout clears any dangling transaction
+# with rollback(), but psycopg skips that round trip when no transaction is open, so it
+# never notices a socket the server already closed (Neon suspends idle computes and drops
+# their connections). A connection idle longer than DB_WARM_PING_S therefore gets a real
+# SELECT 1 first and is replaced when that fails, instead of failing the request with a 503.
 # Set AI_SCANNER_DB_POOL=0 to restore connect-per-call behavior.
 # ---------------------------------------------------------------------------
 import threading as _threading
+import time as _time
 
 _pool_local = _threading.local()
 
@@ -87,14 +91,52 @@ def _pool_enabled() -> bool:
     return os.environ.get("AI_SCANNER_DB_POOL", "1").strip() != "0"
 
 
+def _warm_ping_s() -> float:
+    """Idle seconds after which a warm connection is pinged before reuse (0 = always)."""
+    try:
+        return max(0.0, float(os.environ.get("DB_WARM_PING_S", "30")))
+    except (TypeError, ValueError):
+        return 30.0
+
+
+def statement_timeout_ms() -> int:
+    """HSF_DB_STATEMENT_TIMEOUT_MS: longest one query may run on a warm connection before
+    Postgres cancels it (0 = no limit, the default for jobs). The API sets 30000 at start so
+    one stuck query can't hold a request thread forever."""
+    try:
+        return max(0, int(os.environ.get("HSF_DB_STATEMENT_TIMEOUT_MS", "0").strip() or 0))
+    except ValueError:
+        return 0
+
+
+def _fresh_transaction(conn) -> None:
+    """End any dangling transaction. With a statement timeout, also start the next one with
+    SET LOCAL in the same round trip. SET LOCAL lasts only for that transaction, so it is
+    safe on Neon's pooled (PgBouncer transaction mode) connections; a helper that commits
+    and keeps going runs its later transactions without the limit."""
+    ms = statement_timeout_ms()
+    if ms:
+        conn.execute(f"ROLLBACK; BEGIN; SET LOCAL statement_timeout = {ms:d}")
+    else:
+        conn.rollback()
+
+
 def _checkout_warm(url: str):
     """Return a warm per-thread connection, reconnecting when stale."""
     import psycopg
 
     conn = getattr(_pool_local, "conn", None)
+    now = _time.monotonic()
     if conn is not None:
         try:
             conn.rollback()
+            if now - getattr(_pool_local, "used_at", 0.0) >= _warm_ping_s():
+                conn.execute("SELECT 1")
+                conn.rollback()
+                count(connection_pings=1)
+            if statement_timeout_ms():
+                _fresh_transaction(conn)
+            _pool_local.used_at = now
             count(connections_reused=1)
             return _WarmConn(conn)
         except Exception:
@@ -105,7 +147,10 @@ def _checkout_warm(url: str):
             _pool_local.conn = None
     real = psycopg.connect(url, row_factory=psycopg.rows.dict_row, connect_timeout=_connect_timeout(), **connect_options())
     count(connections_opened=1)
+    if statement_timeout_ms():
+        _fresh_transaction(real)
     _pool_local.conn = real
+    _pool_local.used_at = now
     return _WarmConn(real)
 
 

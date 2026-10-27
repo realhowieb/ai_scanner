@@ -217,16 +217,43 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
         return 0
     message = {"title": title[:80], "body": body[:240], "url": url if url.startswith("/") else "/alerts",
                "tag": "hsf-alert"}
+    from api import alert_delivery
+    from api.workspace import is_quiet
+
+    try:
+        quiet = is_quiet(user_id)
+    except Exception:
+        quiet = False
     sent = 0
     import httpx
 
     with httpx.Client(timeout=5.0) as client:
         for d in targets:
+            receipt = None
             try:
+                receipt = alert_delivery.begin(str(user_id).strip().lower(), d["id"], message)
+            except Exception:
+                pass  # Ledger failure must not prevent the original alert.
+            if quiet:
+                if receipt:
+                    try:
+                        alert_delivery.finish(receipt, "quiet_hours")
+                    except Exception:
+                        pass
+                continue
+            try:
+                started = time.monotonic()
                 ok, status = send(d["token"], message, client=client)
+                from api.operations import record_provider
+                record_provider("web_push", ok, (time.monotonic() - started) * 1000)
             except Exception as e:
                 log.warning(json.dumps({"event": "webpush_send_failed", "error": type(e).__name__}))
-                continue
+                ok, status = False, None
+            if receipt:
+                try:
+                    alert_delivery.finish(receipt, "accepted" if ok else "gone" if status in (404, 410) else "unconfirmed" if status is None else "failed")
+                except Exception:
+                    pass
             sent += 1 if ok else 0
             if status in (404, 410):
                 try:
@@ -239,7 +266,8 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
 
 
 def alert_fired(user_id: str, message: str) -> None:
-    """Hook for both alert kinds (price alerts and alert rules): browsers and the iPhone app."""
+    """Hook for both alert kinds (price alerts and alert rules): browser push, the iPhone
+    app (api.apns), then any linked Telegram / Discord chat (api.chat_delivery)."""
     notify_user(user_id, "HSF alert", message, "/alerts")
     try:
         from api import apns
@@ -247,3 +275,9 @@ def alert_fired(user_id: str, message: str) -> None:
         apns.notify_user(user_id, "HSF alert", message, "/alerts")
     except Exception as e:
         log.warning(json.dumps({"event": "apns_notify_failed", "error": type(e).__name__}))
+    try:
+        from api import chat_delivery
+
+        chat_delivery.alert_fired(user_id, message)
+    except Exception as e:
+        log.warning(json.dumps({"event": "chat_alert_failed", "error": type(e).__name__}))

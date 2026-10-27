@@ -32,7 +32,7 @@ def _plan(req, tier, session="regular"):
                      max_results=max_results_for(tier), now_session=session)
 
 
-@unittest.skipUnless(importlib.util.find_spec("streamlit"), "needs the app's modules")
+@unittest.skipUnless(True, "needs the app's modules")
 class PlanRuleTests(unittest.TestCase):
     def test_universes_by_plan(self):
         from api.custom_scans import PlanError
@@ -221,6 +221,17 @@ class ScanRouteTests(ApiTestCase):
         self.assertEqual(r.status_code, 202, r.text)
         self.assertEqual(r.json()["params"]["ticker"], "BRK.B")
 
+    def test_earnings_scans_today_free_week_pro(self):
+        r = self.post("free@example.com", {"universe": "earnings", "score_all": True})
+        self.assertEqual(r.status_code, 202, r.text)
+        self.assertEqual((r.json()["params"]["universe"], r.json()["params"]["earnings_window"]), ("earnings", "today"))
+        self.jobs[r.json()["scan_id"]]["status"] = "complete"
+        for w in ("tomorrow", "week"):
+            self.assertEqual(self.post("free@example.com", {"universe": "earnings", "earnings_window": w}).status_code, 403)
+        r = self.post("pro@example.com", {"universe": "earnings", "earnings_window": "week"})
+        self.assertEqual((r.status_code, r.json()["params"]["earnings_window"]), (202, "week"))
+        self.assertEqual(self.post("prem@example.com", {"universe": "earnings", "earnings_window": "month"}).status_code, 422)
+
     def test_validation_and_auth(self):
         self.assertEqual(self.client.post("/v1/scans", json={"universe": "sp500"}).status_code, 401)
         self.assertEqual(self.post("pro@example.com", {"universe": "everything"}).status_code, 422)
@@ -254,7 +265,7 @@ class ScanRouteTests(ApiTestCase):
         for code in ("202", "403", "409", "429", "503"):
             self.assertIn(code, post["responses"])
         universe = spec["components"]["schemas"]["ScanCreate"]["properties"]["universe"]
-        self.assertEqual(set(universe["enum"]), {"sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker"})
+        self.assertEqual(set(universe["enum"]), {"sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings"})
 
 
 def _fake_prices(tickers, **_k):
@@ -362,6 +373,66 @@ class ScanJobPostgresTests(unittest.TestCase):
         done = sj.cancel_job("pro@example.com", job2["id"])                     # finished: unchanged
         self.assertEqual(done["error"], sj.CANCELLED)
 
+    def _admit_concurrently(self, users):
+        """Call create_job for every user at once (one thread each) and sort the outcomes.
+        Every read is slowed so a check-then-insert gap would let callers overlap."""
+        import threading
+
+        sj, real_rows = self.sj, self.sj._rows
+        start = threading.Barrier(len(users))
+        out = {"ok": [], "busy": 0, "in_progress": 0, "other": []}
+        lock = threading.Lock()
+
+        def slow_rows(cur):
+            rows = real_rows(cur)
+            time.sleep(0.05)
+            return rows
+
+        def one(user):
+            start.wait(10)
+            try:
+                job = sj.create_job(user, "sp500", {})
+                key, val = "ok", job["id"]
+            except sj.ScanBusy:
+                key, val = "busy", None
+            except sj.ScanInProgress:
+                key, val = "in_progress", None
+            except Exception as e:  # pragma: no cover - surfaced by the assertion below
+                key, val = "other", repr(e)
+            with lock:
+                if key in ("ok", "other"):
+                    out[key].append(val)
+                else:
+                    out[key] += 1
+
+        with mock.patch.object(sj, "_rows", side_effect=slow_rows):
+            threads = [threading.Thread(target=one, args=(u,)) for u in users]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(60)
+        return out
+
+    def _active(self):
+        import psycopg
+
+        with psycopg.connect(PG_URL) as conn:
+            return conn.execute("SELECT username FROM api_scan_jobs WHERE status IN ('queued', 'running')").fetchall()
+
+    def test_shared_capacity_holds_under_concurrent_admission(self):
+        """Different accounts racing for the last slots never push the service past MAX_ACTIVE_JOBS."""
+        with mock.patch.object(self.sj, "MAX_ACTIVE_JOBS", 3):
+            out = self._admit_concurrently([f"user{i}@example.com" for i in range(12)])
+        self.assertEqual(out["other"], [])
+        self.assertEqual((len(out["ok"]), out["busy"]), (3, 9), out)
+        self.assertEqual(len(self._active()), 3)
+
+    def test_one_active_scan_per_account_under_concurrent_admission(self):
+        out = self._admit_concurrently(["pro@example.com"] * 8)
+        self.assertEqual(out["other"], [])
+        self.assertEqual((len(out["ok"]), out["in_progress"]), (1, 7), out)
+        self.assertEqual(self._active(), [("pro@example.com",)])
+
     def test_running_job_without_heartbeat_expires(self):
         import psycopg
 
@@ -426,3 +497,42 @@ class TimestampTests(unittest.TestCase):
         aware = dt.datetime(2026, 10, 6, 9, 35, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
         self.assertEqual(json_safe(aware), "2026-10-06T09:35:00-04:00")
         self.assertEqual(json_safe(dt.date(2026, 10, 6)), "2026-10-06")
+
+
+@unittest.skipUnless(importlib.util.find_spec("streamlit") and HAS_PANDAS, "needs the app's modules")
+class EarningsUniverseTests(unittest.TestCase):
+    def test_scores_every_reporter_and_caps_rows_to_the_plan(self):
+        import datetime as dt
+
+        import pandas as pd
+
+        from api import custom_scans
+        from api.scans import _et_date
+
+        today = _et_date()
+        cal = [{"symbol": "TSLA", "earnings_date": today, "earnings_time": "amc"},
+               {"symbol": "IBM", "earnings_date": today, "earnings_time": "amc"},
+               {"symbol": "LATE", "earnings_date": today + dt.timedelta(days=3), "earnings_time": None}]
+        params = _plan({"universe": "earnings", "score_all": True}, "basic")
+        df = pd.DataFrame([{"Ticker": "TSLA"}, {"Ticker": "IBM"}])
+        opps = [{"ticker": f"T{i}", "score": 90 - i, "signals": []} for i in range(30)]
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=cal) as f, \
+                mock.patch("scan.execution.run_manual_scan_execution", return_value=df) as run, \
+                mock.patch("ui.market_scans.top_setups", return_value=opps), \
+                mock.patch("db.runs.save_run"):
+            res = custom_scans.run_scan(params, "free@example.com", lambda _p: None)
+        self.assertEqual(f.call_args.kwargs, {"days_ahead": 0, "start": today})
+        kw = run.call_args.kwargs
+        self.assertEqual(sorted(kw["tickers"]), ["IBM", "TSLA"])
+        self.assertEqual((kw["min_price"], kw["min_dollar_vol"], kw["unusual_volume"]), (0.0, 0.0, False))  # screens off
+        self.assertEqual(res["label"], "Earnings today (2 tickers) · all")
+        self.assertEqual((res["total"], len(res["setups"])), (30, 25))         # Starter's row cap
+
+    def test_empty_calendar_fails_with_a_safe_message(self):
+        from api import custom_scans
+        from api.scan_jobs import ScanFailed
+
+        params = _plan({"universe": "earnings", "earnings_window": "week"}, "pro")
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=[]):
+            with self.assertRaisesRegex(ScanFailed, "No stocks report in the next 7 days"):
+                custom_scans.run_scan(params, "pro@example.com", lambda _p: None)

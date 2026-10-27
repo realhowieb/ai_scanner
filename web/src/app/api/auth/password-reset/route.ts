@@ -1,8 +1,8 @@
 import { publicAuth } from "@/server/auth";
-import { upstream } from "@/server/upstream";
+import { upstreamFor } from "@/server/upstream";
 
 export const dynamic = "force-dynamic";
 
 export function POST(req: Request): Promise<Response> {
-  return publicAuth(req, "password-reset", upstream);
+  return publicAuth(req, "password-reset", upstreamFor(req));
 }

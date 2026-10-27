@@ -58,7 +58,9 @@ class AlertRuleCreate(BaseModel):
     ticker: Optional[str] = Field(default=None, max_length=12, description="One ticker, or set watchlist_id")
     watchlist_id: Optional[int] = Field(default=None, ge=1, description="Every symbol on this watchlist")
     threshold: Optional[float] = None
-    value: Optional[str] = Field(default=None, max_length=40, description="SETUP_APPEARED: only this setup (optional)")
+    value: Optional[str] = Field(default=None, max_length=300, description=(
+        "SETUP_APPEARED: only this setup (optional). SCAN_MATCH: JSON filters, any of "
+        "name, setup, min_price, max_price, min_rvol"))
     delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(
         default=None, max_length=2, description="Default in_app; email is Pro+")
     cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400,
@@ -68,7 +70,7 @@ class AlertRuleCreate(BaseModel):
 
 class AlertRuleUpdate(BaseModel):
     threshold: Optional[float] = None
-    value: Optional[str] = Field(default=None, max_length=40)
+    value: Optional[str] = Field(default=None, max_length=300)
     enabled: Optional[bool] = None
     delivery_channels: Optional[List[Literal["in_app", "email"]]] = Field(default=None, min_length=1, max_length=2)
     cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=7 * 86400)
@@ -76,6 +78,20 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertUpdate(BaseModel):
     enabled: bool
+
+
+def _watched_tickers(user: str) -> set:
+    """Every ticker on the user's watchlists, for row tags; empty when the lists can't be read."""
+    try:
+        from db import watchlists as wl
+
+        out: set = set()
+        for w in wl.list_watchlists(user)[:20]:
+            out.update(wl.get_watchlist_tickers(int(w["id"]), user))
+        return out
+    except Exception:  # a tag is not worth failing the page
+        log.warning("earnings scan: watchlists unavailable", exc_info=True)
+        return set()
 
 
 def register(app: FastAPI) -> None:
@@ -92,9 +108,13 @@ def register(app: FastAPI) -> None:
     @app.get("/v1/market/tape", response_model=models.Tape, responses=_AUTH, summary="Price strip")
     def market_tape(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close."""
-        from api.today import tape_quotes
+        from api.today import market_phase, tape_quotes
 
-        return {"quotes": tape_quotes()}
+        try:
+            phase = market_phase(dt.datetime.now(dt.timezone.utc))
+        except Exception:
+            phase = None
+        return {"quotes": tape_quotes(), "phase": phase}
 
     @app.get("/v1/scans/latest", response_model=models.LatestScan, responses=_AUTH)
     def scans_latest(account: Dict[str, Any] = Depends(current_account),
@@ -114,6 +134,44 @@ def register(app: FastAPI) -> None:
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort)
 
+    @app.get("/v1/scans/latest/earnings", response_model=models.EarningsScan,
+             responses={**_AUTH, 403: {"description": "Pro feature"}}, summary="Earnings scanner")
+    def scans_earnings(account: Dict[str, Any] = Depends(current_account),
+                       window: Literal["today", "tomorrow", "week"] = Query(
+                           "today", description="today (free), tomorrow or week = today + 7 days (Pro)"),
+                       time: Optional[Literal["bmo", "amc"]] = Query(None, description="Before open or after close only"),
+                       include_unranked: bool = Query(False, description="Also list names that report but did not rank")
+                       ) -> Dict[str, Any]:
+        """Setups in the latest market scan that report earnings in the window, soonest first,
+        then by HSF Score, up to the plan's row cap."""
+        from api.scans import earnings_scan
+
+        ent = entitlements_for(account)
+        if window != "today" and not ent["entitlements"].get("can_earnings"):
+            raise HTTPException(403, "The earnings week ahead is a Pro feature.")
+        user = _user(account)
+        custom = None
+        if include_unranked:
+            try:   # scores from the user's earnings scan this past hour; none on any error
+                from api.scan_jobs import latest_earnings_job
+
+                custom = latest_earnings_job(user)
+            except Exception:
+                custom = None
+        return json_safe(earnings_scan(ent["entitlements"], ent["tier"], window=window, time=time,
+                                       include_unranked=include_unranked, watched=_watched_tickers(user),
+                                       custom=custom))
+
+    @app.get("/v1/scans/latest/movers", response_model=models.ScoreMovers, responses=_AUTH,
+             summary="Biggest HSF Score moves since the previous scan")
+    def scans_movers(account: Dict[str, Any] = Depends(current_account),
+                     limit: int = Query(5, ge=1, le=10)) -> Dict[str, Any]:
+        """Setups ranked in both of the two latest full-market scans whose HSF Score rose or
+        fell the most, within the plan's Scanner row cap."""
+        from api.scans import score_movers
+
+        return json_safe(score_movers(entitlements_for(account)["tier"], limit=limit))
+
     @app.get("/v1/sparklines", response_model=models.Sparklines, responses=_AUTH, summary="Daily sparklines")
     def sparklines(account: Dict[str, Any] = Depends(current_account),
                    symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are returned")
@@ -122,6 +180,15 @@ def register(app: FastAPI) -> None:
         from api.scans import daily_closes
 
         return json_safe(daily_closes(symbols.split(",")))
+
+    @app.get("/v1/quotes", response_model=models.LatestQuotes, responses=_AUTH, summary="Latest quotes")
+    def quotes(account: Dict[str, Any] = Depends(current_account),
+               symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are returned")
+               ) -> Dict[str, Any]:
+        """Each ticker's latest trade and change vs the previous close, for the Watchlists Refresh."""
+        from api.scans import latest_quotes
+
+        return json_safe(latest_quotes(symbols.split(",")))
 
     @app.get("/v1/stocks/{ticker}/score-history", response_model=models.ScoreHistory, responses=_AUTH)
     def stock_score_history(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -148,6 +215,35 @@ def register(app: FastAPI) -> None:
                     "watchlists": user_data.watchlists_with(user, t),
                     "alerts": json_safe(user_data.alerts_for(user, t))})
         return out
+
+    @app.get("/v1/stocks/{ticker}/news", response_model=models.StockNews, responses=_AUTH, summary="Company news")
+    def stock_news(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account),
+                   limit: int = Query(10, ge=1, le=10)) -> Dict[str, Any]:
+        """Recent headlines for the ticker from Alpaca News (Benzinga), newest first, from the
+        last two weeks. Shared for 5 minutes. available=false when news is switched off or the
+        provider can't be reached."""
+        from api import news
+
+        return news.stock_news(ticker, limit)
+
+    @app.get("/v1/news/flags", response_model=models.NewsFlags, responses=_AUTH, summary="Which tickers have news today")
+    def news_flags(account: Dict[str, Any] = Depends(current_account),
+                   symbols: str = Query(..., max_length=2000, description="Comma-separated; the first 50 are checked")
+                   ) -> Dict[str, Any]:
+        """Tickers with a news story in the last 24 hours, for the Scanner's News marker."""
+        from api import news
+
+        return news.news_flags(symbols.split(","))
+
+    @app.get("/v1/stocks/{ticker}/filings", response_model=models.StockFilings, responses=_AUTH,
+             summary="SEC filings: insider trades and 8-K events")
+    def stock_filings(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Open-market insider buys and sales (Form 4) and company events (8-K) from SEC EDGAR
+        in the last 90 days. Shared for 3 hours. available=false when EDGAR can't be reached
+        or filings are switched off."""
+        from api import filings
+
+        return filings.stock_filings(ticker)
 
     # ---- step 6: watchlists ----
     @app.get("/v1/watchlists", response_model=List[models.Watchlist], responses=_AUTH)
@@ -215,6 +311,16 @@ def register(app: FastAPI) -> None:
         wl = user_data.get_watchlist(user, watchlist_id)
         return json_safe(watchlist_intel.changes(user, wl, entitlements_for(account)["entitlements"]))
 
+    @app.get("/v1/watchlists/{watchlist_id}/performance", response_model=models.WatchlistPerformance,
+             responses=_OWNED, summary="How each ticker did since you added it")
+    def watchlist_performance(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Each symbol's move from the price when it was added (saved price, else the last daily
+        close at that time) to the latest daily close, next to SPY over the same span. Best first."""
+        from api import watchlist_perf
+
+        wl = user_data.get_watchlist(_user(account), watchlist_id)
+        return json_safe(watchlist_perf.performance(wl))
+
     @app.post("/v1/watchlists/{watchlist_id}/tickers", response_model=models.TickersResult, responses=_OWNED)
     def watchlist_add(watchlist_id: int, body: TickersBody,
                       account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -266,7 +372,7 @@ def register(app: FastAPI) -> None:
                          409: {"description": "You already have this alert"},
                          422: {"description": "Invalid type, ticker, threshold or direction"}})
     def alert_create(body: AlertCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """Same types and rules as the web app. Free 1 alert, Pro 5, Premium 25."""
+        """Same types and rules as the web app. Starter 1 alert, Pro 5, Premium 25."""
         ent = entitlements_for(account)
         try:
             created = user_data.create_alert(_user(account), ent["alert_limit"], body.type, ticker=body.ticker,
@@ -340,8 +446,8 @@ def register(app: FastAPI) -> None:
                          409: {"description": "You already have this rule"},
                          422: {"description": "Invalid rule"}})
     def alert_rule_create(body: AlertRuleCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """Set exactly one of `ticker` or `watchlist_id`. Rules count toward the plan's alert
-        limit together with ticker alerts."""
+        """Set exactly one of `ticker` or `watchlist_id` (neither for market-wide types such as
+        SCAN_MATCH). Rules count toward the plan's alert limit together with ticker alerts."""
         from api import alert_rules
 
         with _rule_errors():

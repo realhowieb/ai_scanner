@@ -213,7 +213,7 @@ def revoke_refresh_token(token_hash: str) -> Optional[str]:
 
 def revoke_all_refresh_tokens(username: str, reason: str) -> int:
     """Sign the account out of every app session (password reset or change).
-    Access tokens already issued still expire on their own (15 min)."""
+    Password changes also invalidate access tokens through credential binding."""
     conn = _conn()
     try:
         ensure_refresh_schema(conn)

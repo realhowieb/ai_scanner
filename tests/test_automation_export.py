@@ -179,6 +179,27 @@ class AutomationExportTests(unittest.TestCase):
             self.assertEqual(status["status"], "success")
             self.assertEqual(status["candidate_count"], 1)
 
+    def test_publish_keeps_own_history_but_prunes_older_days(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = root / "history" / "2000-01-01" / "old.json"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("{}", encoding="utf-8")
+            snapshot = ae.build_snapshot(
+                self._frame(),
+                universe="COMBO",
+                scan_type="scheduled",
+                market_session="regular",
+                started_at_utc=self._started(),
+                completed_at_utc=self._started(),
+                model_metadata={},
+                env={"GITHUB_RUN_ID": "78"},
+            )
+            result = ae.publish_snapshot(snapshot, root=root, retention_days=0)
+
+            self.assertTrue(Path(result["history_path"]).exists())
+            self.assertFalse(stale.exists())
+
     def test_model_metadata_is_accepted_when_available(self) -> None:
         snapshot = ae.build_snapshot(
             self._frame(),

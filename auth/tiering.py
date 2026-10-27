@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 try:
-    import streamlit as st
+    from utils.st_compat import st
 except Exception:
     class _StShim:
         @staticmethod
@@ -25,6 +25,7 @@ except Exception:
 
 # Load tier configuration from config.py
 from config import TIERS_CONFIG
+from domain.plans import TIER_ORDER, has_min_tier
 
 
 # ------------------------------
@@ -74,7 +75,7 @@ def _load_admin_users() -> set[str]:
     """
     raw: str | None = None
     try:
-        import streamlit as _st
+        from utils.st_compat import st as _st
         raw = _st.secrets.get("ADMIN_USERS") or _st.secrets.get("admin_users")
     except Exception:
         pass
@@ -111,12 +112,6 @@ class Tier:
 # ------------------------------
 
 # Rank order for tiers from lowest to highest privilege
-TIER_ORDER = {
-    "basic": 0,
-    "pro": 1,
-    "premium": 2,
-    "admin": 3,
-}
 
 
 def _normalize_tier_key(tier_or_key) -> str:
@@ -129,20 +124,6 @@ def _normalize_tier_key(tier_or_key) -> str:
     else:
         key = str(tier_or_key or "basic")
     return key.strip().lower()
-
-
-def has_min_tier(tier_or_key, required: str) -> bool:
-    """
-    Return True if the current tier is >= the required tier based on TIER_ORDER.
-
-    Example:
-        has_min_tier(current_tier, "pro")
-    """
-    current_key = _normalize_tier_key(tier_or_key)
-    required_key = str(required or "basic").strip().lower()
-    current_rank = TIER_ORDER.get(current_key, 0)
-    required_rank = TIER_ORDER.get(required_key, 0)
-    return current_rank >= required_rank
 
 
 def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
@@ -161,14 +142,14 @@ def require_min_tier(tier_or_key, required: str, feature_name: str) -> bool:
 
     # Lazy import to avoid hard dependency at module load time
     try:
-        import streamlit as st  # type: ignore
+        from utils.st_compat import st
     except Exception:
         return False
 
     current_key = _normalize_tier_key(tier_or_key)
     required_key = str(required or "basic").strip().lower()
 
-    try:  # Run 85B: customer-facing names (internal "basic" is shown as "Free")
+    try:  # Run 85B: customer-facing names (internal "basic" is shown as "Starter")
         from ui.plan_labels import plan_label
         current_label, required_label = plan_label(current_key), plan_label(required_key)
     except ImportError:

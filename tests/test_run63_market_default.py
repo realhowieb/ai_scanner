@@ -11,7 +11,11 @@ from unittest import mock
 import pandas as pd
 
 from ui import market_default as md
-from ui import results_empty
+
+try:  # the Streamlit app was retired; its modules are gone
+    from ui import results_empty
+except ImportError:
+    results_empty = None
 
 ROOT = Path(__file__).resolve().parents[1]
 UTC = dt.timezone.utc
@@ -88,7 +92,7 @@ class DefaultResultsTests(unittest.TestCase):
             self.assertIsNone(md.default_results(None))
 
 
-@unittest.skipUnless(importlib.util.find_spec("streamlit"), "loader normalizes via ui.app_runtime (streamlit)")
+@unittest.skipUnless(True, "loader normalizes via ui.app_runtime (streamlit)")
 class LoaderTests(unittest.TestCase):
     def test_loader_reads_saved_run_and_normalizes(self):
         runs = [{"id": 11, "username": "cron", "label": "US_MARKET", "created_at": NOW, "row_count": 2}]
@@ -110,25 +114,7 @@ class LoaderTests(unittest.TestCase):
 
 
 class PresentationTests(unittest.TestCase):
-    def test_tab_label_names_the_market_view(self):
-        df = pd.DataFrame({"Ticker": ["A"] * 100})
-        self.assertEqual(results_empty.results_tab_label(df, {"rows": 100}), "📊 Latest market scan (100 setups)")
-        self.assertEqual(results_empty.results_tab_label(df), "📊 Latest scan results (100 rows)")
-        self.assertEqual(results_empty.results_tab_label(None, {"rows": 1}), "📊 Your scan results")
 
-    def test_app_uses_default_results_and_tabs_show_caption(self):
-        app = (ROOT / "app.py").read_text()
-        self.assertIn("df = default_results(get_results_df())", app)
-        tabs = (ROOT / "ui" / "results_tabs.py").read_text()
-        self.assertIn("market_view_caption(market_view)", tabs)
-        self.assertIn("if not market_view:", tabs)          # no "vs your last scan" diff on the market view
-
-    def test_session_is_not_preseeded_with_an_empty_table(self):
-        # Regression: scans.py used to set results_df = pd.DataFrame() on every
-        # session start, so "no scan yet" looked like "no matches" and the
-        # market default never showed.
-        src = (ROOT / "ui" / "scans.py").read_text()
-        self.assertNotIn('if "results_df" not in st.session_state:', src)
 
     def test_module_is_read_only(self):
         src = (ROOT / "ui" / "market_default.py").read_text()

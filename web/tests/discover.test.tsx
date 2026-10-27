@@ -26,7 +26,9 @@ beforeEach(() => {
   search = new URLSearchParams();
   replace.mockReset();
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", (request: Request) => new URL(request.url).pathname.endsWith("/v1/me/research-preferences")
+    ? Promise.resolve(jsonResponse({ scanner_views: [], custom_views: [], table: { columns: ["setup", "spark", "last", "change", "gap", "rvol", "prob"], compact: false }, quiet_hours: { enabled: false, start: "22:00", end: "07:00", timezone: "America/New_York" } }))
+    : fetchMock(request));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -63,9 +65,22 @@ describe("Market Brief", () => {
     const sectors = screen.getByRole("region", { name: "Sectors" });
     expect(within(sectors).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("PreBreakout is part of Premium")).toBeInTheDocument();
-    expect(screen.getByText("The earnings calendar is part of Pro")).toBeInTheDocument();
+    expect(screen.getByText("The 7-day earnings calendar is part of Pro")).toBeInTheDocument();
     expect(urls().map((u) => u.pathname)).toEqual(["/api/hsf/v1/brief"]);            // no Pro calls on Free
     expect(screen.queryByRole("region", { name: "AI market narrative" })).not.toBeInTheDocument();
+  });
+
+  it("keeps Reporting today free on Starter and says the week is Pro", async () => {
+    route({ "/v1/brief": () => jsonResponse(brief({ earnings_today: ["JPM"] })) });
+    const { unmount } = wrap(<BriefView />, "basic");
+    const today = await screen.findByRole("region", { name: "Reporting today" });
+    expect(within(today).getByRole("link", { name: "JPM" })).toBeInTheDocument();
+    expect(within(today).getByText(/Free on every plan/)).toBeInTheDocument();
+    unmount();
+    route({ "/v1/brief": () => jsonResponse(brief({ earnings_today: ["JPM"] })), "/v1/earnings": () => jsonResponse([]) });
+    wrap(<BriefView />, "pro");
+    const proToday = await screen.findByRole("region", { name: "Reporting today" });
+    expect(within(proToday).queryByText(/Free on every plan/)).not.toBeInTheDocument();
   });
 
   it("Pro gets the earnings calendar; not-ready and failed briefs are explained", async () => {
@@ -117,7 +132,7 @@ describe("Market Brief", () => {
       gainers: Array.from({ length: 6 }, (_, i) => ({ ticker: `GAIN${i}`, chg_pct: i + 1 })),
     })), "/v1/earnings": () => jsonResponse([]) });
     const view = wrap(<BriefView />, "premium");
-    await screen.findByText("TEST0");
+    await screen.findAllByText("TEST0");
     await screen.findByText("No earnings on file for the next 7 days.");
     expect(view.container.querySelector(".brief-dashboard")?.firstElementChild).toHaveClass("brief-center");
     // Opt-in HTML export for browser layout QA. Fixtures are never shipped by the app.
@@ -136,7 +151,7 @@ describe("Scan history", () => {
   it("lists saved scans and opens one", async () => {
     route({ "/v1/runs": () => jsonResponse([{ id: 7, name: "x", label: "SP500", row_count: 40, duration_s: 61.2, is_snapshot: false, created_at: "2026-10-07T14:00:00+00:00" }]) });
     const { unmount } = wrap(<ScanHistoryView />, "pro");
-    expect(await screen.findByRole("link", { name: "SP500" })).toHaveAttribute("href", "/scanner/history/7");
+    expect(await screen.findByRole("link", { name: "S&P 500" })).toHaveAttribute("href", "/scanner/history/7");
     unmount();
     route({ "/v1/runs": () => jsonResponse([]) });
     const b = wrap(<ScanHistoryView />, "pro");

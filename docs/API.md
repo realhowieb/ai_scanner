@@ -12,7 +12,7 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | Method | Path | Auth | What |
 |---|---|---|---|
 | GET | `/healthz` | none | Liveness only (no database call). Use as the Render health check. |
-| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring; 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
+| GET | `/readyz` | none | Readiness: 200 when the database answers, with the latest market scan's time and age (`scan_age_minutes`) for freshness monitoring and the API's memory (`rss_mb`, `rss_peak_mb`, `container_mb`, `container_peak_mb`, `memory_warning`, `price_cache_entries`); 503 when the database is down. Don't use it as the Render health check (a database blip would restart a healthy service). |
 | POST | `/v1/auth/login` | none | `{"email","password","client"?}` → `access_token` (15 min), `refresh_token` (30 days). Same accounts and passwords as the web app. 10 failed attempts in 10 minutes → 429. |
 | POST | `/v1/auth/refresh` | none | `{"refresh_token"}` → a new pair. Each refresh token works once. A retry within 30 s of rotating (lost response, two refreshes at once) gets another pair; a later replay, or one after logout, is treated as theft and revokes every session of that account. |
 | POST | `/v1/auth/logout` | none | `{"refresh_token","push_token"?}` → 204, token revoked; with `push_token`, that device stops getting this account's pushes. |
@@ -21,17 +21,18 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | POST | `/v1/auth/password-reset` | none | `{"email"}` → 202, same answer whether or not the account exists; emails a reset link (3 per hour per account, 5 per hour per address). |
 | POST | `/v1/auth/password-reset/confirm` | none | `{"token","new_password"}` → new password; signs the account out of the web app and every app session. |
 | GET | `/v1/me` | Bearer | Email, name, plan (`basic`/`pro`/`premium`/`admin`), plan label, alert limit, `email_verified`, entitlement flags. |
-| POST | `/v1/me/verify-email` | Bearer | Resend the verification link to your own email (3 per hour). |
+| POST | `/v1/me/verify-email` | Bearer | Resend the verification link to your own email (3 per hour). 503 when the verification status can't be read or the email can't be sent. |
 | POST | `/v1/me/password` | Bearer | `{"current_password","new_password"}` → a new token pair for this device; every other session (web and app) is signed out. |
 | GET / PATCH | `/v1/me/email-preferences` | Bearer | `{"digest","evening","alerts"}` on/off. |
 | POST | `/v1/me/devices` | Bearer | Register this phone for push: `{"push_token","platform":"ios"\|"android","provider"?:"apns"\|"fcm"\|"expo","device_name"?,"app_version"?}` → the device (`id`, never the token). Idempotent; a token already registered to another account moves to this one. Provider defaults: Expo tokens → `expo`, iOS → `apns`, Android → `fcm` (400 when the token doesn't fit). Up to 10 devices per account (least recently seen dropped). |
 | GET | `/v1/me/devices` | Bearer | Your registered devices, most recently seen first. |
 | DELETE | `/v1/me/devices/{id}` | Bearer | Remove a device (204; 404 when not yours). |
-| POST | `/v1/billing/checkout` | Bearer | `{"plan":"pro"\|"premium","interval":"month"\|"year"}` → `{url, mode}`: Stripe checkout, or Stripe's plan-change screen for existing subscribers (`mode: portal`). Needs a verified email (403 otherwise), as on the web. |
+| POST | `/v1/billing/checkout` | Bearer | `{"plan":"pro"\|"premium","interval":"month"\|"year"}` → `{url, mode}`: Stripe checkout, or Stripe's plan-change screen for existing subscribers (`mode: portal`). Needs a verified email (403 otherwise), as on the web. When the verification status can't be read, 503 + `Retry-After` with `code: "verification_unavailable"`; checkout stays blocked until it can be confirmed. |
 | POST | `/v1/billing/portal` | Bearer | `{"flow"?: "cancel"}` → Stripe Customer Portal URL (404 when there's no subscription yet). |
 | GET | `/v1/today` | Bearer | Market phase, Before the open (this morning's pre-market movers, 8:35-10:30 ET), Top setups, After the close, last session recap. Pre/after-hours movers are Pro+ (`locked: true` below Pro); Premium model fields are redacted below Premium. Each section fails on its own (`errors` lists it). |
 | GET | `/v1/scans/latest` | Bearer | The latest market scan's HSF setups, ranked as in the Scanner. `limit` (≤200), `offset`, `min_score`, `signal`. A plan sees its Scanner row cap (Free 25, Pro 100, Premium 200; `limited: true` when the cap hides some). PreBreakout (`prob`, `signal=prebreakout`) is Premium. |
-| POST | `/v1/scans` | Bearer | Start a **custom scan** (the web's Custom Scan page) → **202** with a job: `{"universe": "sp500"\|"nasdaq"\|"combo"\|"us_market"\|"watchlist"\|"ticker", "ticker"?, "watchlist_id"?, "score_all"?, "filters"?: {min_price, max_price, min_dollar_vol, min_gap, apply_gap_filter, unusual_volume, session, profile, top_n, max_nasdaq, max_combo}}`. Plan rules are enforced here (403): NASDAQ/Combo Pro+, US market Premium+, `top_n` ≤ plan rows, pre-market/after-hours/unusual volume/gap filter Pro+, Pro ticker caps ≤ 4,000 / 6,000, Premium scans the full lists. One scan per account at a time (409 with the running `scan_id`), 30 per hour (429), 503 + `Retry-After` when the service is busy. |
+| GET | `/v1/scans/latest/earnings` | Bearer | Earnings scanner: latest-scan setups that report earnings in `window` (`today` free; `tomorrow`, `week` = today + 7 ET days are Pro, 403 otherwise), soonest day first then HSF Score, with `time` (bmo/amc), `on_watchlist` and the scan row fields. `time=bmo|amc` filters; `include_unranked=true` adds names that report but did not rank, with live `last`/`chg_pct`/`gap_pct`; `score_source` is `scan` (ranked), `custom` (scored by your earnings-universe custom scan finished within the hour, see `custom_scan_at`) or null (not scored). Plan row cap as above. |
+| POST | `/v1/scans` | Bearer | Start a **custom scan** (the web's Custom Scan page) → **202** with a job: `{"universe": "sp500"\|"nasdaq"\|"combo"\|"us_market"\|"watchlist"\|"ticker"\|"earnings", "ticker"?, "watchlist_id"?, "earnings_window"? (today\|tomorrow\|week), "score_all"?, "filters"?: {min_price, max_price, min_dollar_vol, min_gap, apply_gap_filter, unusual_volume, session, profile, top_n, max_nasdaq, max_combo}}`. Plan rules are enforced here (403): NASDAQ/Combo Pro+, US market Premium+, `top_n` ≤ plan rows, pre-market/after-hours/unusual volume/gap filter Pro+, Pro ticker caps ≤ 4,000 / 6,000, Premium scans the full lists. `earnings` scans every stock in the earnings calendar reporting in `earnings_window` (today every plan; tomorrow/week Pro); with `score_all` the screens are skipped and rows stop at the plan's row cap. One scan per account at a time (409 with the running `scan_id`), 30 per hour (429), 503 + `Retry-After` when the service is busy (10 active scans across all accounts, admitted atomically across API instances). |
 | GET | `/v1/scans/{scan_id}` | Bearer | Poll every 2–5 s: `status` `queued` → `running` (with `progress.phase` and `progress.symbols`) → `complete` (`result.setups`, same rows as `/v1/scans/latest`) or `failed` (`error`, safe to show). 404 when not yours. |
 | GET | `/v1/scans` | Bearer | Your recent custom scans (newest first, no rows; kept 7 days). |
 | DELETE | `/v1/scans/{scan_id}` | Bearer | Cancel your queued or running scan → the job, `failed` with error `Cancelled.`; you can start another at once. A running scan stops at its next progress step. 404 when not yours. |
@@ -44,12 +45,13 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/day-trader?source=…` | Bearer, **Pro** | Live Day Trader table for `watchlist` (default list or `watchlist_id`), `movers`, `movers_sp500`, `movers_nasdaq`, `premarket`, `postmarket`, `scan_picks`, `megacaps` or `custom` (`symbols=`). Quotes shared 30 s; poll every 30–60 s. |
 | GET | `/v1/day-trader/stair-steppers?symbols=…` | Bearer, **Pro** | Smooth 1-minute trends (R², trend/hour, pullback filters). |
 | POST | `/v1/ai/summary`, `/v1/ai/chat`, `/v1/ai/notes/{ticker}`; GET `/v1/ai/brief-narrative` | Bearer, **Premium** | Claude explains a scan (latest market scan or one of your `run_id`s), answers questions about it (client sends the conversation; 8 turns kept), writes a setup note for a ticker, or the brief's narrative. Same guardrails and daily limit as the web; 429 at the limit, 503 when AI is off. Shared answers are cached 30 min per scan. |
-| GET / POST | `/v1/journal` | Bearer (POST **Pro**) | Your trades marked to live quotes with P&L and stats; log a trade `{ticker, entry_price, shares}`. |
+| GET / POST | `/v1/journal` | Bearer (POST **Pro**) | Read trades with `limit` (1–200, default 200), `offset` (default 0), and `has_more`. Page counts/P&L are separate from full closed-trade statistics. Log a trade `{ticker, entry_price, shares}`. |
 | POST / DELETE | `/v1/journal/{id}/close`, `/v1/journal/{id}` | Bearer, **Pro** | Close `{exit_price}` (409 if already closed) or delete a trade. |
 | GET | `/v1/stocks/{ticker}/plan?account_size&risk_pct` | Bearer, **Pro** | Trade plan for a latest-scan result: entry, stop, 1.5R/3R targets, size. |
 | GET / POST / DELETE | `/v1/paper/account` | Bearer, **Premium** | Paper account status; connect your own Alpaca **paper** keys (validated, stored encrypted, never returned); disconnect. |
 | GET | `/v1/paper/activity` | Bearer, **Premium** | Live positions and the order feed. |
-| POST | `/v1/paper/orders` | Bearer, **Premium** | `{ticker, qty, "confirm": true}` → whole-share market buy in your paper account, imported into the journal. Refused unless the trading endpoint is Alpaca's paper host. |
+| GET | `/v1/paper/orders/{confirmation_id}` | Bearer, **Premium** | Check an existing confirmation owned by this user. Returns durable state, broker status, fill quantity, and journal-sync status. Never submits an order. `broker_available: false` means the saved status could not be confirmed; completed receipts are returned without recreating deleted journal entries. Poll every 10 seconds while visible; limited to 60 checks/minute per account. |
+| POST | `/v1/paper/orders` | Bearer, **Premium** | `{ticker, qty, "confirm": true, idempotency_key}` → whole-share market buy in your paper account. Reuse the confirmation ID on retries. Actual fills import into the journal; `journal_synced: false` means fill confirmation or import is pending. Refused unless the trading endpoint is Alpaca's paper host. |
 | DELETE | `/v1/me` | Bearer | `{password, "confirm": "DELETE"}` → deletes your account and its data. 409 while a paid subscription is active (cancel via the portal first) and for admins. |
 | GET | `/v1/stocks/{ticker}` | Bearer | Stock Intelligence (same builder as the web page): score, components, signals, reasons, risks, what to watch, lifecycle, historical context, daily bars the scans cached (up to 120), and your watchlists and alerts on it. |
 | GET / POST | `/v1/watchlists` | Bearer | List; create `{"name","make_default"?}` (201; 409 duplicate name; 403 past 50 lists). |
@@ -85,9 +87,15 @@ proxy-added `X-Forwarded-For` entry is the one counted).
 Send the access token as `Authorization: Bearer <token>`. Plan and admin status
 are read from the database on every request, so a plan change applies at once.
 
-Logout revokes the refresh token only. Access tokens are stateless: one already
-issued keeps working until it expires (at most 15 minutes). Deactivating an
-account or changing its plan applies on the next request.
+Logout revokes the refresh token only; an already issued access token keeps
+working until expiry (at most 15 minutes). Password resets and changes invalidate
+existing access tokens immediately: each token carries a keyed credential version
+bound to the password hash, checked against a fresh account row on every request.
+Deactivating an account or changing its plan also applies on the next request.
+No password hash is included in the token or cached for authorization. Older
+access tokens without credential binding receive 401 and can be exchanged using
+their existing refresh token. Temporary refresh outages preserve browser cookies
+and return a retryable error; only a rejected refresh token ends the session.
 
 Push devices (P1-64): the app should call `POST /v1/me/devices` at every start
 and whenever it gets new tokens (sign-in, sign-up, password change) or the OS gives
@@ -95,6 +103,21 @@ it a new push token. Signing out with `push_token` removes that device; a passwo
 change or reset, or a refresh-token reuse sweep, removes every device of the
 account, so the app registers again after its next sign-in. Nothing sends pushes
 yet; the alert sender will read `api.devices.devices_for_user()`.
+
+Paper-order confirmations are saved before contacting Alpaca. The server uses a
+stable, account-user-scoped client order ID and checks Alpaca before submitting.
+If a response is lost, retry the **same** `idempotency_key` (8–128 letters,
+digits, underscores or hyphens). A different ticker, quantity or unconfirmed
+account change with that key returns 409. Uncertain network outcomes return 503;
+the client must preserve its key. A confirmed rejection returns 400 and requires
+a new explicit confirmation. Accepted orders do not create estimated journal
+entries. Journal/activity refreshes reconcile up to five pending intents using
+broker-confirmed quantities and average fill prices. Partial fills update the
+same journal row, and failed imports remain pending for a later refresh.
+
+Paper-order tracking updates lock the saved intent before applying changes. Lower fill counts and older nonterminal statuses cannot replace newer progress or completed receipts. Journal/activity recovery checks up to five orders, passes the remaining three-second network budget to each lookup, and isolates individual failures so later orders still get checked. Database operations use their configured timeouts.
+
+When Alpaca positions are unavailable, paper activity returns `positions_available: false` and null position counts, market value, and open P/L. A successful empty position list returns zero totals.
 
 Custom scans run in the background because they take from a couple of seconds
 (one ticker, S&P 500) to minutes (US market: 224.6 s on 2026-10-06). They use
@@ -121,14 +144,19 @@ GET /v1/scans/9f37c3e6…
                 "setups": [{"ticker": "…", "score": <0-100>, "signals": ["breakout"], …}]}}
 ```
 
-Errors are `{"detail": "<message>"}` (validation errors: `{"detail": [ … ]}`, FastAPI's
-standard list). Times are ISO 8601 and always carry a timezone. Plans are
+Errors retain `detail` for existing clients. HTTP errors also include a stable `code`
+and `request_id`. Validation errors return a `detail` list and a `fields` map
+(e.g. `{"shares": "Enter a whole number."}`), with `code: "validation_error"`.
+Submitted values and validator context are omitted, so invalid credentials are
+never echoed in validation responses.
+
+Times are ISO 8601 and always carry a timezone. Plans are
 `basic` / `pro` / `premium` / `admin` in data; `plan_label` (Free / Pro / Premium /
 Admin) is the name to show. Tickers are upper case.
 
 ## Postman
 
-Import `https://hsf-api.onrender.com/openapi.json` (File → Import → Link; OpenAPI
+Import `https://hsf-api-v1.onrender.com/openapi.json` (File → Import → Link; OpenAPI
 3.1). Set a collection variable `base_url`, and after login paste the access token
 into the collection's Bearer auth. Never save real passwords or tokens in a shared
 collection. Smoke sequence:
@@ -188,6 +216,12 @@ Environment variables:
 | `APP_ENCRYPTION_KEY` | Same as the web app. Needed to store paper-trading keys (`POST /v1/paper/account`); without it paper trading answers 503. |
 | `API_SCAN_WORKERS` | Optional, default 1 (max 4): custom scans that run at once. Raise only with more memory (a US market scan holds thousands of price histories). |
 | `APP_BASE_URL`, `BILLING_API_BASE` | Optional; default to the production web app and billing service. |
+| `HSF_PROXY_SECRET` | Random secret, **same value on hsf-web-v1**. The web server sends each visitor's address with it, so the per-address sign-in and sign-up limits apply per visitor instead of to the web server as a whole. Unset on either side = the old behaviour. |
+| `HSF_API_DOCS` | Optional. `/docs` and `/openapi.json` are off on Render; `1` turns them back on. The web client's contract comes from `scripts/export_openapi.py`, not the live service. |
+| `HSF_API_THREADS` | Optional, default 24: request threads (each keeps a warm database connection). |
+| `HSF_DB_STATEMENT_TIMEOUT_MS` | Optional, default 30000 in the API (jobs have no limit): Postgres cancels one query after this long. |
+| `HSF_MEMORY_LIMIT_MB`, `HSF_MEMORY_WARN_MB` | Optional, default 512 and 400. `/readyz` reports `rss_mb`/`rss_peak_mb` (process, counts shared libraries) and `container_mb`/`container_peak_mb` (what Render measures and restarts on); `memory_warning` uses the container peak when present. The health report lists `api:API_MEMORY_HIGH` as an incident once that peak reaches the warning line (it no longer marks Database degraded). |
+| `PRICE_CACHE_MAX_ENTRIES` | Optional, default 2000 (0 = no cap). Price frames kept in memory; expired ones are swept on write. The scan workflow sets 0. |
 
 The service won't start without `API_JWT_SECRET` (uvicorn logs
 "HSF API not started: API_JWT_SECRET must be set…" and exits). Changing it signs every app
@@ -196,10 +230,12 @@ user out once (access tokens stop verifying; refresh tokens still work).
 The free plan sleeps after 15 minutes idle; move to Starter before the app has
 real users.
 
-Memory: the API idles at about 90 MB. The first custom scan loads the PreBreakout
-model libraries (xgboost, scikit-learn), which adds about 230 MB for the life of
-the process, before the scan's own price data. Watch the service's memory graph
-after the first scans; a 512 MB instance has little headroom for a US market scan.
+Memory: after importing everything it serves, the API holds about 140 MB before
+caches fill (202 MB before the Streamlit app and pyarrow were removed, 2026-10-21).
+The first custom scan loads the PreBreakout model libraries (xgboost, scikit-learn),
+about 80 MB more for the life of the process, plus the model and the scan's own
+price data. `/readyz` shows memory now and the peak since restart, and the nightly
+health report warns at 400 of 512 MB.
 
 ## Acceptance journey
 
@@ -213,7 +249,7 @@ test-account credentials from `ACC_<ROLE>_EMAIL` / `ACC_<ROLE>_PASSWORD`
 deletes it at the end. Alerts use a threshold that cannot fire, so no email is
 sent. Use dedicated test accounts only.
 
-    API_BASE_URL=https://hsf-api.onrender.com python scripts/api_acceptance.py \
+    API_BASE_URL=https://hsf-api-v1.onrender.com python scripts/api_acceptance.py \
         --allow-writes --origin https://<frontend origin> --report acceptance.json
 
 ## Tests

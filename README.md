@@ -1,12 +1,17 @@
 # AI Scanner
 
-AI Scanner is a Streamlit stock scanner with scheduled market scans, optional Neon/Postgres storage, and Stripe-backed billing helpers.
+AI Scanner (HSFinest.AI) is a stock scanner: a FastAPI service (`api/`, Render
+hsf-api-v1), a Next.js web app (`web/`, Render hsf-web-v1), scheduled market scans
+and emails on GitHub Actions, Neon/Postgres storage and Stripe billing. The old
+Streamlit app was retired on 2026-10-21.
+
+For the current frontend, routes, local setup and checks, see [web/README.md](web/README.md).
 
 User guide:
 
 - [HS Finest AI App Tutorial](APP_TUTORIAL.md)
 
-## Run the Streamlit App
+## Local development
 
 Set up the local environment (Python 3.13, the same pinned versions production
 runs from `requirements.lock`, plus test tools):
@@ -16,40 +21,21 @@ bash scripts/setup_local_env.sh
 ```
 
 Add `--fresh` to delete and rebuild `.venv` (for example after a Homebrew Python
-upgrade). Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and
-fill it in. For a local database, point `[neon] database_url` at the Neon branch
-`dev-local` (a copy of live; refresh it with `bash scripts/reset_dev_branch.sh`),
-never at `live` itself.
+upgrade). Settings come from environment variables. For a local database, point
+`DATABASE_URL` at the Neon branch `dev-local` (a copy of live; refresh it with
+`bash scripts/reset_dev_branch.sh`), never at `live` itself.
 
 Outages and database restore: [docs/PROVIDER_FAILOVER_AND_RESTORE.md](docs/PROVIDER_FAILOVER_AND_RESTORE.md).
 
-Start the app:
-
-```bash
-streamlit run app.py
-```
+Run the API and the web app: [docs/API.md](docs/API.md) and [web/README.md](web/README.md).
 
 Developer checks:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 ruff check .
-python scripts/streamlit_smoke.py --timeout 60
+python -m pytest tests/
 ```
-
-Optional real browser smoke flow:
-
-```bash
-python -m pip install -r requirements-browser.txt
-python -m playwright install chromium
-python scripts/streamlit_browser_flow.py --timeout 60
-```
-
-The app defaults to local development settings when no secrets are configured. Production deployments should provide database, market-data, cookie, and billing secrets through the host environment or Streamlit secrets.
-
-Required production auth setting:
-
-- `COOKIE_PASSWORD`
 
 Optional demo-user settings for local/test deployments:
 
@@ -102,9 +88,12 @@ Required billing service environment variables:
 - `APP_SUCCESS_URL`
 - `APP_CANCEL_URL`
 
-Required Streamlit app billing setting:
+Optional: `APP_RETURN_HOSTS` (default `hsf-web-v1.onrender.com`), comma-separated
+hosts of other apps whose https return links checkout and the portal accept, so
+upgrades started in the web app come back to it.
 
-- `BILLING_API_BASE`
+Billing service base URL used by the API and jobs: `BILLING_API_BASE`
+(default `https://hsf-api-v1.onrender.com/billing`).
 
 ## Database Notes
 

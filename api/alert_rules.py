@@ -11,8 +11,21 @@ api.watchlist_intel.market_observation):
     SETUP_APPEARED                                transition: not a ranked setup -> ranked setup
                                                   (optionally only a given setup, e.g. "Breakout")
     RVOL_ABOVE                                    level: scan relative volume >= threshold
+    EARNINGS_SOON                                 heads-up: the ticker reports earnings within
+                                                  threshold days (once per earnings date; Pro).
+                                                  Read from earnings_calendar, so it works for
+                                                  tickers that aren't in the scan
+    INSIDER_BUY                                   heads-up: a company insider reported an open-market
+                                                  buy (SEC Form 4) worth at least threshold dollars
+                                                  (once per newest buy date; Pro). Read from EDGAR
+                                                  (api.filings), so no scan row is needed
     RANK_IMPROVED                                 transition: HSF rank moved up >= threshold places
                                                   since the last scan this rule saw
+    SCAN_MATCH                                    scan alert (Pro): saved Scanner filters on the whole
+                                                  market (HSF Score >= threshold, plus optional setup,
+                                                  price range and relative volume in `value` as JSON).
+                                                  Fires once per scan that brings new matching
+                                                  stocks, listing them in one alert
 
 "Last seen" is persisted per (rule, ticker) in hsf_alert_rule_state, so a crossing
 fires once (77 -> 82 crosses 80; 83 -> 84 doesn't) and re-evaluating an observation
@@ -73,11 +86,35 @@ RULE_TYPES: Dict[str, Dict[str, Any]] = {
                    "label": "Relative volume at or above",
                    "description": "Fires on each new market scan where the ticker trades at your multiple of "
                                   "its 20-day average volume or more (at most once per cooldown)."},
+    "EARNINGS_SOON": {"operator": "within_days", "kind": EDGE, "threshold": (0.0, 14.0), "default": 1.0,
+                      "label": "Reports earnings within (days)", "entitlement": "can_earnings", "plan": "Pro",
+                      "description": "Fires once per earnings date when the ticker reports within your number of "
+                                     "days (1 = the day before). Uses the HSF earnings calendar."},
+    "INSIDER_BUY": {"operator": "insider_buy", "kind": EDGE, "threshold": (0.0, 1_000_000_000.0), "default": 0.0,
+                    "label": "Insider buys at least ($)", "entitlement": "can_insider_alerts", "plan": "Pro",
+                    "description": "Fires when a company insider (officer, director or 10% owner) reports buying "
+                                   "shares on the open market in an SEC Form 4 worth at least your amount "
+                                   "(0 = any buy). Checked after each market scan."},
     "RANK_IMPROVED": {"operator": "improves_by", "kind": EDGE, "threshold": (1.0, 10000.0), "default": 10.0,
                       "label": "HSF rank improves by",
                       "description": "Fires when the ticker moves up at least your number of places in the HSF "
                                      "ranking since the last scan."},
+    "SCAN_MATCH": {"operator": "new_matches", "kind": EDGE, "threshold": (0.0, 100.0), "default": 75.0,
+                   "value": True, "scope": "market", "entitlement": "can_scan_alerts", "plan": "Pro",
+                   "cooldown": 0, "label": "New scanner matches",
+                   "description": "Saves your Scanner filters and checks them after every market scan. Fires when "
+                                  "stocks that weren't matching on the previous scan now match, listing them in "
+                                  "one alert."},
 }
+MARKET = "*"  # state/target key for market-wide rules (SCAN_MATCH)
+SCAN_SIGNALS = ("breakout", "gapper", "golden_cross", "gainer", "prebreakout")
+SCAN_FILTER_KEYS = ("name", "setup", "min_price", "max_price", "min_rvol", "earnings")
+SCAN_EARNINGS = ("today", "tomorrow", "week")  # only names that report then (ET days; week = next 7)
+EARNINGS_CACHE_S = 300
+INSIDER_MAX_TICKERS = 150  # EDGAR lookups per pass (each cached for hours)
+_earnings_cache: Dict[Tuple[str, str], Tuple[float, frozenset]] = {}
+SCAN_MATCH_LIST_MAX = 1000  # matches remembered per rule between scans
+SCAN_MATCH_NAMES_IN_MESSAGE = 8
 CHANNELS = ("in_app", "email")
 CHANNEL_ENTITLEMENT = {"email": "can_email_alerts"}
 DEFAULT_COOLDOWN = {LEVEL: 86400, EDGE: 3600}
@@ -102,9 +139,160 @@ def rule_types(entitlements: Dict[str, bool]) -> List[Dict[str, Any]]:
                     "operator": spec["operator"], "kind": spec["kind"],
                     "threshold": ({"min": thr[0], "max": thr[1], "default": spec.get("default")} if thr else None),
                     "takes_value": bool(spec.get("value")),
-                    "default_cooldown_seconds": DEFAULT_COOLDOWN[spec["kind"]],
+                    "scope": spec.get("scope", "symbol"),
+                    "default_cooldown_seconds": _default_cooldown(spec),
                     "available": _allowed(spec, entitlements)})
     return out
+
+
+def _default_cooldown(spec: Dict[str, Any]) -> int:
+    return int(spec["cooldown"]) if "cooldown" in spec else DEFAULT_COOLDOWN[spec["kind"]]
+
+
+def _market(spec_or_rule: Dict[str, Any]) -> bool:
+    spec = RULE_TYPES.get(str(spec_or_rule.get("rule_type") or "")) if "rule_type" in spec_or_rule else spec_or_rule
+    return bool(spec and spec.get("scope") == "market")
+
+
+def parse_scan_filters(value: Any) -> Dict[str, Any]:
+    """SCAN_MATCH filters from the rule's `value` (JSON object). Unknown keys are
+    rejected; every key is optional. Raises RuleError on bad input."""
+    if value is None or not str(value).strip():
+        return {}
+    try:
+        raw = json.loads(str(value))
+    except ValueError as e:
+        raise RuleError("Scan filters must be a JSON object.") from e
+    if not isinstance(raw, dict):
+        raise RuleError("Scan filters must be a JSON object.")
+    bad = [k for k in raw if k not in SCAN_FILTER_KEYS]
+    if bad:
+        raise RuleError(f"Unknown scan filter: {', '.join(sorted(bad))}. Use: {', '.join(SCAN_FILTER_KEYS)}.")
+    out: Dict[str, Any] = {}
+    name = str(raw.get("name") or "").strip()[:60]
+    if name:
+        out["name"] = name
+    setup = str(raw.get("setup") or "").strip().lower()
+    if setup:
+        if setup not in SCAN_SIGNALS:
+            raise RuleError(f"Setup must be one of: {', '.join(SCAN_SIGNALS)}.")
+        out["setup"] = setup
+    earnings = str(raw.get("earnings") or "").strip().lower()
+    if earnings:
+        if earnings not in SCAN_EARNINGS:
+            raise RuleError(f"earnings must be one of: {', '.join(SCAN_EARNINGS)}.")
+        out["earnings"] = earnings
+    for k, lo, hi in (("min_price", 0.0, 1e6), ("max_price", 0.0, 1e6), ("min_rvol", 0.0, 1000.0)):
+        v = raw.get(k)
+        if v is None or v == "":
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError) as e:
+            raise RuleError(f"{k} must be a number.") from e
+        if not (lo <= f <= hi) or f != f:
+            raise RuleError(f"{k} must be between {lo:g} and {hi:g}.")
+        out[k] = f
+    if "min_price" in out and "max_price" in out and out["min_price"] > out["max_price"]:
+        raise RuleError("min_price must not exceed max_price.")
+    return out
+
+
+def _scan_value(filters: Dict[str, Any]) -> Optional[str]:
+    return json.dumps(filters, sort_keys=True, separators=(",", ":")) if filters else None
+
+
+def _reporting(window: str) -> frozenset:
+    """Ticker keys (letters and digits only) that report earnings in `window`, cached for a
+    few minutes so one alert pass reads the calendar once."""
+    from api.scans import EARNINGS_WINDOWS, _et_date, _ticker_key
+    from db.earnings import fetch_earnings_this_week
+
+    lo, hi = EARNINGS_WINDOWS[window]
+    start = _et_date() + dt.timedelta(days=lo)
+    key = (start.isoformat(), window)
+    hit = _earnings_cache.get(key)
+    if hit and time.monotonic() - hit[0] < EARNINGS_CACHE_S:
+        return hit[1]
+    try:
+        rows = fetch_earnings_this_week(days_ahead=hi - lo, start=start) or []
+    except Exception as e:  # skip earnings rules this pass, never the whole pass
+        raise RuleError("The earnings calendar is unavailable.") from e
+    keys = frozenset(_ticker_key(r.get("symbol")) for r in rows if r.get("earnings_date") is not None)
+    _earnings_cache.clear()
+    _earnings_cache[key] = (time.monotonic(), keys)
+    return keys
+
+
+def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) -> List[str]:
+    """Tickers in the latest scan's ranked setups that pass a SCAN_MATCH rule, best
+    rank first. Uses the same canonical per-ticker view as every other rule."""
+    from api import watchlist_intel
+
+    f = parse_scan_filters(rule.get("value"))
+    min_score = float(rule.get("threshold") or 0)
+    hits: List[Tuple[int, str]] = []
+    reporting = _reporting(f["earnings"]) if f.get("earnings") else None
+    picks = None
+    if f.get("setup") == "prebreakout":
+        # Same names as the Scanner's PreBreakout tab: the model's strongest this scan.
+        from ui.results_intelligence import prebreakout_picks
+
+        ranked = obs.get("ranked") or {}
+        top = {id(o) for o in prebreakout_picks(list(ranked.values()))} if premium else set()
+        picks = {str(t).upper() for t, o in ranked.items() if id(o) in top}
+    for t in obs.get("ranked") or {}:
+        v = watchlist_intel.ticker_view(obs, t, premium=premium)
+        score = v.get("hsf_score")
+        if not v.get("ranked") or score is None or score < min_score:
+            continue
+        if picks is not None:
+            if t.upper() not in picks:
+                continue
+        elif f.get("setup"):
+            setup = str(v.get("setup") or "").lower()
+            if f["setup"] != setup and f["setup"] not in [s.lower() for s in v.get("signals") or []]:
+                continue
+        p = v.get("price")
+        if "min_price" in f and (p is None or p < f["min_price"]):
+            continue
+        if "max_price" in f and (p is None or p > f["max_price"]):
+            continue
+        if "min_rvol" in f and (v.get("rvol") is None or v["rvol"] < f["min_rvol"]):
+            continue
+        if reporting is not None:
+            from api.scans import _ticker_key
+
+            if _ticker_key(t) not in reporting:
+                continue
+        hits.append((int(v.get("rank") or 10**9), t.upper()))
+    return [t for _, t in sorted(hits)]
+
+
+def check_scan(matches: Sequence[str], state: Optional[Dict[str, Any]]
+               ) -> Tuple[bool, List[str], Dict[str, Any]]:
+    """(fires, new tickers best rank first, new state) for a SCAN_MATCH rule. The first
+    scan a rule sees only records its baseline."""
+    state = state or {}
+    keep = list(matches)[:SCAN_MATCH_LIST_MAX]
+    new_state = {"last_value": float(len(matches)), "last_flag": True, "last_text": json.dumps(keep)}
+    if not state.get("observation_id"):
+        return False, [], new_state
+    try:
+        before = set(json.loads(state.get("last_text") or "[]"))
+    except ValueError:
+        before = set()
+    fresh = [t for t in matches if t not in before]
+    return bool(fresh), fresh, new_state
+
+
+def scan_message(rule: Dict[str, Any], fresh: Sequence[str]) -> str:
+    f = parse_scan_filters(rule.get("value"))
+    name = f.get("name") or "your scan alert"
+    shown = ", ".join(fresh[:SCAN_MATCH_NAMES_IN_MESSAGE])
+    more = f" and {len(fresh) - SCAN_MATCH_NAMES_IN_MESSAGE} more" if len(fresh) > SCAN_MATCH_NAMES_IN_MESSAGE else ""
+    noun = "stock matches" if len(fresh) == 1 else "stocks match"
+    return f"{len(fresh)} new {noun} {name}: {shown}{more}"
 
 
 def _allowed(spec: Dict[str, Any], entitlements: Dict[str, bool]) -> bool:
@@ -137,9 +325,15 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
     if spec is None:
         raise RuleError(f"Unknown rule type. Use one of: {', '.join(RULE_TYPES)}.")
     if not _allowed(spec, entitlements):
-        raise RuleForbidden(f"{spec['label']} alerts are a Premium feature.")
+        plan = spec.get("plan", "Premium")
+        raise RuleForbidden(f"{spec['label']} alerts are {'part of Pro' if plan == 'Pro' else 'a Premium feature'}.")
     out: Dict[str, Any] = {}
-    if not partial:
+    market = _market(spec)
+    if not partial and market:
+        if ticker or watchlist_id is not None:
+            raise RuleError(f"{spec['label']} alerts watch the whole market: leave ticker and watchlist_id empty.")
+        out.update(ticker=None, watchlist_id=None, rule_type=str(rule_type).upper(), operator=spec["operator"])
+    elif not partial:
         t = normalize_watchlist_ticker(ticker) if ticker else ""
         if ticker and not t:
             raise RuleError("Enter a valid ticker symbol.")
@@ -161,7 +355,13 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
     if value is not None:
         if not spec.get("value"):
             raise RuleError("This rule type takes no value.")
-        out["value"] = str(value).strip()[:40] or None
+        if market:
+            filters = parse_scan_filters(value)
+            if filters.get("setup") == "prebreakout" and not entitlements.get("can_early_breakout"):
+                raise RuleForbidden("PreBreakout scan alerts are a Premium feature.")
+            out["value"] = _scan_value(filters)
+        else:
+            out["value"] = str(value).strip()[:40] or None
     elif not partial and spec.get("value"):
         out["value"] = None
     if delivery_channels is not None or not partial:
@@ -179,7 +379,7 @@ def validate(entitlements: Dict[str, bool], *, rule_type: str, threshold: Option
             raise RuleError(f"cooldown_seconds must be between 0 and {MAX_COOLDOWN_S}.")
         out["cooldown_seconds"] = int(cooldown_seconds)
     elif not partial:
-        out["cooldown_seconds"] = DEFAULT_COOLDOWN[spec["kind"]]
+        out["cooldown_seconds"] = _default_cooldown(spec)
     if not partial:
         out.setdefault("threshold", None)
         out.setdefault("value", None)
@@ -192,6 +392,10 @@ def check(rule: Dict[str, Any], view: Dict[str, Any], state: Optional[Dict[str, 
     """(fires, trigger value, previous value, new state) for one rule on one ticker's
     canonical view. new state None = this observation says nothing about the ticker
     (absent from the scan), so the stored state is left as it was."""
+    if rule["rule_type"] == "EARNINGS_SOON":
+        return _check_earnings(rule, view, state or {})
+    if rule["rule_type"] == "INSIDER_BUY":
+        return _check_insider(rule, view, state or {})
     if not view.get("present"):
         return False, None, None, None
     rt, thr = rule["rule_type"], rule.get("threshold")
@@ -236,6 +440,103 @@ def check(rule: Dict[str, Any], view: Dict[str, Any], state: Optional[Dict[str, 
     return False, None, None, None
 
 
+def _check_earnings(rule: Dict[str, Any], view: Dict[str, Any], state: Dict[str, Any]
+                    ) -> Tuple[bool, Optional[float], Optional[float], Optional[Dict[str, Any]]]:
+    """EARNINGS_SOON: fires the first time a known earnings date is within the window.
+    last_text holds the earnings date it already fired for, so it fires once per report
+    (a moved date fires again). Needs no scan row: the date comes from the calendar."""
+    days, date = view.get("earnings_days"), view.get("earnings_date")
+    fired_for = state.get("last_text")
+    if days is None or date is None:
+        return False, None, None, {"last_value": None, "last_flag": False, "last_text": fired_for}
+    inside = 0 <= float(days) <= float(rule.get("threshold") or 0)
+    fires = inside and fired_for != date
+    return fires, float(days), None, {"last_value": float(days), "last_flag": inside,
+                                      "last_text": date if inside else fired_for}
+
+
+def _check_insider(rule: Dict[str, Any], view: Dict[str, Any], state: Dict[str, Any]
+                   ) -> Tuple[bool, Optional[float], Optional[float], Optional[Dict[str, Any]]]:
+    """INSIDER_BUY: fires once for the newest insider buy date at or above the rule's dollar
+    amount. last_text holds the buy date it last fired for (or the baseline date the first
+    pass saw, so a rule never fires for buys filed before it was created)."""
+    date, value = view.get("insider_buy_date"), view.get("insider_buy_value")
+    seen = state.get("last_text")
+    if not view.get("insider_known"):
+        return False, None, None, None  # EDGAR unreadable this pass: keep the stored state
+    if date is None:
+        return False, None, None, {"last_value": None, "last_flag": False, "last_text": seen or "-"}
+    big_enough = float(value or 0) >= float(rule.get("threshold") or 0)
+    fires = bool(seen) and big_enough and str(date) > str(seen)
+    return fires, float(value or 0), None, {"last_value": float(value or 0), "last_flag": big_enough,
+                                            "last_text": max(str(date), str(seen or ""))}
+
+
+def insider_lookup(tickers: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+    """{ticker: insider_known, insider_buy_date, insider_buy_value, insider_buy_who} from the
+    newest open-market buy in recent Form 4s (api.filings, cached for hours). A ticker EDGAR
+    couldn't answer for is left out, so its rules keep their state."""
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        from api import filings
+
+        if not filings.enabled():
+            return {}
+        for t in sorted({str(x).strip().upper() for x in tickers if str(x).strip()})[:INSIDER_MAX_TICKERS]:
+            f = filings.stock_filings(t)
+            if not f.get("available"):
+                continue
+            buys = [x for x in f.get("insider") or [] if x.get("type") == "Buy" and x.get("date")]
+            if not buys:
+                out[t] = {"insider_known": True, "insider_buy_date": None, "insider_buy_value": None}
+                continue
+            newest = max(x["date"] for x in buys)
+            same_day = [x for x in buys if x["date"] == newest]
+            out[t] = {"insider_known": True, "insider_buy_date": newest,
+                      "insider_buy_value": round(sum(x.get("value") or 0 for x in same_day), 2),
+                      "insider_buy_who": f"{same_day[0].get('insider')} ({same_day[0].get('role')})"}
+    except Exception as e:
+        log.warning(json.dumps({"event": "alert_rules_insider_failed", "error": type(e).__name__}))
+    return out
+
+
+def _earnings_when(view: Dict[str, Any]) -> str:
+    days = int(view.get("earnings_days") or 0)
+    when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days ({view.get('earnings_date')})"
+    t = str(view.get("earnings_time") or "").strip().lower()
+    timing = {"bmo": " before the open", "amc": " after the close"}.get(t, "")
+    return f"{when}{timing}"
+
+
+def earnings_lookup(tickers: Sequence[str], now: dt.datetime) -> Dict[str, Dict[str, Any]]:
+    """{ticker: earnings_days, earnings_date, earnings_time} for upcoming reports, from
+    the earnings calendar (one query). Days count from today in New York. Best effort:
+    an unreadable calendar means no earnings alerts this pass, never a failed pass."""
+    syms = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})
+    if not syms:
+        return {}
+    try:
+        from zoneinfo import ZoneInfo
+
+        from db.earnings import load_earnings_details_map
+
+        details = load_earnings_details_map(syms)
+        today = now.astimezone(ZoneInfo("America/New_York")).date()
+    except Exception as e:
+        log.warning(json.dumps({"event": "alert_rules_earnings_failed", "error": type(e).__name__}))
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for t in syms:
+        d, when = details.get(t) or details.get(t.replace(".", "-")) or (None, None)
+        if isinstance(d, dt.datetime):
+            d = d.date()
+        if not isinstance(d, dt.date) or d < today:
+            continue
+        out[t] = {"earnings_days": (d - today).days, "earnings_date": d.isoformat(),
+                  "earnings_time": (str(when).strip().lower() or None) if when else None}
+    return out
+
+
 def message_for(rule: Dict[str, Any], ticker: str, value: Optional[float], prev: Optional[float],
                 view: Dict[str, Any]) -> str:
     rt, thr = rule["rule_type"], rule.get("threshold")
@@ -253,6 +554,11 @@ def message_for(rule: Dict[str, Any], ticker: str, value: Optional[float], prev:
         return f"{ticker} is now a PreBreakout setup"
     if rt == "SETUP_APPEARED":
         return f"{ticker} is a new HSF setup: {view.get('setup') or 'Signal'}"
+    if rt == "EARNINGS_SOON":
+        return f"{ticker} reports earnings {_earnings_when(view)}"
+    if rt == "INSIDER_BUY":
+        amount = f"${value:,.0f}" if value else "shares"
+        return f"{ticker}: insider buy of {amount} reported {view.get('insider_buy_date')} by {view.get('insider_buy_who') or 'an insider'}"
     if rt == "RANK_IMPROVED":
         return f"{ticker} moved up {prev - value:.0f} places to #{value:.0f} in the HSF ranking"
     return f"{ticker} alert"
@@ -281,9 +587,12 @@ def metrics() -> Dict[str, Any]:
 
 # ---- evaluator --------------------------------------------------------------------------------------
 def _plan(rule: Dict[str, Any]) -> Tuple[str, Dict[str, bool], int]:
+    from api import referrals
     from api.main import entitlements_for
 
-    ent = entitlements_for({"tier": rule.get("owner_tier"), "is_admin": rule.get("owner_is_admin")})
+    tier, _until = referrals.effective_tier(str(rule.get("user_id") or ""), rule.get("owner_tier"),
+                                            bool(rule.get("owner_is_admin")))
+    ent = entitlements_for({"tier": tier, "is_admin": rule.get("owner_is_admin")})
     return ent["tier"], ent["entitlements"], int(ent["alert_limit"])
 
 
@@ -323,6 +632,42 @@ def _cooling(state: Optional[Dict[str, Any]], cooldown_s: int, now: dt.datetime)
     return (now - t).total_seconds() < cooldown_s
 
 
+def _evaluate_market_rule(r: Dict[str, Any], obs: Dict[str, Any], st: Optional[Dict[str, Any]], now_s: str,
+                          now: dt.datetime) -> Optional[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]]:
+    """SCAN_MATCH: (new state, event or None); None when this rule already saw the scan
+    or its saved filters can't be read (the rule is skipped, never the pass)."""
+    from api import watchlist_intel
+
+    obs_id = obs["observation_id"]
+    if st and st.get("observation_id") == obs_id:
+        return None
+    try:
+        matches = scan_matches(obs, r, premium=r["_premium"])
+    except RuleError:
+        return None
+    fires, fresh, new = check_scan(matches, st)
+    last_trig = (st or {}).get("last_triggered_at")
+    if fires and _cooling(st, int(r["cooldown_seconds"]), now):
+        fires = False
+    state = {"rule_id": r["id"], "ticker": MARKET, **new, "observation_id": obs_id,
+             "last_triggered_at": now_s if fires else last_trig}
+    if not fires:
+        return state, None
+    top = watchlist_intel.ticker_view(obs, fresh[0], premium=r["_premium"])
+    event = {
+        "user_id": r["user_id"], "rule_id": r["id"], "watchlist_id": None,
+        "ticker": fresh[0], "rule_type": r["rule_type"], "operator": r["operator"],
+        "threshold": r.get("threshold"), "trigger_value": float(len(fresh)), "previous_value": None,
+        "hsf_score": top.get("hsf_score"), "setup": top.get("setup"),
+        "message": scan_message(r, fresh), "observation_id": obs_id,
+        "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
+        "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
+        "_channels": r["delivery_channels"], "_tier": r["_tier"],
+        "_email_verified": r.get("owner_email_verified"), "_view": top,
+    }
+    return state, event
+
+
 def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Dict[str, Any]] = None,
                   deliver: bool = True) -> Dict[str, Any]:
     """One evaluation pass. Idempotent: a rule that already saw this observation is skipped,
@@ -352,10 +697,33 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
     result["observation_id"] = obs_id
     wl = store.watchlist_tickers({(r["user_id"], r["watchlist_id"]) for r in rules if r.get("watchlist_id")})
     states = store.load_states([r["id"] for r in rules])
+    earn_tickers = set()
+    for r in rules:
+        if r["rule_type"] == "EARNINGS_SOON":
+            earn_tickers.update((wl.get(int(r["watchlist_id"])) or []) if r.get("watchlist_id") else [r["ticker"]])
+    earnings = earnings_lookup(sorted(earn_tickers), now) if earn_tickers else {}
+    insider_tickers = set()
+    for r in rules:
+        if r["rule_type"] == "INSIDER_BUY":
+            insider_tickers.update((wl.get(int(r["watchlist_id"])) or []) if r.get("watchlist_id") else [r["ticker"]])
+    for t, info in (insider_lookup(sorted(insider_tickers)) if insider_tickers else {}).items():
+        earnings.setdefault(t, {}).update(info)
     now_s = now.isoformat(timespec="microseconds")
     views: Dict[Tuple[str, bool], Dict[str, Any]] = {}
     new_states, events, evaluated, triggered = [], [], set(), set()
     for r in rules:
+        if _market(r):
+            ev = _evaluate_market_rule(r, obs, states.get((r["id"], MARKET)), now_s, now)
+            if ev is None:
+                continue
+            evaluated.add(r["id"])
+            result["evaluated"] += 1
+            state, event = ev
+            new_states.append(state)
+            if event is not None:
+                triggered.add(r["id"])
+                events.append(event)
+            continue
         if r.get("watchlist_id"):
             tickers = wl.get(int(r["watchlist_id"]))
             if tickers is None:  # watchlist deleted or not the owner's: nothing to watch
@@ -368,7 +736,8 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
                 continue  # this rule already saw this scan for this ticker
             key = (t, r["_premium"])
             if key not in views:
-                views[key] = watchlist_intel.ticker_view(obs, t, premium=r["_premium"])
+                views[key] = {**watchlist_intel.ticker_view(obs, t, premium=r["_premium"]),
+                              **earnings.get(t.upper(), {})}
             view = views[key]
             fires, value, prev, new = check(r, view, st)
             evaluated.add(r["id"])
@@ -391,10 +760,17 @@ def evaluate_once(now: Optional[dt.datetime] = None, *, observation: Optional[Di
                     "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
                     "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
                     "_channels": r["delivery_channels"], "_tier": r["_tier"],
-                    "_email_verified": r.get("owner_email_verified"),
+                    "_email_verified": r.get("owner_email_verified"), "_view": view,
                 })
             new_states.append({"rule_id": r["id"], "ticker": t, **new, "observation_id": obs_id,
                                "last_triggered_at": last_trig})
+    if deliver and events:
+        try:  # Premium: one AI "Why:" line on the message (own daily cap; never blocks the pass)
+            from api.ai_premium import annotate_alerts
+
+            result["ai_why"] = annotate_alerts(events, obs)
+        except Exception as e:
+            log.warning(json.dumps({"event": "alert_ai_why_failed", "error": type(e).__name__}))
     inserted = store.save_evaluation(states=new_states, events=events, evaluated_rule_ids=sorted(evaluated),
                                      triggered_rule_ids=sorted(triggered), now=now_s)
     result["triggered"] = len(inserted)

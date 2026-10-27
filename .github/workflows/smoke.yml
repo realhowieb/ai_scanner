@@ -19,6 +19,37 @@ permissions:
   contents: read
 
 jobs:
+  billing-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: billing_test
+          POSTGRES_PASSWORD: billing_test_only
+          POSTGRES_DB: billing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install isolated billing dependencies
+        run: python -m pip install -r requirements-billing-test.txt psycopg2-binary==2.9.10 stripe==11.1.1
+      - name: Verify billing schema, transactions and concurrency
+        env:
+          HSF_TEST_BILLING_PG_URL: postgresql://billing_test:billing_test_only@localhost:5432/billing_test
+        run: python -m pytest tests/test_billing_postgres.py -v --tb=short
+
   billing-contract:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -52,6 +83,9 @@ jobs:
           python -c "import fastapi, httpx, jwt, bcrypt"
           python -m pytest \
             tests/test_billing_service.py \
+            tests/test_api_billing.py \
+            tests/test_billing_reliability.py \
+            tests/test_research_workflows.py \
             tests/test_run83_billing_auth.py \
             tests/test_run83_restore_token.py \
             tests/test_run72_pricing.py \
@@ -61,6 +95,8 @@ jobs:
             tests/test_p1_39_billing_email_health.py \
             tests/test_p2_backlog_fixes_0929.py \
             tests/test_api_v1.py \
+            tests/test_api_ratelimit.py \
+            tests/test_api_experience.py \
             tests/test_api_today_and_store.py \
             -v --tb=short
 
@@ -126,7 +162,7 @@ jobs:
           python -c "import scan.breakout"
           python -c "import scan.engine"
           python -c "import db.runs"
-          python -c "import ui.scans"
+          python -c "import api.market"
 
       - name: Run dependency-backed unit tests
         run: python -m unittest discover -s tests -v
@@ -134,8 +170,6 @@ jobs:
       - name: Deployment readiness doctor
         run: python scripts/deployment_doctor.py
 
-      - name: Live Streamlit startup smoke
-        run: python scripts/streamlit_smoke.py --timeout 60
 
   full-dependency-import-smoke:
     runs-on: ubuntu-24.04
@@ -171,7 +205,7 @@ jobs:
           python -c "import scan.breakout"
           python -c "import scan.engine"
           python -c "import db.runs"
-          python -c "import ui.scans"
+          python -c "import api.market"
           python -c "import ml_prebreakout"
 
   dependency-audit:

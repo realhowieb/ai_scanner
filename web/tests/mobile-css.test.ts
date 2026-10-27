@@ -12,8 +12,11 @@ describe("mobile CSS polish", () => {
     expect(css).toContain(".tabbar { display: flex; position: fixed;");
   });
 
-  it("keeps the desktop header on one row", () => {
-    expect(css).toContain(".topbar-in { flex-wrap: nowrap; }");
+  it("keeps the desktop header on one row, with navigation in a sidebar that narrows to a rail", () => {
+    expect(css).toContain("display: flex; flex-wrap: nowrap; align-items: center;");
+    expect(css).toContain(".sidebar { position: sticky; top: 0; height: 100vh;");
+    expect(css).toContain("@media (min-width: 901px) and (max-width: 1199px)");
+    expect(css).toContain("  .sidebar { display: none; }");
   });
 
   it("makes core phone actions and filters comfortable to tap", () => {
@@ -25,7 +28,8 @@ describe("mobile CSS polish", () => {
 
   it("keeps narrow account and status content from squeezing sideways", () => {
     expect(css).toContain(".kv > div { align-items: flex-start; flex-direction: column;");
-    expect(css).toContain(".status-strip { align-items: flex-start; flex-direction: column; }");
+    expect(css).toContain(".status-strip .status-extra, .data-fresh .wide-text { display: none; }");
+    expect(css).toContain(".scanner-results { display: grid; grid-template-columns: minmax(0, 1fr);");
     expect(css).toContain(".tiles { grid-template-columns: minmax(0, 1fr); }");
   });
 

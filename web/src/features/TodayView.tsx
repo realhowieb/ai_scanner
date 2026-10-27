@@ -1,13 +1,17 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
+import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import type { Schemas } from "@/api/client";
-import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ResearchNotice, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
-import { etDate, etTime, freshness, greeting, pct, price, setupLabel } from "@/lib/format";
+import { Card, Empty, Freshness, Locked, Pill, RANKED_MIN, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
+import { etTime, greeting, localDate, pct, price, setupLabel } from "@/lib/format";
 
+import { GettingStarted } from "./GettingStarted";
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
+import { ScoreMoversCard } from "./ScoreMovers";
+import { StarterWatchlistButton } from "./Starters";
 
 type Today = Schemas["Today"];
 type SessionCard = Schemas["SessionCard"];
@@ -21,12 +25,32 @@ const PHASES: Record<string, { label: string; note: string; tone: string }> = {
   closed: { label: "Market closed", note: "Next session 9:30 AM ET", tone: "grey" },
 };
 
-const CHIP_LIMIT = 12;
+const CHIP_LIMIT = 5;
+
+// The greeting follows the viewer's clock, which only the browser knows. The
+// server render (and first hydration pass) uses the scan time in ET, then the
+// client swaps in local time. The minute bucket keeps the snapshot stable.
+const noSubscribe = () => () => undefined;
+const clientMinute = () => Math.floor(Date.now() / 60000);
+const serverMinute = () => null;
+
+function Greeting({ asOf }: { asOf: string }) {
+  const minute = useSyncExternalStore(noSubscribe, clientMinute, serverMinute);
+  const nowMs = minute === null ? Date.parse(asOf) || 0 : minute * 60000;
+  const tz = minute === null ? "America/New_York" : undefined;
+  return (
+    <div>
+      <p className="cap">{localDate(nowMs, tz)}</p>
+      <h1 className="h1">{greeting(nowMs, tz)}</h1>
+    </div>
+  );
+}
 
 /** Recap names arrive as "VST (53)"; each chip opens that stock. */
 /** `move` marks a list of names that rose into (up) or dropped out of (down) the ranked list. */
 function TickerChips({ items, move }: { items: string[]; move?: "up" | "down" }) {
-  const shown = items.slice(0, CHIP_LIMIT);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, CHIP_LIMIT);
   return (
     <div className="chips">
       {shown.map((e) => {
@@ -38,7 +62,7 @@ function TickerChips({ items, move }: { items: string[]; move?: "up" | "down" })
           </Link>
         );
       })}
-      {items.length > shown.length && <span className="cap">+{items.length - shown.length} more</span>}
+      {items.length > CHIP_LIMIT && <button type="button" className="link-btn cap" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>{expanded ? "Show fewer" : `+${items.length - shown.length} more`}</button>}
     </div>
   );
 }
@@ -49,7 +73,7 @@ export function SectionFailed({ name }: { name: string }) {
 
 function Movers({ card, title, caption, id }: { card: SessionCard; title: string; caption: string; id: string }) {
   return (
-    <Card title={title} id={id} aside={card.scan_at ? <Freshness at={card.scan_at} label="Scan" staleCheck={false} /> : undefined}>
+    <Card title={title} id={id} source="data" aside={card.scan_at ? <Freshness at={card.scan_at} label="Scan" staleCheck={false} /> : undefined}>
       {card.locked ? (
         <Locked title={`${title} movers are part of Pro`} plan="pro">See which names are moving outside regular hours, with their HSF Score.</Locked>
       ) : card.movers.length === 0 ? (
@@ -88,15 +112,21 @@ function NewSince({ data }: { data: Schemas["NewSince"] }) {
 
 const MISSING_LIMIT = 20;
 
-function YourWatchlist({ data }: { data: Schemas["WatchlistToday"] }) {
+function YourWatchlist({ data, top, onChanged }: { data: Schemas["WatchlistToday"]; top: string[]; onChanged?: () => void }) {
   const s = data.summary;
   return (
-    <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href="/watchlists">{data.name}</Link> : undefined}>
+    <Card title="Your watchlist" id="wl" aside={data.watchlist_id ? <Link href={`/watchlists?id=${data.watchlist_id}`}>{data.name}</Link> : undefined}>
       {!data.watchlist_id || (data.in_scan.length === 0 && data.missing.length === 0) ? (
-        <Empty title="Your watchlist is empty.">Add names from the Scanner or a stock page.</Empty>
+        <Empty title="Your watchlist is empty.">
+          <div className="stack-sm">
+            <p>Add names from the Scanner or a stock page, or start with today&apos;s leaders.</p>
+            {onChanged && <StarterWatchlistButton tickers={top} listId={data.watchlist_id} onDone={onChanged} />}
+          </div>
+        </Empty>
       ) : (
         <>
-          {s && <p className="cap">{s.tracked} watched · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
+          {s && <p className="cap">{s.tracked} across all watchlists · {s.needs_attention} need attention · {s.strengthening} strengthening · {s.fading} fading</p>}
+          <p className="cap">Showing {data.name || "your default list"} below.</p>
           {data.in_scan.length > 0 ? (
             <ul className="rows">
               {data.in_scan.map((r) => (
@@ -128,6 +158,7 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
       <td><ScoreBar score={s.score} /></td>
       <td className="num mono hide-narrow">{price(s.last)}</td>
       <td className={`num mono ${s.chg_pct && s.chg_pct > 0 ? "up" : s.chg_pct && s.chg_pct < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</td>
+      <td className="num mono hide-narrow">{s.rvol == null ? "--" : `${s.rvol.toFixed(1)}x`}</td>
     </tr>
   );
 }
@@ -175,7 +206,7 @@ function FirstRunGuide({ top }: { top: Today["top_setups"] }) {
 }
 
 /** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
-export function TodayView({ data, mine, mineFailed = false, side }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode }) {
+export function TodayView({ data, mine, mineFailed = false, side, lead, onMineChanged }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode; lead?: ReactNode; onMineChanged?: () => void }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
@@ -187,29 +218,26 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
   // Standouts are the recapped session's top names; skip them when Top setups already shows the same list.
   const standouts = (data.recap?.standouts ?? []).filter((o) => !shownOnTop.has(o.ticker));
   // The API knows the scan schedule (a missed slot, not overnight or weekend gaps);
-  // the age rule is only a fallback for an API that predates market.stale.
+  // Unknown schedule coverage does not establish a delayed scan.
   const scanAt = data.market.latest_scan_at ?? top?.scan_at;
-  const stale = data.market.stale ?? (top?.scan_at ? freshness(top.scan_at).stale : false);
+  const stale = data.market.stale === true || data.market.freshness?.scan_state === "stale";
   const watchlist = mine?.watchlist;
   const hasWatchlist = Boolean(watchlist?.watchlist_id && ((watchlist.in_scan?.length ?? 0) > 0 || (watchlist.missing?.length ?? 0) > 0));
   const hasVisitMarker = Boolean(mine?.new_since?.marker);
   const showFirstRun = Boolean(mine && !mineFailed && !hasWatchlist && !hasVisitMarker);
-  // Returning users see their own sections first: atop the side column, and first of all on a phone.
+  // Returning users see personal sections atop the desktop side column.
   const personalFirst = hasWatchlist || hasVisitMarker;
   const personal = (
     <div className="today-personal">
       {mineErr.has("new_since") ? <SectionFailed name="New since your last visit" /> : mine?.new_since && <NewSince data={mine.new_since} />}
-      {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} />}
+      {mineErr.has("watchlist") ? <SectionFailed name="Your watchlist" /> : mine?.watchlist && <YourWatchlist data={mine.watchlist} top={[...(top?.setups ?? []), ...also].map((r) => r.ticker)} onChanged={onMineChanged} />}
     </div>
   );
 
   return (
     <div className="stack">
       <section className="page-head">
-        <div>
-          <p className="cap">{etDate(data.as_of)}</p>
-          <h1 className="h1">{greeting(data.as_of)}</h1>
-        </div>
+        <Greeting asOf={data.as_of} />
         <div className={`phase phase-${phase.tone}`}>
           <span className="dot" aria-hidden="true" />
           <span className="strong">{phase.label}</span>
@@ -228,18 +256,19 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
       )}
 
       {failed.has("snapshot") ? <SectionFailed name="Market snapshot" /> : data.snapshot && (
-        <Card title="Market snapshot" id="snap" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">
+        <Card title="Market snapshot" id="snap" source="data" aside="Top gainer and most active are among the latest scan's ranked setups, not the whole market">
           <SnapshotTiles snapshot={data.snapshot} />
         </Card>
       )}
 
       <div className="split today-split">
         <div className="col-main">
+          {lead}
           {failed.has("before_open") ? <SectionFailed name="Before the open" /> : data.before_open && (
             <Movers card={data.before_open} id="bto" title="Before the open" caption="Pre-market scan vs the previous close. Pre-market prices keep moving." />
           )}
 
-          <Card title="Top setups" id="top" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" stale={data.market.stale} /> : "Ranked by HSF Score"}>
+          <Card title="Top setups" id="top" source="ranking" aside={top?.scan_at ? <Freshness at={top.scan_at} label="Full-market scan" stale={data.market.stale} /> : "Ranked by HSF Score"}>
             {failed.has("top_setups") || !top ? (
               <SectionFailed name="Top setups" />
             ) : top.state === "empty_scan" ? (
@@ -253,7 +282,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
                 <div className="table-wrap">
                   <table className="table">
                     <thead>
-                      <tr><th scope="col">Ticker</th><th scope="col" className="hide-narrow">Setup</th><th scope="col" className="w40">HSF Score</th><th scope="col" className="num hide-narrow">Last</th><th scope="col" className="num">Chg</th></tr>
+                      <tr><th scope="col">Ticker</th><th scope="col" className="hide-narrow">Setup</th><th scope="col" className="w40">HSF Score</th><th scope="col" className="num hide-narrow">Last</th><th scope="col" className="num">Chg</th><th scope="col" className="num hide-narrow"><abbr title="Relative volume: today's volume vs its usual pace">RVOL</abbr></th></tr>
                     </thead>
                     {top.setups.length > 0 && (
                       <tbody>
@@ -262,7 +291,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
                     )}
                     {also.length > 0 && (
                       <tbody className="also">
-                        {top.setups.length > 0 && <tr className="sub-head"><th scope="rowgroup" colSpan={5}>Also ranked</th></tr>}
+                        {top.setups.length > 0 && <tr className="sub-head"><th scope="rowgroup" colSpan={6}>Also ranked</th></tr>}
                         {also.map((s) => <SetupRow key={s.ticker} s={s} muted />)}
                       </tbody>
                     )}
@@ -272,10 +301,11 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
               </>
             )}
             <div className="card-foot">
-              <ResearchNotice compact />
               <Link href="/scanner">Open the Scanner →</Link>
             </div>
           </Card>
+
+          <ScoreMoversCard />
 
           {showFirstRun && <FirstRunGuide top={top} />}
 
@@ -283,6 +313,7 @@ export function TodayView({ data, mine, mineFailed = false, side }: { data: Toda
         </div>
 
         <aside className="col-side">
+          <GettingStarted />
           {personalFirst && personal}
           {failed.has("after_close") ? <SectionFailed name="After the close" /> : data.after_close && (
             <Movers card={data.after_close} id="atc" title="After the close" caption="After-hours scan vs today's close. After-hours prices keep moving." />
