@@ -52,7 +52,11 @@ const num = (s: string): number | undefined => {
   return s.trim() !== "" && Number.isFinite(v) && v >= 0 ? v : undefined;
 };
 
-export function ScanAlertButton({ setup, minScore, setupLabel, earnings }: { setup: string; minScore: number; setupLabel?: string; earnings?: ScanEarnings }) {
+export function ScanAlertButton({ setup, minScore, setupLabel, earnings, initial }: {
+  setup: string; minScore: number; setupLabel?: string; earnings?: ScanEarnings;
+  /** The Scanner's current price and volume filters, prefilled when the dialog opens. */
+  initial?: Pick<ScanFilters, "min_price" | "max_price" | "min_rvol">;
+}) {
   const [open, setOpen] = useState(false);
   const types = useApi(open ? "alert-rule-types" : null, (signal) => alertRules.types(signal));
   const rules = useApi(open ? "alert-rules" : null, (signal) => alertRules.list(signal));
@@ -87,7 +91,12 @@ export function ScanAlertButton({ setup, minScore, setupLabel, earnings }: { set
 
   return (
     <>
-      <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>Alert me on new matches</button>
+      <button type="button" className="btn btn-sm" onClick={() => {
+        setMinPrice(initial?.min_price != null ? String(initial.min_price) : "");
+        setMaxPrice(initial?.max_price != null ? String(initial.max_price) : "");
+        setMinRvol(initial?.min_rvol != null ? String(initial.min_rvol) : "");
+        setOpen(true);
+      }}>Alert me on new matches</button>
       <Dialog open={open} title="Scan alert" onClose={close}>
         {done ? (
           <div className="stack-sm">

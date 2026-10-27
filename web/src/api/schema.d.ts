@@ -14875,6 +14875,12 @@ export interface operations {
                 signal?: string | null;
                 /** @description Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups */
                 sort?: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+                /** @description Last price at least this */
+                min_price?: number | null;
+                /** @description Last price at most this */
+                max_price?: number | null;
+                /** @description Relative volume at least this (x) */
+                min_rvol?: number | null;
             };
             header?: never;
             path?: never;

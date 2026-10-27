@@ -8,6 +8,15 @@ export type WhatsNewEntry = { id: string; title: string; items: string[] };
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    id: "2026-10-27",
+    title: "What's new",
+    items: [
+      "Scanner filters are always in view now, with new Price and Relative volume filters. Scan alerts start with the same filters.",
+      "Stock charts show volume in its own pane, with a dashed 20-day average and how today compares (for example 1.8x avg).",
+      "New here? Getting started on Today saves today's top setups and adds a score alert in one tap each.",
+    ],
+  },
+  {
     id: "2026-10-23c",
     title: "What's new",
     items: [

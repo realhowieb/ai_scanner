@@ -10,6 +10,8 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { captureUsage } from "@/lib/usageAnalytics";
 
+import { StarterScoreAlertButton, StarterWatchlistButton } from "./Starters";
+
 type Data = Schemas["GettingStarted"];
 type Step = Schemas["GettingStartedStep"];
 
@@ -35,6 +37,11 @@ export function GettingStarted() {
     }
   };
   const pct = Math.round((data.done / data.total) * 100);
+  // The first two steps can be done right here in one tap; the link stays for doing it by hand.
+  const refresh = () => { setLocal(null); res.reload(); };
+  const hasStocks = data.steps.some((s) => s.id === "watchlist" && s.done);
+  const quick = (s: Step) => s.id === "watchlist" ? <StarterWatchlistButton compact onDone={refresh} />
+    : s.id === "alert" && hasStocks ? <StarterScoreAlertButton onDone={refresh} /> : null;
 
   return (
     <Card title="Getting started" id="getting-started" className="getting-started"
@@ -48,8 +55,9 @@ export function GettingStarted() {
             <div className="grow">
               <p className="strong">{s.title}<span className="sr-only">{s.done ? " (done)" : " (to do)"}</span></p>
               {!s.done && <p className="cap">{s.detail}</p>}
+              {!s.done && quick(s)}
             </div>
-            {!s.done && <Link href={s.href} className="btn" onClick={() => open(s)}>{s.id === "guide" ? "Read" : "Start"}</Link>}
+            {!s.done && <Link href={s.href} className="btn" onClick={() => open(s)}>{s.id === "guide" ? "Read" : quick(s) ? "Choose" : "Start"}</Link>}
           </li>
         ))}
       </ol>

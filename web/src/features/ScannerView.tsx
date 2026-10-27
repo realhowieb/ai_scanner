@@ -29,6 +29,15 @@ export const SIGNALS = [
   { id: "earnings", label: "Earnings" },
 ] as const;
 const MIN_SCORES = [0, 40, 60, 75];
+/** Price bands for the inline filter, as [id, label, min, max]. */
+export const PRICE_BANDS = [
+  ["", "Any price", undefined, undefined],
+  ["u5", "Under $5", undefined, 5],
+  ["5-20", "$5 to $20", 5, 20],
+  ["20-100", "$20 to $100", 20, 100],
+  ["100", "$100+", 100, undefined],
+] as const;
+export const RVOLS = [0, 1.5, 2, 3];
 const PAGE_SIZES = [25, 50, 100];
 export const SORTS = [
   { id: "score", label: "HSF Score" },
@@ -51,7 +60,11 @@ export function readFilters(sp: URLSearchParams) {
   const page = Number.isFinite(requestedPage)
     ? Math.min(Math.floor(10_000 / pageSize) + 1, Math.max(1, Math.floor(requestedPage))) : 1;
   const so = sp.get("sort") || "score";
+  const pr = sp.get("price") || "";
+  const rv = Number(sp.get("rvol") || 0);
   return {
+    price: (PRICE_BANDS.some(([id]) => id === pr) ? pr : "") as (typeof PRICE_BANDS)[number][0],
+    rvol: RVOLS.includes(rv) ? rv : 0,
     sort: (SORTS.some((x) => x.id === so) ? so : "score") as Sort,
     signal,
     minScore: MIN_SCORES.includes(min) ? min : 0,
@@ -77,10 +90,13 @@ export function ScannerView() {
   const offset = (f.page - 1) * f.size;
 
   const sort: Sort = f.sort === "prob" && !premium ? "score" : f.sort;
-  const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}`;
+  const band = PRICE_BANDS.find(([id]) => id === f.price)!;
+  const [, , minPrice, maxPrice] = band;
+  const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}:${f.price}:${f.rvol}`;
   const { data, error, loading, refreshing, updatedAt, reload } = useApi(key, (signal) =>
     unwrap(api.GET("/v1/scans/latest", {
-      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}) } },
+      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}),
+        ...(minPrice != null ? { min_price: minPrice } : {}), ...(maxPrice != null ? { max_price: maxPrice } : {}), ...(f.rvol ? { min_rvol: f.rvol } : {}) } },
       signal,
     })));
   useAutoRefresh(reload, { enabled: key !== null });
@@ -98,18 +114,18 @@ export function ScannerView() {
 
   const visibleTotal = data ? Math.min(data.total, data.max_results) : 0;
   const pages = Math.max(1, Math.ceil(visibleTotal / f.size));
-  const moreActive = Boolean(f.minScore || f.size !== 25 || sort !== "score");
   const leader = f.page === 1 && sort === "score" ? data?.setups[0] : undefined;
   const plural = (n: number) => `${n} setup${n === 1 ? "" : "s"}`;
   // total counts what the filters left; the headline counts the whole scan and names the filter's share.
   const scanTotal = data ? (data.scan_total ?? data.total) : 0;
-  const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : f.minScore ? `at HSF Score ${f.minScore}+` : "";
+  const narrowing = Boolean(f.minScore || f.price || f.rvol);
+  const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : narrowing ? "match your filters" : "";
   const filtered = Boolean(data && filterName && scanTotal !== data.total);
   const earnWindow = ef.when === "week" ? "in the next 7 days" : EARNINGS_WHEN.find((w) => w.id === ef.when)!.label.toLowerCase();
   const countText = !data ? "" : earnings
     ? `${plural(scanTotal)} ranked${earn.data ? ` · ${earn.data.total} report ${earnWindow}` : ""}`
     : `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}`;
-  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0 };
+  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, price: "", rvol: 0 };
 
 
   return (
@@ -129,10 +145,6 @@ export function ScannerView() {
       </section>
       {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
         checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} />}
-      {(f.signal || f.minScore || f.sort !== "score" || f.size !== 25 || f.page !== 1) && <div className="row-actions">
-        <span className="cap">Current view: {SIGNALS.find((s) => s.id === f.signal)?.label} · score {f.minScore}+ · {SORTS.find((s) => s.id === f.sort)?.label} · {f.size} rows</span>
-        <button type="button" className="btn btn-sm" onClick={() => set(resetAll)}>Reset view</button>
-      </div>}
 
       {leader && !earnings && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 
@@ -148,6 +160,34 @@ export function ScannerView() {
         })}
       </div>
 
+      {!earnings && <section aria-label="Filters" className="filters scanner-filters">
+        <label className="inline-field">Min HSF Score
+          <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
+            {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : `${m}+`}</option>)}
+          </select>
+        </label>
+        <label className="inline-field">Price
+          <select value={f.price} onChange={(e) => set({ price: e.target.value })}>
+            {PRICE_BANDS.map(([id, label]) => <option key={id || "any"} value={id}>{label}</option>)}
+          </select>
+        </label>
+        <label className="inline-field">Rel. volume
+          <select value={f.rvol} onChange={(e) => set({ rvol: Number(e.target.value) })}>
+            {RVOLS.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : `${m}x+`}</option>)}
+          </select>
+        </label>
+        <label className="inline-field">Sort by
+          <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
+            {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          </select>
+        </label>
+        <label className="inline-field">Rows
+          <select value={f.size} onChange={(e) => set({ size: Number(e.target.value) })}>
+            {PAGE_SIZES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+        {(f.signal || narrowing || f.sort !== "score" || f.size !== 25) && <button type="button" className="btn btn-sm" onClick={() => set(resetAll)}>Reset view</button>}
+      </section>}
       {earnings && <EarningsControls f={ef} pro={pro} set={set} />}
       {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
@@ -155,30 +195,8 @@ export function ScannerView() {
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
         onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25 }); }} />
       <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !earningsLocked(ef, pro) ? ef.when : undefined}
-        setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label} />
-      <details className="filter-panel" open={moreActive}>
-        <summary>
-          <span className="strong">More filters</span>
-          <span className="cap">{moreActive ? "Filters active" : "Score floor, sort, and rows"}</span>
-        </summary>
-        <section aria-label="Filters" className="filters">
-          <label className="inline-field">Min HSF Score
-            <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
-              {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : m}</option>)}
-            </select>
-          </label>
-          <label className="inline-field">Sort by
-            <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
-              {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-            </select>
-          </label>
-          <label className="inline-field">Rows
-            <select value={f.size} onChange={(e) => set({ size: Number(e.target.value) })}>
-              {PAGE_SIZES.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
-        </section>
-      </details>
+        setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label}
+        initial={{ min_price: minPrice, max_price: maxPrice, min_rvol: f.rvol || undefined }} />
       {preferences.data && <TablePreferences key={JSON.stringify(preferences.data.table)} initial={preferences.data.table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
       </div>
 
@@ -197,8 +215,8 @@ export function ScannerView() {
           <button type="button" className="btn" onClick={() => set({ page: 1 })}>Back to first page</button>
         </Empty></Card>
       ) : data && data.setups.length === 0 ? (
-        <Card><Empty title={f.signal || f.minScore ? "No setups match these filters." : "The latest scan has no ranked setups."}>
-          {(f.signal || f.minScore) ? <button type="button" className="btn" onClick={() => set({ signal: "", min: 0 })}>Clear filters</button> : null}
+        <Card><Empty title={f.signal || narrowing ? "No setups match these filters." : "The latest scan has no ranked setups."}>
+          {(f.signal || narrowing) ? <button type="button" className="btn" onClick={() => set({ signal: "", min: 0, price: "", rvol: 0 })}>Clear filters</button> : null}
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading || refreshing ? " dim" : ""}`} aria-busy={loading || refreshing}>
