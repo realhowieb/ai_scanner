@@ -183,7 +183,7 @@ export function ScannerView() {
       </div>
 
       {earnings ? (
-        <EarningsResults f={ef} pro={pro} res={earn} onClear={() => set({ all: 1 })} />
+        <EarningsResults f={ef} pro={pro} autoScore={can("can_earnings_autoscore")} res={earn} onClear={() => set({ all: 1 })} />
       ) : lockedSignal ? (
         <Card><Locked title="PreBreakout is part of Premium" plan="premium">The PreBreakout model ranks names before they break out, with its probability.</Locked></Card>
       ) : error && !data ? (

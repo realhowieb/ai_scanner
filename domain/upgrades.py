@@ -29,6 +29,9 @@ UPGRADE_MESSAGES = {
     "can_insider_alerts": (
         "Pro adds insider-buy alerts: HSF tells you when a company insider reports buying shares (SEC Form 4)."
     ),
+    "can_earnings_autoscore": (
+        "Premium scores every earnings reporter automatically, so the Earnings tab shows an HSF Score on each one."
+    ),
     "can_track_record": ("Pro adds historical research so you can inspect how prior HSF observations evolved."),
     "can_ai_notes": (
         "Premium adds AI scan summaries and results chat, setup notes on each result and watchlist rundowns, "

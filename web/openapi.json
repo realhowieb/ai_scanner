@@ -5395,6 +5395,18 @@
    },
    "EarningsScan": {
     "properties": {
+     "auto_scored_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: when the scheduled scan last scored every reporter (ISO); null when not on the plan or no pass yet",
+      "title": "Auto Scored At"
+     },
      "custom_scan_at": {
       "anyOf": [
        {
@@ -5643,7 +5655,8 @@
        {
         "enum": [
          "scan",
-         "custom"
+         "custom",
+         "auto"
         ],
         "type": "string"
        },
@@ -5651,7 +5664,7 @@
         "type": "null"
        }
       ],
-      "description": "scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)",
+      "description": "scan: the latest market scan ranked it; custom: scored by your recent earnings scan (custom_scan_at); auto: Premium, scored by the scheduled pass over every reporter (auto_scored_at); null: not scored (last/chg_pct/gap_pct are live quotes)",
       "title": "Score Source"
      },
      "signals": {

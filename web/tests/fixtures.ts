@@ -3,10 +3,10 @@ import type { Schemas } from "@/api/client";
 
 const FEATURES = ["can_scan_sp500", "can_scan_nasdaq", "can_premarket", "can_afterhours", "can_unusual_volume", "can_export_csv",
   "can_earnings", "can_ai_notes", "can_scan_history", "can_track_record", "can_early_breakout", "can_full_universe",
-  "can_paper_trade", "can_email_alerts", "can_day_trader", "can_scan_alerts", "can_diagnostics", "can_admin_panel"];
+  "can_paper_trade", "can_email_alerts", "can_day_trader", "can_scan_alerts", "can_earnings_autoscore", "can_diagnostics", "can_admin_panel"];
 const PRO = new Set(["can_scan_sp500", "can_scan_nasdaq", "can_premarket", "can_afterhours", "can_unusual_volume", "can_export_csv",
   "can_earnings", "can_scan_history", "can_track_record", "can_email_alerts", "can_day_trader", "can_scan_alerts"]);
-const PREMIUM = new Set([...PRO, "can_ai_notes", "can_early_breakout", "can_full_universe", "can_paper_trade"]);
+const PREMIUM = new Set([...PRO, "can_ai_notes", "can_early_breakout", "can_full_universe", "can_paper_trade", "can_earnings_autoscore"]);
 
 export function me(plan: "basic" | "pro" | "premium"): Schemas["Me"] {
   const on = plan === "basic" ? new Set(["can_scan_sp500"]) : plan === "pro" ? PRO : PREMIUM;
