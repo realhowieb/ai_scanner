@@ -121,3 +121,44 @@ def test_missing_sentry_dsn_does_not_initialize(monkeypatch):
     with mock.patch.object(monitoring, "_get_dsn", return_value=None), mock.patch("sentry_sdk.init") as init:
         assert monitoring.init_sentry("api") is False
     init.assert_not_called()
+
+
+def test_yfinance_error_logs_are_not_sent_to_sentry(monkeypatch):
+    """yfinance's "possibly delisted" ERROR logs are handled noise (PYTHON-AC)."""
+    import logging
+
+    import pytest
+
+    sentry_sdk = pytest.importorskip("sentry_sdk")
+    from sentry_sdk.transport import Transport
+
+    from ui import monitoring
+
+    events: list = []
+
+    class _Capture(Transport):
+        def capture_envelope(self, envelope):
+            for item in envelope.items:
+                if item.type == "event":
+                    events.append(item.payload.json)
+
+    real_init = sentry_sdk.init
+
+    def _init(**kwargs):
+        kwargs["transport"] = _Capture
+        return real_init(**kwargs)
+
+    monkeypatch.setattr(monitoring, "_initialized", False)
+    monkeypatch.setattr(monitoring, "_get_dsn", lambda: "https://public@example.invalid/1")
+    monkeypatch.setattr(sentry_sdk, "init", _init)
+    try:
+        assert monitoring.init_sentry("api") is True
+        logging.getLogger("yfinance").error("$CFLT: possibly delisted; no price data found")
+        logging.getLogger("hsf.test").error("real app error")
+        sentry_sdk.flush()
+    finally:
+        sentry_sdk.get_client().close()
+        monkeypatch.setattr(monitoring, "_initialized", False)
+    messages = [e.get("logentry", {}).get("message") or e.get("message") for e in events]
+    assert "real app error" in messages
+    assert not any("possibly delisted" in str(m) for m in messages)
