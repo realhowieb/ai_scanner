@@ -23807,6 +23807,66 @@
        "title": "Sort",
        "type": "string"
       }
+     },
+     {
+      "description": "Last price at least this",
+      "in": "query",
+      "name": "min_price",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 1000000,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Last price at least this",
+       "title": "Min Price"
+      }
+     },
+     {
+      "description": "Last price at most this",
+      "in": "query",
+      "name": "max_price",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 1000000,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Last price at most this",
+       "title": "Max Price"
+      }
+     },
+     {
+      "description": "Relative volume at least this (x)",
+      "in": "query",
+      "name": "min_rvol",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 1000,
+         "minimum": 0,
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Relative volume at least this (x)",
+       "title": "Min Rvol"
+      }
      }
     ],
     "responses": {

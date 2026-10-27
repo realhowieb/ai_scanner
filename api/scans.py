@@ -74,7 +74,9 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
-                min_score: int = 0, signal: Optional[str] = None, sort: str = "score") -> Dict[str, Any]:
+                min_score: int = 0, signal: Optional[str] = None, sort: str = "score",
+                min_price: Optional[float] = None, max_price: Optional[float] = None,
+                min_rvol: Optional[float] = None) -> Dict[str, Any]:
     from analytics.data_freshness import describe
     from ui.entitlement_view import redact_prebreakout_rows
 
@@ -88,6 +90,15 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     scan_total = len(opps)
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
+    # Price and relative volume use the scan's own numbers, like scan alerts (SCAN_MATCH);
+    # a row without the number never passes that limit.
+    for field, lo, hi in (("last", min_price, max_price), ("rvol", min_rvol, None)):
+        if lo is None and hi is None:
+            continue
+        def keep(o: Dict[str, Any], field: str = field, lo: Optional[float] = lo, hi: Optional[float] = hi) -> bool:
+            v = _num(o.get(field))
+            return v is not None and (lo is None or v >= lo) and (hi is None or v <= hi)
+        opps = [o for o in opps if keep(o)]
     if signal == "prebreakout":
         # The model's strongest names this scan, kept in HSF order (see PREBREAKOUT_TOP_N).
         from ui.results_intelligence import prebreakout_picks

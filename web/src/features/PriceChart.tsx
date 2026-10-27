@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import type { Schemas } from "@/api/client";
 import { compact, etDate, pct, price, shortDate } from "@/lib/format";
 
-import { chartBars, emaCrosses, rsi as rsiOf } from "@/lib/chartBars";
+import { avgVolume, chartBars, emaCrosses, rsi as rsiOf } from "@/lib/chartBars";
 import { InteractivePriceChart } from "./InteractivePriceChart";
 export { emaCrosses } from "@/lib/chartBars";
 
@@ -27,6 +27,7 @@ const OVERLAYS = [
   { key: "sma20", label: "SMA 20" },
   { key: "sma50", label: "SMA 50" },
   { key: "rsi", label: "RSI 14" },
+  { key: "vol", label: "Volume" },
 ] as const;
 type OverlayKey = (typeof OVERLAYS)[number]["key"];
 const MAX_EARNINGS_SLOTS = 10;
@@ -98,8 +99,9 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
   const all = useMemo(() => chartBars(bars), [bars]);
   const ranges = RANGES.filter((_r, k) => k === 0 || all.length > RANGES[k - 1]![1]);
   const [rangePick, setRange] = useState<RangeKey | null>(null);
-  const [on, setOn] = useState<Record<OverlayKey, boolean>>({ ema: true, sma20: false, sma50: false, rsi: true });
+  const [on, setOn] = useState<Record<OverlayKey, boolean>>({ ema: true, sma20: false, sma50: false, rsi: true, vol: true });
   const rsiAll = useMemo(() => rsiOf(all.map((b) => b.close)), [all]);
+  const avgVolAll = useMemo(() => avgVolume(all), [all]);
   const [hover, setHover] = useState<number | null>(null);
   const [W, setW] = useState(DEFAULT_W);
   const fig = useRef<HTMLElement>(null);
@@ -116,7 +118,9 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
   const off = Math.max(0, all.length - range[1]);
   const data = useMemo(() => all.slice(off), [all, off]);
   const rsiData = useMemo(() => rsiAll.slice(off), [rsiAll, off]);
+  const avgVolData = useMemo(() => avgVolAll.slice(off), [avgVolAll, off]);
   const hasRsi = rsiData.some((v) => v != null);
+  const hasVol = data.some((b) => (b.volume ?? 0) > 0);
   const [interactive, setInteractive] = useState(false);
   const hoverDate = useCallback((date: string | null) => {
     const i = date ? data.findIndex((bar) => bar.date === date) : -1;
@@ -205,7 +209,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
           ))}
         </div>
         <div className="chips" role="group" aria-label="Chart lines">
-          {OVERLAYS.filter((o) => (o.key !== "ema" || hasEma) && (o.key !== "rsi" || hasRsi)).map((o) => (
+          {OVERLAYS.filter((o) => (o.key !== "ema" || hasEma) && (o.key !== "rsi" || hasRsi) && (o.key !== "vol" || hasVol)).map((o) => (
             <button key={o.key} type="button" className="chip" aria-pressed={on[o.key]} onClick={() => setOn({ ...on, [o.key]: !on[o.key] })}>
               <i className={`sw ${o.key === "ema" ? "ema-9" : o.key}`} aria-hidden="true" />{o.label}
             </button>
@@ -220,6 +224,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
         <span>C {price(shown.close)}</span>
         {chg != null && <span className={chg >= 0 ? "up" : "down"}>{pct(chg)}</span>}
         {shown.volume != null && <span>{volumeFeed === "iex" ? "IEX vol" : "Vol"} {compact(shown.volume)}</span>}
+        {on.vol && shown.volume != null && avgVolData[shownIdx] != null && <span className="rd-rvol" title="Volume vs the 20-session average">{(shown.volume / avgVolData[shownIdx]!).toFixed(1)}x avg</span>}
         {on.rsi && rsiData[shownIdx] != null && <span className="rd-rsi">RSI {rsiData[shownIdx]!.toFixed(0)}</span>}
         {notes.map((n) => <span key={n} className="rd-note">{n}</span>)}
       </div>
@@ -227,7 +232,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
         role="group" aria-roledescription="chart" tabIndex={interactive ? 0 : -1} aria-hidden={!interactive}
         aria-label={`Interactive daily price from ${etDate(first.date)} to ${etDate(last.date)}, last close ${price(last.close)}. Drag to pan, pinch or scroll to zoom. Arrow keys step through sessions.`}
         onKeyDown={onKey} onBlur={() => setHover(null)}>
-        <InteractivePriceChart bars={data} events={events} overlays={on} rsi={rsiData} earningsDate={earningsDate}
+        <InteractivePriceChart bars={data} events={events} overlays={on} rsi={rsiData} avgVol={avgVolData} earningsDate={earningsDate}
           onReady={setInteractive} onHover={hoverDate} selectedDate={hover != null ? data[hover]?.date : null} />
       </div>
       <svg style={interactive ? { display: "none" } : undefined} aria-hidden={interactive} viewBox={`0 0 ${W} ${H}`} role="img" tabIndex={interactive ? -1 : 0} onKeyDown={onKey}
@@ -256,7 +261,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
             <g key={b.date} className={up ? "c-up" : "c-down"}>
               <line x1={cx} x2={cx} y1={y(b.high ?? Math.max(o, b.close))} y2={y(b.low ?? Math.min(o, b.close))} />
               <rect x={cx - bw / 2} width={bw} y={y(Math.max(o, b.close))} height={Math.max(1, Math.abs(y(o) - y(b.close)))} />
-              <rect className="vol" x={cx - bw / 2} width={bw} y={volBase - vh} height={vh} />
+              {on.vol && <rect className="vol" x={cx - bw / 2} width={bw} y={volBase - vh} height={vh} />}
             </g>
           );
         })}
@@ -308,7 +313,7 @@ export function PriceChart({ bars, events = NO_EVENTS, earningsDate, volumeFeed 
       )}
       <figcaption className="cap">
         {interactive && <span className="chart-help">Drag to pan · Pinch or scroll to zoom · Arrow keys read sessions. </span>}
-        {on.rsi && hasRsi ? "RSI 14 (Wilder) from daily closes; 70 and 30 are the usual overbought and oversold guides. " : ""}{data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.{earningsDate ? ` Next earnings ${shortDate(earningsDate)}.` : ""}{volumeFeed === "iex" ? " Volume counts IEX exchange trades only, a small share of all U.S. volume." : ""}
+        {on.rsi && hasRsi ? "RSI 14 (Wilder) from daily closes; 70 and 30 are the usual overbought and oversold guides. " : ""}{on.vol && hasVol ? "Dashed line in the volume pane is the 20-session average. " : ""}{data.length} daily bars, {etDate(first.date)} to {etDate(last.date)}.{hasEma ? (lastGolden ? ` Last golden cross ${shortDate(all[lastGolden.i]!.date)} (${all.length - 1 - lastGolden.i === 0 ? "latest session" : `${all.length - 1 - lastGolden.i} sessions ago`}).` : " No recent golden cross.") : ""} End-of-day prices, not live.{earningsDate ? ` Next earnings ${shortDate(earningsDate)}.` : ""}{volumeFeed === "iex" ? " Volume counts IEX exchange trades only, a small share of all U.S. volume." : ""}
         {" "}<a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a> · <a href="/licenses/lightweight-charts.txt" target="_blank" rel="noreferrer">License</a>
       </figcaption>
     </figure>

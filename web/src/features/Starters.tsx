@@ -17,7 +17,11 @@ const STARTER_COUNT = 5;
 const STARTER_NAME = "Today's top setups";
 
 /** Adds today's top ranked tickers to `listId`, or to a new default list when there is none. */
-export function StarterWatchlistButton({ tickers, listId, onDone }: { tickers?: string[]; listId?: number | null; onDone: (id: number) => void }) {
+export function StarterWatchlistButton({ tickers, listId, onDone, compact = false }: {
+  tickers?: string[]; listId?: number | null; onDone: (id: number) => void;
+  /** Small button for a checklist row (Getting started) instead of a page's main action. */
+  compact?: boolean;
+}) {
   const latest = useApi(tickers ? null : "starter-top", (signal) =>
     unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT } }, signal })));
   const act = useAction();
@@ -29,6 +33,15 @@ export function StarterWatchlistButton({ tickers, listId, onDone }: { tickers?: 
     onDone(id);
     return true;
   });
+  if (compact) return (
+    <div className="stack-xs gs-quick">
+      <button type="button" className="btn btn-primary btn-sm" onClick={start} disabled={act.busy}>
+        {act.busy ? "Adding…" : `Save today's top ${picks.length}`}
+      </button>
+      <p className="cap">{picks.join(", ")}</p>
+      <ErrorLine error={act.error} />
+    </div>
+  );
   return (
     <div className="stack-sm">
       <div className="row-actions">
@@ -97,5 +110,29 @@ export function StarterAlerts({ onDone }: { onDone: (label: string) => void }) {
       )}
       <ErrorLine error={act.error} />
     </Card>
+  );
+}
+
+/** One tap from Getting started: alert when any stock on the default watchlist crosses HSF 75. */
+export function StarterScoreAlertButton({ onDone }: { onDone: () => void }) {
+  const lists = useApi("watchlists", (signal) => watchlists.list(signal));
+  const act = useAction();
+  const list = lists.data?.find((w) => w.is_default && (w.symbol_count ?? 0) > 0)
+    ?? lists.data?.find((w) => (w.symbol_count ?? 0) > 0);
+  if (!list) return null;
+  const add = () => void act.run(async () => {
+    await alertRules.create({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: list.id, threshold: 75, enabled: true,
+      delivery_channels: ["in_app"] });
+    onDone();
+    return true;
+  });
+  return (
+    <div className="stack-xs gs-quick">
+      <button type="button" className="btn btn-primary btn-sm" onClick={add} disabled={act.busy}>
+        {act.busy ? "Adding…" : "Add score alert"}
+      </button>
+      <p className="cap">When a stock on {list.name} reaches HSF 75</p>
+      <ErrorLine error={act.error} />
+    </div>
   );
 }
