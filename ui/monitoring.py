@@ -13,6 +13,13 @@ _initialized = False
 _STREAMLIT_COMPONENT_LOGGER = "streamlit.web.server.component_request_handler"
 _COOKIE_COMPONENT_BUILD_PATH = "streamlit_cookies_manager/build"
 
+# Third-party loggers whose ERROR records are expected and already handled by our
+# code. yfinance logs "possibly delisted; no price data found" and quote 404s at
+# ERROR for every unknown or delisted ticker (typos, acquired names, test
+# tickers); the price loader records those as skipped symbols, so they are noise
+# in Sentry. Real exceptions raised from yfinance calls are still reported.
+_IGNORED_LOGGERS = ("yfinance",)
+
 
 def _is_handled_cookie_component_directory_read(event: dict[str, Any]) -> bool:
     """Return whether *event* is Streamlit's harmless bare-component probe.
@@ -68,6 +75,10 @@ def init_sentry(component: str = "app") -> bool:
         return False
     try:
         import sentry_sdk
+        from sentry_sdk.integrations.logging import ignore_logger
+
+        for name in _IGNORED_LOGGERS:
+            ignore_logger(name)
 
         sentry_sdk.init(
             dsn=dsn,
