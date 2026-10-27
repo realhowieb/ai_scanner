@@ -36,11 +36,21 @@ def public_stock(ticker: str) -> Dict[str, Any]:
     ranked = bool(d.get("has_setup") and d.get("in_latest_scan") and score is not None and score >= RANKED_MIN)
     reasons = list(d.get("reasons") or [])
     hidden = len(reasons[1:]) + len(d.get("signals") or []) + len(d.get("risks") or []) if ranked else 0
+    price, change = d.get("price"), d.get("change_pct")
+    if price is None:
+        # Not in the scan (or no scan price): fall back to the latest trade, as Watchlists do.
+        try:
+            from api.scans import latest_quotes
+
+            q = (latest_quotes([t]).get("quotes") or {}).get(t) or {}
+            price, change = q.get("last"), q.get("chg_pct")
+        except Exception:
+            pass
     return {
         "ticker": t,
         "name": (known or {}).get("name"),
-        "price": d.get("price"),
-        "change_pct": d.get("change_pct"),
+        "price": price,
+        "change_pct": change,
         "scan_at": d.get("scan_at"),
         "ranked": ranked,
         "hsf_score": round(float(score)) if ranked and score is not None else None,

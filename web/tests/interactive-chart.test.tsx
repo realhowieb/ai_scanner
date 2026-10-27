@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { PriceChart } from "@/features/PriceChart";
-import { chartBars } from "@/lib/chartBars";
+import { avgVolume, chartBars } from "@/lib/chartBars";
 import type { Schemas } from "@/api/client";
 
 const lc = vi.hoisted(() => {
@@ -40,7 +40,7 @@ it("renders interactive candles, volume, signal and cross markers with preserved
   const { unmount } = render(<PriceChart bars={bars} events={[{ date: bars[40]!.date, label: "Breakout" }]} earningsDate="2026-08-05" volumeFeed="iex" />);
   const image = await screen.findByRole("group", { name: /Interactive daily price/ });
   expect(lc.createChart).toHaveBeenCalledTimes(1);
-  expect(lc.createChart.mock.calls[0]![1]).toMatchObject({ layout: { attributionLogo: true }, handleScroll: { vertTouchDrag: false } });
+  expect(lc.createChart.mock.calls[0]![1]).toMatchObject({ layout: { attributionLogo: false }, handleScroll: { vertTouchDrag: false } });
   expect(lc.series[0]!.setData.mock.lastCall![0]).toHaveLength(91);
   expect(lc.series[0]!.setData.mock.lastCall![0].at(-1)).toEqual({ time: "2026-08-05" });
   expect(lc.markers.setMarkers.mock.lastCall![0]).toEqual(expect.arrayContaining([
@@ -69,4 +69,26 @@ it("keeps the keyboard-accessible SVG if the interactive renderer fails", async 
   await waitFor(() => expect(lc.createChart).toHaveBeenCalled());
   expect(screen.getByRole("img", { name: /^Daily price/ })).toHaveAttribute("tabindex", "0");
   expect(screen.queryByRole("group", { name: /Interactive daily price/ })).not.toBeInTheDocument();
+});
+
+it("averages the previous 20 sessions' volume and skips gaps", () => {
+  const vols = Array.from({ length: 25 }, (_, i) => ({ ...bars[i]!, volume: i === 3 ? null : 100 }));
+  const avg = avgVolume(vols);
+  expect(avg.slice(0, 20).every((v) => v === null)).toBe(true);
+  expect(avg[20]).toBe(100);
+  expect(avgVolume(vols.map((b) => ({ ...b, volume: null })))[24]).toBeNull();
+});
+
+it("puts volume in its own pane with the 20-session average, and the Volume chip hides both", async () => {
+  render(<PriceChart bars={bars} />);
+  await screen.findByRole("group", { name: /Interactive daily price/ });
+  expect(lc.createChart.mock.calls[0]![1]).toMatchObject({ layout: { attributionLogo: false } });
+  const avgLine = lc.series[7]!;
+  expect(avgLine.setData.mock.lastCall![0].at(-1)).toEqual({ time: bars.at(-1)!.date, value: expect.closeTo(1078.5, 5) });
+  expect(screen.getByText(/1\.0x avg/)).toBeInTheDocument();
+  expect(screen.getByText(/20-session average/)).toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Volume" }));
+  expect(lc.series[1]!.applyOptions).toHaveBeenLastCalledWith({ visible: false });
+  expect(avgLine.applyOptions).toHaveBeenLastCalledWith({ visible: false });
+  expect(screen.queryByText(/x avg/)).not.toBeInTheDocument();
 });

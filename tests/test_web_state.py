@@ -167,6 +167,24 @@ class PublicStockTests(DataApiBase):
         self.assertIsNone(body["reason"])
         self.assertEqual(body["hidden_insights"], 0)
 
+    def test_unranked_stock_without_scan_price_uses_the_latest_trade(self):
+        detail = {"ticker": "NVDA", "price": None, "change_pct": None, "in_latest_scan": False, "has_setup": False}
+        quotes = {"quotes": {"NVDA": {"last": 181.2, "chg_pct": -1.4}}, "feed": "iex"}
+        with mock.patch("api.scans.stock_detail", return_value=detail), \
+                mock.patch("api.scans.latest_quotes", return_value=quotes) as lq:
+            body = self.client.get("/v1/public/stocks/NVDA").json()
+        lq.assert_called_once_with(["NVDA"])
+        self.assertEqual((body["price"], body["change_pct"]), (181.2, -1.4))
+        self.assertFalse(body["ranked"])
+
+    def test_quote_failure_still_answers_without_a_price(self):
+        detail = {"ticker": "NVDA", "price": None, "in_latest_scan": False, "has_setup": False}
+        with mock.patch("api.scans.stock_detail", return_value=detail), \
+                mock.patch("api.scans.latest_quotes", side_effect=RuntimeError("no keys")):
+            r = self.client.get("/v1/public/stocks/NVDA")
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.json()["price"])
+
     def test_unknown_symbol_is_refused_before_any_lookup(self):
         with mock.patch("api.scans.stock_detail") as detail:
             self.assertEqual(self.client.get("/v1/public/stocks/ZZZZQ").status_code, 404)

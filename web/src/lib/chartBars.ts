@@ -53,3 +53,13 @@ export function rsi(closes: number[], period = 14): (number | null)[] {
   }
   return out;
 }
+
+/** Average volume over the previous `period` sessions (today excluded), aligned with `bars`;
+ * null until enough sessions with volume exist. */
+export function avgVolume(bars: Bar[], period = 20): (number | null)[] {
+  return bars.map((_b, i) => {
+    if (i < period) return null;
+    const window = bars.slice(i - period, i).map((b) => b.volume).filter((v): v is number => v != null && v > 0);
+    return window.length >= Math.ceil(period * 0.75) ? window.reduce((a, b) => a + b, 0) / window.length : null;
+  });
+}

@@ -556,6 +556,9 @@ a.pill:hover { color: var(--text); border-color: var(--line-strong); }
   .filter-panel .filters { align-items: stretch; }
   .inline-field { width: 100%; align-items: flex-start; flex-direction: column; gap: 6px; }
   .inline-field select { width: 100%; }
+  .scanner-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .scanner-filters .inline-field { gap: 4px; font-size: 13px; }
+  .scanner-filters .btn { grid-column: 1 / -1; justify-self: start; }
   .hide-narrow { display: none; }
   .dialog-foot { flex-wrap: wrap; }
   .dialog-foot .btn, .dialog-foot button { flex: 1 1 100%; }
@@ -1045,6 +1048,8 @@ p a:not(.btn), figcaption a { text-decoration: underline; text-decoration-thickn
 .gs-steps li:first-child { border-top: 0; }
 .gs-mark { flex: 0 0 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
 .gs-done .gs-mark { background: var(--up); border-color: var(--up); color: var(--bg); }
+.gs-quick { margin-top: 8px; }
+.gs-quick .cap { overflow-wrap: anywhere; }
 .gs-done .strong { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
 .getting-started .card-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
@@ -1126,6 +1131,7 @@ a.chip { display: inline-flex; align-items: center; }
 .rsi-panel .crosshair-v { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; }
 .rd-rsi { color: var(--sma20); }
 .chart-tools .sw.rsi { background: var(--sma20); }
+.chart-tools .sw.vol { height: 8px; background: linear-gradient(90deg, var(--up) 0 3px, transparent 3px 5px, var(--down) 5px 8px, transparent 8px 10px, var(--up) 10px); opacity: .7; }
 
 /* Brief: the 60-second read above the dashboard */
 .brief-glance { display: flex; flex-direction: column; gap: var(--sp-2); }

@@ -46,8 +46,9 @@ describe("Scanner", () => {
     render(<SessionProvider initialMe={me("basic")}><ScannerView /></SessionProvider>);
     expect(await screen.findAllByRole("link", { name: "AAA" })).not.toHaveLength(0);
     expect(screen.getByRole("link", { name: "Review AAA" })).toHaveAttribute("href", "/stocks/AAA");
-    expect(screen.getByText("More filters")).toBeInTheDocument();
-    expect(screen.getAllByRole("group", { name: "Setup type" })).toHaveLength(1); // chips sit outside the folded filters
+    const filters = screen.getByRole("region", { name: "Filters" }); // inline, not folded away
+    for (const name of ["Min HSF Score", "Price", "Rel. volume", "Sort by", "Rows"]) expect(within(filters).getByLabelText(name)).toBeVisible();
+    expect(screen.getAllByRole("group", { name: "Setup type" })).toHaveLength(1);
     expect(screen.queryByRole("columnheader", { name: "PreBreakout" })).not.toBeInTheDocument();
     expect(screen.getByText(/PreBreakout probability is part of/)).toBeInTheDocument();
     const note = screen.getByRole("note");
@@ -65,6 +66,18 @@ describe("Scanner", () => {
     expect(Object.fromEntries(q)).toEqual({ limit: "25", offset: "25", min_score: "60", signal: "breakout" });
     expect(await screen.findByText("Page 2 of 4")).toBeInTheDocument();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  it("sends price and relative volume filters and offers to reset them", async () => {
+    search = new URLSearchParams("price=5-20&rvol=2");
+    fetchMock.mockResolvedValue(jsonResponse(latest({ total: 12, scan_total: 140, max_results: 100, limited: false })));
+    render(<SessionProvider initialMe={me("pro")}><ScannerView /></SessionProvider>);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const q = urlOf(fetchMock.mock.calls[0]!).searchParams;
+    expect(Object.fromEntries(q)).toEqual({ limit: "25", offset: "0", min_score: "0", min_price: "5", max_price: "20", min_rvol: "2" });
+    expect(await screen.findByText(/140 setups ranked · 12 match your filters/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Price")).toHaveValue("5-20");
+    expect(screen.getByRole("button", { name: "Reset view" })).toBeInTheDocument();
   });
 
   it("counts the whole scan in the headline and names what a filter left", async () => {
