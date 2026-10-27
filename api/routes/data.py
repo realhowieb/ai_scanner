@@ -158,9 +158,17 @@ def register(app: FastAPI) -> None:
                 custom = latest_earnings_job(user)
             except Exception:
                 custom = None
+        auto = None
+        if include_unranked and ent["entitlements"].get("can_earnings_autoscore"):
+            try:   # Premium: every reporter scored by the scheduled scan; none on any error
+                from api.scans import earnings_autoscore
+
+                auto = earnings_autoscore(ent["entitlements"])
+            except Exception:
+                auto = {"at": None, "rows": {}}
         return json_safe(earnings_scan(ent["entitlements"], ent["tier"], window=window, time=time,
                                        include_unranked=include_unranked, watched=_watched_tickers(user),
-                                       custom=custom))
+                                       custom=custom, auto=auto))
 
     @app.get("/v1/scans/latest/movers", response_model=models.ScoreMovers, responses=_AUTH,
              summary="Biggest HSF Score moves since the previous scan")

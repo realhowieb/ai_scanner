@@ -1038,6 +1038,17 @@ def main():
         print(f"[cron] earnings refresh failed: {e}")
         _capture(e)
 
+    # Score every reporter in the next 7 days once per slot (Premium auto-score
+    # on the Earnings tab; the earnings emails reuse it). After the calendar
+    # refresh so the day's first slot sees today's dates.
+    try:
+        from scheduler.earnings_autoscore import run_earnings_autoscore
+
+        run_earnings_autoscore(session)
+    except Exception as e:
+        print(f"[cron] earnings auto-score failed: {_redact(e)}")
+        _capture(e)
+
     # Recompute the signal track record once per day (forward returns of past
     # snapshot candidates). Best-effort; never fail the scan run.
     try:

@@ -377,6 +377,47 @@ class ScanAndStockApiTests(DataApiBase):
             self.assertEqual((len(capped["setups"]), capped["total"], capped["limited"]), (2, 3, True))
         self.assertEqual(self.client.get("/v1/scans/latest/earnings?window=month", headers=self.h).status_code, 422)
 
+    def test_premium_earnings_reporters_are_auto_scored(self):
+        from api.scans import _et_date
+
+        top = [s["ticker"] for s in self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]]
+        today = _et_date()
+        cal = [{"symbol": top[0], "earnings_date": today, "earnings_time": "BMO"},
+               {"symbol": "ZZZQ", "earnings_date": today, "earnings_time": "AMC"},
+               {"symbol": "MINE", "earnings_date": today, "earnings_time": None},
+               {"symbol": "NONE", "earnings_date": today, "earnings_time": None}]
+        stamp = {"id": 7, "created_at": dt.datetime(2026, 10, 27, 14, 35, tzinfo=UTC), "session": "regular"}
+        auto = [{"ticker": "ZZZQ", "score": 61, "primary_setup": "Gapper", "last": 13.0, "chg_pct": 3.0,
+                 "gap_pct": 2.0, "rvol": 1.8, "signals": ["gapper", "prebreakout"], "prob": 0.4},
+                {"ticker": "MINE", "score": 20, "signals": []}, {"ticker": top[0], "score": 1, "signals": []}]
+        job = {"id": "f" * 32, "finished_at": dt.datetime(2026, 10, 27, 15, 0, tzinfo=UTC),
+               "result": {"setups": [{"ticker": "MINE", "score": 44, "signals": []}]}}
+        self.accounts["prem@example.com"] = {**self.accounts["pro@example.com"], "username": "prem@example.com",
+                                             "tier": "premium"}
+        prem = self.auth(self.login("prem@example.com").json()["access_token"])
+        url = "/v1/scans/latest/earnings?include_unranked=true"
+        with mock.patch("db.earnings.fetch_earnings_this_week", return_value=cal), \
+                mock.patch("api.scans.latest_quotes", return_value={"quotes": {}}), \
+                mock.patch("db.earnings_autoscore.latest_stamp", return_value=stamp) as st, \
+                mock.patch("db.earnings_autoscore.load_setups", return_value=auto) as ld, \
+                mock.patch("api.scan_jobs.latest_earnings_job", return_value=job):
+            out = self.client.get(url, headers=prem).json()
+            rows = {s["ticker"]: s for s in out["setups"]}
+            self.assertEqual((rows[top[0]]["score_source"], rows["ZZZQ"]["score_source"],
+                              rows["MINE"]["score_source"], rows["NONE"]["score_source"]),
+                             ("scan", "auto", "custom", None))       # the user's own fresh scan wins
+            self.assertNotEqual(rows[top[0]]["score"], 1)            # a ranked row keeps the market scan's score
+            self.assertEqual((rows["ZZZQ"]["score"], rows["ZZZQ"]["rvol"], rows["MINE"]["score"]), (61, 1.8, 44))
+            self.assertIn("prebreakout", rows["ZZZQ"]["signals"])    # Premium keeps model evidence
+            self.assertEqual(out["auto_scored_at"], "2026-10-27T14:35:00+00:00")
+            self.client.get(url, headers=prem)
+            self.assertEqual((st.call_count, ld.call_count), (1, 1))  # cached between page loads
+            # Pro keeps the per-row "Score it": no auto scores, no read of the shared pass.
+            pro = self.client.get(url, headers=self.h).json()
+            self.assertEqual({s["ticker"]: s["score_source"] for s in pro["setups"]}["ZZZQ"], None)
+            self.assertIsNone(pro["auto_scored_at"])
+            self.assertEqual(ld.call_count, 1)
+
     def test_latest_scan_counts_the_whole_scan_beside_the_filtered_total(self):
         whole = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual(whole["scan_total"], whole["total"])

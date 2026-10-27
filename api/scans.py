@@ -156,11 +156,14 @@ def earnings_tickers(window: str, now: Optional[dt.datetime] = None) -> List[str
 def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
                   time: Optional[str] = None, include_unranked: bool = False,
                   watched: Optional[set] = None, custom: Optional[Dict[str, Any]] = None,
+                  auto: Optional[Dict[str, Any]] = None,
                   now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     """Setups in the latest market scan that report earnings in `window` (ET days), joined with
     the earnings calendar. Soonest day first, then HSF Score. With include_unranked, names that
     report but did not rank in the scan follow each day's ranked names: scored from `custom`
-    (the user's recent earnings custom scan job) when it has them, else with live quotes only."""
+    (the user's recent earnings custom scan job) when it has them, then from `auto` (Premium:
+    the scheduled scan's pass over every reporter, see earnings_autoscore), else with live
+    quotes only."""
     from analytics.data_freshness import describe
     from db.earnings import fetch_earnings_this_week
     from ui.entitlement_view import redact_prebreakout_rows
@@ -206,12 +209,18 @@ def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "to
         k = _ticker_key(o.get("ticker"))
         if k and k not in scored:
             scored[k] = o
+    auto_rows = (auto or {}).get("rows") or {}
     unranked = []
     for key, e in calendar.items():
         if key in seen:
             continue
         o = scored.get(key)
-        row = ({**_scan_row(o), "score_source": "custom"} if o else {"score": None, "signals": [], "score_source": None})
+        if o:
+            row = {**_scan_row(o), "score_source": "custom"}
+        elif key in auto_rows:
+            row = {**_scan_row(auto_rows[key]), "score_source": "auto"}
+        else:
+            row = {"score": None, "signals": [], "score_source": None}
         unranked.append({**row, "ticker": e["ticker"], "rank": None, "ranked": False, **earnings_fields(e, key)})
 
     def order(row: Dict[str, Any]) -> Any:
@@ -226,11 +235,41 @@ def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "to
            "setups": rows}
     if custom and scored:
         out.update(custom_scan_id=custom.get("id"), custom_scan_at=_iso(custom.get("finished_at")))
+    if include_unranked and auto is not None:
+        out["auto_scored_at"] = _iso(auto.get("at")) if auto_rows else None
     if not runs:
         return {**out, "scan_at": None, "stale": None, "freshness": describe(None)}
     return {**out, "scan_at": _iso(runs[0]["created_at"]),
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             "freshness": run_freshness(runs[0])}
+
+
+AUTOSCORE_MAX_AGE_S = 4 * 24 * 3600   # a Friday evening pass still serves Monday's pre-open
+AUTOSCORE_ROWS_TTL_S = 6 * 3600
+
+
+def earnings_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """{at, rows: {ticker key: scanner row}} from the newest scheduled pass over every
+    earnings reporter (Premium auto-score), or {at: None, rows: {}} when there is none.
+    The stamp is checked once a minute; the rows are read once per pass and cached."""
+    from api.today import _cached
+    from db.earnings_autoscore import latest_stamp, load_setups
+
+    stamp = _cached("earnings_autoscore_stamp", lambda: latest_stamp(AUTOSCORE_MAX_AGE_S) or {})
+    if not stamp:
+        return {"at": None, "rows": {}}
+    raw = _cached(("earnings_autoscore", int(stamp["id"])), lambda: load_setups(int(stamp["id"])),
+                  ttl_s=AUTOSCORE_ROWS_TTL_S)
+    if not entitlements.get("can_early_breakout"):
+        from ui.entitlement_view import redact_prebreakout_opportunity
+
+        raw = [_scan_row(redact_prebreakout_opportunity(r, allowed=False)) for r in raw]
+    rows: Dict[str, Dict[str, Any]] = {}
+    for r in raw:
+        k = _ticker_key(r.get("ticker"))
+        if k and k not in rows:
+            rows[k] = r
+    return {"at": stamp.get("created_at"), "rows": rows}
 
 
 def _fill_quotes(rows: List[Dict[str, Any]]) -> None:

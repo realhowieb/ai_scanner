@@ -337,9 +337,10 @@ class EarningsSetup(BaseModel):
     days_until: int = Field(description="Days from today's ET date")
     time: Optional[str] = Field(default=None, description="bmo (before open) / amc (after close) / … when known")
     on_watchlist: bool = False
-    score_source: Optional[Literal["scan", "custom"]] = Field(
+    score_source: Optional[Literal["scan", "custom", "auto"]] = Field(
         default=None, description="scan: the latest market scan ranked it; custom: scored by your recent earnings "
-                                  "scan (custom_scan_at); null: not scored (last/chg_pct/gap_pct are live quotes)")
+                                  "scan (custom_scan_at); auto: Premium, scored by the scheduled pass over every "
+                                  "reporter (auto_scored_at); null: not scored (last/chg_pct/gap_pct are live quotes)")
 
 
 class EarningsScan(BaseModel):
@@ -354,6 +355,8 @@ class EarningsScan(BaseModel):
     max_results: int
     custom_scan_id: Optional[str] = Field(default=None, description="Your earnings scan whose scores fill unranked names")
     custom_scan_at: Optional[str] = Field(default=None, description="When that scan finished (ISO)")
+    auto_scored_at: Optional[str] = Field(default=None, description="Premium: when the scheduled scan last scored "
+                                          "every reporter (ISO); null when not on the plan or no pass yet")
     limited: bool
     setups: List[EarningsSetup] = []
 
