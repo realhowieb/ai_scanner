@@ -82,7 +82,11 @@ button, input, select { font: inherit; color: inherit; }
 .side-upgrade:hover { color: var(--gold); border-color: var(--warn-strong); }
 .side-upgrade .cap { color: var(--text-2); font-size: var(--fs-xs); }
 .side-help { padding: 4px 10px; }
-.topbar { border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 5; }
+.topbar { border-bottom: 1px solid var(--line-soft); position: sticky; top: 0; z-index: 5; }
+/* The blur sits on a pseudo-layer. Newer Safari treats backdrop-filter as the containing block for
+   position: fixed, but Radix's positioner assumes WebKit does not, so a blur on .topbar itself pushed
+   the Account menu right by the sidebar width (off screen). */
+.topbar::before { content: ""; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); pointer-events: none; }
 .topbar-in { max-width: var(--content-max); margin: 0 auto; min-height: var(--header-h); padding: 8px 32px; display: flex; flex-wrap: nowrap; align-items: center; gap: 12px 16px; }
 .top-brand { display: none; }
 .search { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 0 12px; height: 38px; flex: 0 1 380px; min-width: 120px; margin-right: auto; color: var(--muted); }
