@@ -122,3 +122,63 @@ def apply_event(kind: str, data: Dict[str, Any], *, now: Optional[dt.datetime] =
     if kind == "checkout.session.async_payment_failed":
         return {"outcome": "released" if db.release(reservation_id, reason="payment_failed", now=now) else "already_done"}
     return {"outcome": "ignored", "reason": "event_not_used"}
+
+
+# ---- refunds ------------------------------------------------------------------------------------
+
+REFUND_KEY = "founding_refund_request_id"
+REFUND_EVENTS = ("charge.refunded", "refund.failed")
+
+
+def _intent_id(value: Any) -> Optional[str]:
+    ref = value.get("id") if isinstance(value, dict) else value
+    return ref if isinstance(ref, str) and ref else None
+
+
+def refund_event_user(kind: str, data: Dict[str, Any]) -> Optional[str]:
+    """The account behind a founding refund event, or None when it isn't one of ours."""
+    from db import founding_refunds as refunds
+
+    if kind == "charge.refunded":
+        ref = _intent_id(data.get("payment_intent"))
+        if not ref:
+            return None
+        with_payment = refunds.payment_by_reference(ref)
+        return with_payment["user_id"] if with_payment else None
+    if kind == "refund.failed":
+        try:
+            rid = int((data.get("metadata") or {}).get(REFUND_KEY))
+        except (TypeError, ValueError):
+            return None
+        r = refunds.get_request(rid)
+        return r["user_id"] if r else None
+    return None
+
+
+def create_refund(b, *, request: Dict[str, Any]) -> Dict[str, Any]:
+    """Send an approved refund to Stripe. The idempotency key is the request, so retrying
+    an approval can never refund twice."""
+    refund = b.stripe.Refund.create(
+        idempotency_key=f"hsf-founding-refund-{request['id']}",
+        payment_intent=request["payment_reference"],
+        amount=int(request["amount_cents"]),
+        metadata={REFUND_KEY: str(request["id"]), "basis": str(request.get("basis") or "")},
+    )
+    rid = getattr(refund, "id", None) or (refund.get("id") if isinstance(refund, dict) else None)
+    status = getattr(refund, "status", None) or (refund.get("status") if isinstance(refund, dict) else None)
+    return {"id": rid, "status": status}
+
+
+def apply_refund_event(kind: str, data: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    if kind == "charge.refunded":
+        latest = ((data.get("refunds") or {}).get("data") or [{}])[0]
+        return refunds.apply_provider_refund(_intent_id(data.get("payment_intent")) or "",
+                                             refunded_total_cents=int(data.get("amount_refunded") or 0),
+                                             provider_refund_id=latest.get("id"), now=now)
+    if kind == "refund.failed":
+        rid = int((data.get("metadata") or {}).get(REFUND_KEY))
+        r = refunds.mark_failed(rid, str(data.get("failure_reason") or "failed"), "payment_provider", now=now)
+        return {"outcome": "failed", "request_id": rid, "status": r["status"], "user_id": r["user_id"]}
+    return {"outcome": "ignored"}

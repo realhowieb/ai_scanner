@@ -38,6 +38,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "billing_diagnostics": (10, 600),  # admin-only Stripe configuration probes
     "delete_account": (5, 3600), # per account: password attempts on DELETE /v1/me
     "founding_checkout": (20, 600),  # per account: founder checkout starts (each may contact Stripe)
+    "founding_refund": (5, 3600),    # per account: refund requests
     "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
     "client_errors": (30, 600),  # per IP: crash reports from the web app

@@ -228,6 +228,59 @@ def _ensure_schema(conn, sq: bool) -> None:
                 "ON founding_reservations (user_id) WHERE status = 'held'")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_founding_reservations_tier_open "
                 "ON founding_reservations (tier, status, expires_at)")
+    # Payments, refunds and the audit trail (db/founding_refunds.py). One row per
+    # verified payment: the purchase and an upgrade are separate payments.
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS founding_payments (
+            id {pk},
+            membership_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('purchase', 'upgrade')),
+            tier TEXT NOT NULL,
+            payment_reference TEXT NOT NULL UNIQUE,
+            amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+            currency TEXT NOT NULL,
+            paid_at TEXT NOT NULL,
+            refunded_cents INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK (refunded_cents >= 0 AND refunded_cents <= amount_cents)
+        )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_founding_payments_user ON founding_payments (user_id)")
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS founding_refund_requests (
+            id {pk},
+            payment_id INTEGER NOT NULL REFERENCES founding_payments (id),
+            user_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('requested', 'approved', 'denied', 'initiated', 'completed', 'failed')),
+            within_guarantee INTEGER NOT NULL,
+            member_reason TEXT,
+            basis TEXT,
+            amount_cents INTEGER CHECK (amount_cents IS NULL OR amount_cents > 0),
+            decision_reason TEXT,
+            decided_by TEXT,
+            provider_refund_id TEXT UNIQUE,
+            failure_reason TEXT,
+            requested_at TEXT NOT NULL,
+            due_at TEXT NOT NULL,
+            decided_at TEXT,
+            initiated_at TEXT,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL
+        )""")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_founding_refund_one_open ON founding_refund_requests (payment_id) "
+                "WHERE status IN ('requested', 'approved', 'initiated')")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_founding_refund_user ON founding_refund_requests (user_id)")
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS founding_audit_log (
+            id {pk},
+            at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            action TEXT NOT NULL,
+            refund_request_id INTEGER,
+            payment_reference TEXT,
+            detail TEXT
+        )""")
     now = _iso(_utc())
     for tier, capacity in rules.CAPACITY.items():
         cur.execute(_sql("INSERT INTO founding_inventory (tier, capacity, held, sold, updated_at) "
@@ -281,6 +334,13 @@ def _next_number(tx: _Tx) -> int:
         if n not in taken:
             return n
     raise SoldOut("Every founder number is taken.")
+
+
+def _record_payment(tx: _Tx, m: Dict[str, Any], kind: str, tier: str, ref: str, amount: int,
+                    paid_at: dt.datetime, now: dt.datetime) -> None:
+    tx.run("INSERT INTO founding_payments (membership_id, user_id, kind, tier, payment_reference, amount_cents, "
+           "currency, paid_at, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+           (m["id"], m["user_id"], kind, tier, ref, amount, rules.CURRENCY, _iso(paid_at), _iso(now), _iso(now)))
 
 
 def _close_hold(tx: _Tx, res: Dict[str, Any], status: str, now: dt.datetime, *,
@@ -470,6 +530,7 @@ def fulfill(reservation_id: int, *, payment_reference: str, amount_cents: int, c
                    (user_id, number, tier, int(amount_cents), rules.CURRENCY, ref, _iso(paid_at), _iso(paid_at),
                     _iso(rules.term_end(paid_at)), _iso(now), _iso(now)))
             m = tx.one("SELECT * FROM founding_memberships WHERE payment_reference = %s", (ref,))
+            _record_payment(tx, m, "purchase", tier, ref, int(amount_cents), paid_at, now)
             tx.run("UPDATE founding_reservations SET status = 'converted', closed_at = %s, payment_reference = %s, "
                    "membership_id = %s WHERE id = %s", (_iso(now), ref, m["id"], res["id"]))
             return {"outcome": "activated", "membership": m}
@@ -484,6 +545,7 @@ def fulfill(reservation_id: int, *, payment_reference: str, amount_cents: int, c
         tx.run("UPDATE founding_memberships SET tier = %s, upgrade_price_cents = %s, upgrade_payment_reference = %s, "
                "upgraded_at = %s, updated_at = %s WHERE id = %s",
                (tier, int(amount_cents), ref, _iso(paid_at), _iso(now), live["id"]))
+        _record_payment(tx, live, "upgrade", tier, ref, int(amount_cents), paid_at, now)
         tx.run("UPDATE founding_reservations SET status = 'converted', closed_at = %s, payment_reference = %s, "
                "membership_id = %s WHERE id = %s", (_iso(now), ref, live["id"], res["id"]))
         return {"outcome": "upgraded", "membership": tx.one("SELECT * FROM founding_memberships WHERE id = %s", (live["id"],))}

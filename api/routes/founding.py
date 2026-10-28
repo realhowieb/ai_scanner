@@ -1,7 +1,9 @@
 """Founding 100: policy pages (public), the founder offer and a one-time founder checkout
-(signed in), and admin previews of the policies. See api/founding.py."""
+(signed in), refund requests (members) and refund review (admins), and admin previews of
+the policies. See api/founding.py."""
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -119,6 +121,130 @@ class FoundingCancel(BaseModel):
     paid: bool = False
 
 
+PaymentKind = Literal["purchase", "upgrade"]
+RefundStatus = Literal["requested", "approved", "denied", "initiated", "completed", "failed"]
+RefundBasis = Literal["guarantee", "legal_requirement", "billing_error", "service_failure", "discontinuation",
+                      "exception"]
+
+
+class FounderPayment(BaseModel):
+    kind: PaymentKind
+    tier: FounderTier
+    amount_cents: int
+    currency: Optional[str] = None
+    paid_at: str
+    refunded_cents: int
+    deadline: str = Field(description="End of this payment's 14-day guarantee")
+    within_guarantee: bool
+    refundable_cents: int
+
+
+class RefundRequest(BaseModel):
+    id: int
+    kind: PaymentKind
+    status: RefundStatus
+    within_guarantee: bool = Field(description="Asked within 14 days of that payment")
+    member_reason: Optional[str] = None
+    amount_cents: Optional[int] = None
+    requested_at: str
+    due_at: str = Field(description="Approved refunds start by this date (7 business days)")
+    decided_at: Optional[str] = None
+    initiated_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    decision_reason: Optional[str] = None
+
+
+class MyRefunds(BaseModel):
+    payments: List[FounderPayment]
+    requests: List[RefundRequest]
+    guarantee_days: int
+    start_within_business_days: int
+    support_email: str
+
+
+class RefundRequestBody(BaseModel):
+    kind: PaymentKind = Field(description="Which of your payments: the purchase or the upgrade")
+    reason: str = Field(default="", max_length=1000, description="Optional")
+
+
+class AdminRefundRequest(RefundRequest):
+    user_id: str
+    basis: Optional[RefundBasis] = None
+    decided_by: Optional[str] = None
+    provider_refund_id: Optional[str] = None
+    failure_reason: Optional[str] = None
+    tier: FounderTier
+    payment_reference: str
+    paid_cents: int
+    refunded_cents: int
+    paid_at: str
+    number: Optional[str] = None
+    membership_status: str
+    activated_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    upgraded_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class AdminRefunds(BaseModel):
+    requests: List[AdminRefundRequest]
+    refunds_live: bool = Field(description="FOUNDING_REFUNDS_ENABLED: approvals are sent to Stripe")
+    prorated_live: bool = Field(description="FOUNDING_PRORATED_REFUNDS_ENABLED")
+
+
+class AcceptedPolicy(BaseModel):
+    policy_type: str
+    version: int
+    content_hash: str
+    accepted_at: str
+
+
+class AuditEntry(BaseModel):
+    at: str
+    actor: str
+    action: str
+    detail: Optional[str] = None
+
+
+class AdminRefundDetail(BaseModel):
+    request: AdminRefundRequest
+    accepted_policies: List[AcceptedPolicy]
+    audit: List[AuditEntry]
+    refunds_live: bool
+    prorated_live: bool
+
+
+class ProratedQuote(BaseModel):
+    request_id: int
+    kind: PaymentKind
+    paid_cents: int
+    refunded_cents: int
+    start: str
+    end: str
+    stopped_at: str
+    unused_months: str
+    total_months: str
+    amount_cents: int
+
+
+class ApproveBody(BaseModel):
+    basis: RefundBasis
+    amount_cents: Optional[int] = Field(default=None, ge=1, description="Defaults to all that is left, or the "
+                                        "prorated amount for discontinuation")
+    reason: str = Field(default="", max_length=1000)
+    stopped_at: Optional[dt.datetime] = Field(default=None, description="Discontinuation: when service stopped")
+
+
+class DenyBody(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000, description="Shown to the member")
+
+
+class RefundDecision(BaseModel):
+    request: AdminRefundRequest
+    sent: bool = False
+    note: Optional[str] = None
+
+
 def _policy_or_404(policy_type: str, version: Optional[int]) -> Dict[str, Any]:
     p = svc.policy(policy_type, version)
     if not p:
@@ -182,3 +308,54 @@ def register(app: FastAPI) -> None:
     def cancel(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Closes your open founder checkout and releases its seat. A paid one is kept."""
         return svc.cancel_checkout(account)
+
+    @app.get("/v1/founding/refunds/me", response_model=MyRefunds, responses=_AUTH,
+             summary="Your founding payments and refund requests")
+    def my_refunds(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Each payment with its 14-day deadline and what is left to refund, and your requests."""
+        return svc.my_refunds(account)
+
+    @app.post("/v1/founding/refunds/request", response_model=RefundRequest,
+              responses={**_AUTH, 409: {"description": "Already requested, or nothing left to refund"}},
+              summary="Ask for a refund of one of your founding payments")
+    def request_refund(body: RefundRequestBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Always accepted: within 14 days it's covered by the guarantee, later it is reviewed by
+        a person. Access is unchanged until a refund is actually made."""
+        ratelimit.check("founding_refund", _user(account))
+        return svc.request_refund(account, kind=body.kind, reason=body.reason)
+
+    @app.get("/v1/admin/founding/refunds", response_model=AdminRefunds, responses=_ADMIN,
+             summary="Founding refund requests (admin)")
+    def admin_refunds(status: Optional[RefundStatus] = Query(default=None),
+                      account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        return svc.admin_refunds(status)
+
+    @app.get("/v1/admin/founding/refunds/{request_id}", response_model=AdminRefundDetail, responses=_ADMIN,
+             summary="One founding refund request with policies accepted and its audit trail (admin)")
+    def admin_refund(request_id: int, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        return svc.admin_refund(request_id)
+
+    @app.get("/v1/admin/founding/refunds/{request_id}/prorated", response_model=ProratedQuote, responses=_ADMIN,
+             summary="Prorated discontinuation refund for a request (admin, read-only)")
+    def admin_quote(request_id: int, stopped_at: dt.datetime = Query(...),
+                    account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        return svc.admin_quote(request_id, stopped_at)
+
+    @app.post("/v1/admin/founding/refunds/{request_id}/approve", response_model=RefundDecision, responses=_ADMIN,
+              summary="Approve one founding refund request (admin)")
+    def admin_approve(request_id: int, body: ApproveBody,
+                      account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Records the approval; sends it to Stripe only when FOUNDING_REFUNDS_ENABLED=1. Calling
+        it again on an approved request retries the Stripe step (never refunds twice)."""
+        require_admin(account)
+        return svc.admin_approve(account, request_id, basis=body.basis, amount_cents=body.amount_cents,
+                                 reason=body.reason, stopped_at=body.stopped_at)
+
+    @app.post("/v1/admin/founding/refunds/{request_id}/deny", response_model=RefundDecision, responses=_ADMIN,
+              summary="Deny one founding refund request (admin)")
+    def admin_deny(request_id: int, body: DenyBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        return svc.admin_deny(account, request_id, reason=body.reason)

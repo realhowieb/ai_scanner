@@ -355,6 +355,34 @@
     "title": "AIText",
     "type": "object"
    },
+   "AcceptedPolicy": {
+    "properties": {
+     "accepted_at": {
+      "title": "Accepted At",
+      "type": "string"
+     },
+     "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "policy_type": {
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "version": {
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "content_hash",
+     "accepted_at"
+    ],
+    "title": "AcceptedPolicy",
+    "type": "object"
+   },
    "AdminActivity": {
     "properties": {
      "ai_usage": {
@@ -1965,6 +1993,336 @@
      }
     },
     "title": "AdminRecoveryEvent",
+    "type": "object"
+   },
+   "AdminRefundDetail": {
+    "properties": {
+     "accepted_policies": {
+      "items": {
+       "$ref": "#/components/schemas/AcceptedPolicy"
+      },
+      "title": "Accepted Policies",
+      "type": "array"
+     },
+     "audit": {
+      "items": {
+       "$ref": "#/components/schemas/AuditEntry"
+      },
+      "title": "Audit",
+      "type": "array"
+     },
+     "prorated_live": {
+      "title": "Prorated Live",
+      "type": "boolean"
+     },
+     "refunds_live": {
+      "title": "Refunds Live",
+      "type": "boolean"
+     },
+     "request": {
+      "$ref": "#/components/schemas/AdminRefundRequest"
+     }
+    },
+    "required": [
+     "request",
+     "accepted_policies",
+     "audit",
+     "refunds_live",
+     "prorated_live"
+    ],
+    "title": "AdminRefundDetail",
+    "type": "object"
+   },
+   "AdminRefundRequest": {
+    "properties": {
+     "activated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Activated At"
+     },
+     "amount_cents": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount Cents"
+     },
+     "basis": {
+      "anyOf": [
+       {
+        "enum": [
+         "guarantee",
+         "legal_requirement",
+         "billing_error",
+         "service_failure",
+         "discontinuation",
+         "exception"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Basis"
+     },
+     "completed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completed At"
+     },
+     "decided_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decided At"
+     },
+     "decided_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decided By"
+     },
+     "decision_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decision Reason"
+     },
+     "due_at": {
+      "description": "Approved refunds start by this date (7 business days)",
+      "title": "Due At",
+      "type": "string"
+     },
+     "expires_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expires At"
+     },
+     "failure_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Failure Reason"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "initiated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Initiated At"
+     },
+     "kind": {
+      "enum": [
+       "purchase",
+       "upgrade"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "member_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Member Reason"
+     },
+     "membership_status": {
+      "title": "Membership Status",
+      "type": "string"
+     },
+     "number": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Number"
+     },
+     "paid_at": {
+      "title": "Paid At",
+      "type": "string"
+     },
+     "paid_cents": {
+      "title": "Paid Cents",
+      "type": "integer"
+     },
+     "payment_reference": {
+      "title": "Payment Reference",
+      "type": "string"
+     },
+     "provider_refund_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider Refund Id"
+     },
+     "refunded_cents": {
+      "title": "Refunded Cents",
+      "type": "integer"
+     },
+     "requested_at": {
+      "title": "Requested At",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "requested",
+       "approved",
+       "denied",
+       "initiated",
+       "completed",
+       "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     },
+     "updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Updated At"
+     },
+     "upgraded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Upgraded At"
+     },
+     "user_id": {
+      "title": "User Id",
+      "type": "string"
+     },
+     "within_guarantee": {
+      "description": "Asked within 14 days of that payment",
+      "title": "Within Guarantee",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "status",
+     "within_guarantee",
+     "requested_at",
+     "due_at",
+     "user_id",
+     "tier",
+     "payment_reference",
+     "paid_cents",
+     "refunded_cents",
+     "paid_at",
+     "membership_status"
+    ],
+    "title": "AdminRefundRequest",
+    "type": "object"
+   },
+   "AdminRefunds": {
+    "properties": {
+     "prorated_live": {
+      "description": "FOUNDING_PRORATED_REFUNDS_ENABLED",
+      "title": "Prorated Live",
+      "type": "boolean"
+     },
+     "refunds_live": {
+      "description": "FOUNDING_REFUNDS_ENABLED: approvals are sent to Stripe",
+      "title": "Refunds Live",
+      "type": "boolean"
+     },
+     "requests": {
+      "items": {
+       "$ref": "#/components/schemas/AdminRefundRequest"
+      },
+      "title": "Requests",
+      "type": "array"
+     }
+    },
+    "required": [
+     "requests",
+     "refunds_live",
+     "prorated_live"
+    ],
+    "title": "AdminRefunds",
     "type": "object"
    },
    "AdminScanError": {
@@ -3621,6 +3979,93 @@
     "title": "Alerts",
     "type": "object"
    },
+   "ApproveBody": {
+    "properties": {
+     "amount_cents": {
+      "anyOf": [
+       {
+        "minimum": 1.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Defaults to all that is left, or the prorated amount for discontinuation",
+      "title": "Amount Cents"
+     },
+     "basis": {
+      "enum": [
+       "guarantee",
+       "legal_requirement",
+       "billing_error",
+       "service_failure",
+       "discontinuation",
+       "exception"
+      ],
+      "title": "Basis",
+      "type": "string"
+     },
+     "reason": {
+      "default": "",
+      "maxLength": 1000,
+      "title": "Reason",
+      "type": "string"
+     },
+     "stopped_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Discontinuation: when service stopped",
+      "title": "Stopped At"
+     }
+    },
+    "required": [
+     "basis"
+    ],
+    "title": "ApproveBody",
+    "type": "object"
+   },
+   "AuditEntry": {
+    "properties": {
+     "action": {
+      "title": "Action",
+      "type": "string"
+     },
+     "actor": {
+      "title": "Actor",
+      "type": "string"
+     },
+     "at": {
+      "title": "At",
+      "type": "string"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     }
+    },
+    "required": [
+     "at",
+     "actor",
+     "action"
+    ],
+    "title": "AuditEntry",
+    "type": "object"
+   },
    "Bar": {
     "properties": {
      "close": {
@@ -5262,6 +5707,22 @@
     "title": "Delivery",
     "type": "object"
    },
+   "DenyBody": {
+    "properties": {
+     "reason": {
+      "description": "Shown to the member",
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "required": [
+     "reason"
+    ],
+    "title": "DenyBody",
+    "type": "object"
+   },
    "Device": {
     "properties": {
      "app_version": {
@@ -6162,6 +6623,74 @@
      "status"
     ],
     "title": "FounderMembership",
+    "type": "object"
+   },
+   "FounderPayment": {
+    "properties": {
+     "amount_cents": {
+      "title": "Amount Cents",
+      "type": "integer"
+     },
+     "currency": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Currency"
+     },
+     "deadline": {
+      "description": "End of this payment's 14-day guarantee",
+      "title": "Deadline",
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "purchase",
+       "upgrade"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "paid_at": {
+      "title": "Paid At",
+      "type": "string"
+     },
+     "refundable_cents": {
+      "title": "Refundable Cents",
+      "type": "integer"
+     },
+     "refunded_cents": {
+      "title": "Refunded Cents",
+      "type": "integer"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     },
+     "within_guarantee": {
+      "title": "Within Guarantee",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "kind",
+     "tier",
+     "amount_cents",
+     "paid_at",
+     "refunded_cents",
+     "deadline",
+     "within_guarantee",
+     "refundable_cents"
+    ],
+    "title": "FounderPayment",
     "type": "object"
    },
    "FoundingCancel": {
@@ -7634,6 +8163,45 @@
      "ticker"
     ],
     "title": "Mover",
+    "type": "object"
+   },
+   "MyRefunds": {
+    "properties": {
+     "guarantee_days": {
+      "title": "Guarantee Days",
+      "type": "integer"
+     },
+     "payments": {
+      "items": {
+       "$ref": "#/components/schemas/FounderPayment"
+      },
+      "title": "Payments",
+      "type": "array"
+     },
+     "requests": {
+      "items": {
+       "$ref": "#/components/schemas/RefundRequest"
+      },
+      "title": "Requests",
+      "type": "array"
+     },
+     "start_within_business_days": {
+      "title": "Start Within Business Days",
+      "type": "integer"
+     },
+     "support_email": {
+      "title": "Support Email",
+      "type": "string"
+     }
+    },
+    "required": [
+     "payments",
+     "requests",
+     "guarantee_days",
+     "start_within_business_days",
+     "support_email"
+    ],
+    "title": "MyRefunds",
     "type": "object"
    },
    "NewSince": {
@@ -11265,6 +11833,68 @@
     "title": "PremarketGappers",
     "type": "object"
    },
+   "ProratedQuote": {
+    "properties": {
+     "amount_cents": {
+      "title": "Amount Cents",
+      "type": "integer"
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "purchase",
+       "upgrade"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "paid_cents": {
+      "title": "Paid Cents",
+      "type": "integer"
+     },
+     "refunded_cents": {
+      "title": "Refunded Cents",
+      "type": "integer"
+     },
+     "request_id": {
+      "title": "Request Id",
+      "type": "integer"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     },
+     "stopped_at": {
+      "title": "Stopped At",
+      "type": "string"
+     },
+     "total_months": {
+      "title": "Total Months",
+      "type": "string"
+     },
+     "unused_months": {
+      "title": "Unused Months",
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "kind",
+     "paid_cents",
+     "refunded_cents",
+     "start",
+     "end",
+     "stopped_at",
+     "unused_months",
+     "total_months",
+     "amount_cents"
+    ],
+    "title": "ProratedQuote",
+    "type": "object"
+   },
    "ProviderDiagnostic": {
     "properties": {
      "at": {
@@ -11763,6 +12393,177 @@
      "refresh_token"
     ],
     "title": "RefreshBody",
+    "type": "object"
+   },
+   "RefundDecision": {
+    "properties": {
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "request": {
+      "$ref": "#/components/schemas/AdminRefundRequest"
+     },
+     "sent": {
+      "default": false,
+      "title": "Sent",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "request"
+    ],
+    "title": "RefundDecision",
+    "type": "object"
+   },
+   "RefundRequest": {
+    "properties": {
+     "amount_cents": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount Cents"
+     },
+     "completed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completed At"
+     },
+     "decided_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decided At"
+     },
+     "decision_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decision Reason"
+     },
+     "due_at": {
+      "description": "Approved refunds start by this date (7 business days)",
+      "title": "Due At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "initiated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Initiated At"
+     },
+     "kind": {
+      "enum": [
+       "purchase",
+       "upgrade"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "member_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Member Reason"
+     },
+     "requested_at": {
+      "title": "Requested At",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "requested",
+       "approved",
+       "denied",
+       "initiated",
+       "completed",
+       "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "within_guarantee": {
+      "description": "Asked within 14 days of that payment",
+      "title": "Within Guarantee",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "status",
+     "within_guarantee",
+     "requested_at",
+     "due_at"
+    ],
+    "title": "RefundRequest",
+    "type": "object"
+   },
+   "RefundRequestBody": {
+    "properties": {
+     "kind": {
+      "description": "Which of your payments: the purchase or the upgrade",
+      "enum": [
+       "purchase",
+       "upgrade"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "reason": {
+      "default": "",
+      "description": "Optional",
+      "maxLength": 1000,
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "title": "RefundRequestBody",
     "type": "object"
    },
    "RequestDiagnostic": {
@@ -16801,6 +17602,302 @@
     "summary": "Preview a Founding 100 policy (admin)"
    }
   },
+  "/v1/admin/founding/refunds": {
+   "get": {
+    "operationId": "admin_refunds_v1_admin_founding_refunds_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "requested",
+          "approved",
+          "denied",
+          "initiated",
+          "completed",
+          "failed"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminRefunds"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Founding refund requests (admin)"
+   }
+  },
+  "/v1/admin/founding/refunds/{request_id}": {
+   "get": {
+    "operationId": "admin_refund_v1_admin_founding_refunds__request_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminRefundDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "One founding refund request with policies accepted and its audit trail (admin)"
+   }
+  },
+  "/v1/admin/founding/refunds/{request_id}/approve": {
+   "post": {
+    "description": "Records the approval; sends it to Stripe only when FOUNDING_REFUNDS_ENABLED=1. Calling\nit again on an approved request retries the Stripe step (never refunds twice).",
+    "operationId": "admin_approve_v1_admin_founding_refunds__request_id__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ApproveBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RefundDecision"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Approve one founding refund request (admin)"
+   }
+  },
+  "/v1/admin/founding/refunds/{request_id}/deny": {
+   "post": {
+    "operationId": "admin_deny_v1_admin_founding_refunds__request_id__deny_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DenyBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RefundDecision"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Deny one founding refund request (admin)"
+   }
+  },
+  "/v1/admin/founding/refunds/{request_id}/prorated": {
+   "get": {
+    "operationId": "admin_quote_v1_admin_founding_refunds__request_id__prorated_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "stopped_at",
+      "required": true,
+      "schema": {
+       "format": "date-time",
+       "title": "Stopped At",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProratedQuote"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Prorated discontinuation refund for a request (admin, read-only)"
+   }
+  },
   "/v1/admin/health": {
    "get": {
     "operationId": "admin_health_v1_admin_health_get",
@@ -20002,6 +21099,93 @@
      }
     },
     "summary": "A Founding 100 policy (public)"
+   }
+  },
+  "/v1/founding/refunds/me": {
+   "get": {
+    "description": "Each payment with its 14-day deadline and what is left to refund, and your requests.",
+    "operationId": "my_refunds_v1_founding_refunds_me_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MyRefunds"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your founding payments and refund requests"
+   }
+  },
+  "/v1/founding/refunds/request": {
+   "post": {
+    "description": "Always accepted: within 14 days it's covered by the guarantee, later it is reviewed by\na person. Access is unchanged until a refund is actually made.",
+    "operationId": "request_refund_v1_founding_refunds_request_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RefundRequestBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RefundRequest"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "409": {
+      "description": "Already requested, or nothing left to refund"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ask for a refund of one of your founding payments"
    }
   },
   "/v1/journal": {

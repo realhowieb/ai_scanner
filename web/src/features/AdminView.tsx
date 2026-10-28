@@ -14,6 +14,7 @@ import type { Schemas } from "@/api/client";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { AnalyticsTab, ResearchTab } from "@/features/AdminAnalytics";
+import { FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
@@ -23,7 +24,7 @@ type User = Schemas["AdminUser"];
 type Check = Schemas["AdminCheck"];
 const PLANS = ["basic", "pro", "premium"] as const;
 type Plan = (typeof PLANS)[number];
-const TABS = [["users", "Users"], ["analytics", "Analytics"], ["research", "Research"], ["health", "Health"], ["tools", "Tools"]] as const;
+const TABS = [["users", "Users"], ["analytics", "Analytics"], ["research", "Research"], ["health", "Health"], ["founding", "Founding"], ["tools", "Tools"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 const GOOD = new Set(["HEALTHY", "WAITING", "ok"]);
@@ -452,7 +453,7 @@ export function AdminView() {
         ))}
       </div>
       <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
-        : tab === "health" ? <HealthTab /> : <ToolsTab />}</div>
+        : tab === "health" ? <HealthTab /> : tab === "founding" ? <FoundingRefundsTab /> : <ToolsTab />}</div>
     </div>
   );
 }

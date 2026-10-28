@@ -168,6 +168,37 @@ class FoundingPostgresTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_refund_requests_and_provider_events_race_safely(self):
+        from db import founding_refunds as rdb
+
+        self._buy(1, PRO)
+        asked = self._rush(8, lambda _: self._try(lambda: rdb.request_refund("user1@example.com", "purchase", now=T0)))
+        self.assertEqual(sum(1 for a in asked if a), 1, "one open request per payment")
+        (req,) = rdb.requests_for("user1@example.com")
+        rdb.approve(req["id"], "boss@example.com", basis="guarantee", now=T0)
+        ref = f"pi_{PRO}_1"
+        outs = self._rush(8, lambda _: rdb.apply_provider_refund(ref, refunded_total_cents=49_900,
+                                                                 provider_refund_id="re_1", now=T0))
+        self.assertEqual([o["outcome"] for o in outs].count("completed"), 1)
+        self.assertEqual(self.db.membership("user1@example.com")["status"], "refunded")
+        self.assertEqual(self.inv()[PRO], (0, 0))
+        self.assertEqual([a["action"] for a in rdb.history()].count("refund_completed"), 1)
+        conn = _connect(self.schema)
+        try:
+            cur = conn.cursor()
+            with self.assertRaises(Exception):  # refunded can never exceed paid
+                cur.execute("UPDATE founding_payments SET refunded_cents = amount_cents + 1")
+            conn.rollback()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _try(fn):
+        try:
+            return fn()
+        except Exception:
+            return None
+
     def test_constraints_hold_without_the_code(self):
         conn = _connect(self.schema)
         try:
