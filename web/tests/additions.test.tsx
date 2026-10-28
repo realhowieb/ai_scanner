@@ -76,12 +76,12 @@ describe("landing and pricing", () => {
     serve({ "GET /v1/plans": jsonResponse(PLANS), "POST /v1/events": new Response(null, { status: 202 }) });
     const u = userEvent.setup();
     const { unmount } = render(<Landing />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Turn the whole market into a short list.");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Find Market Opportunities with AI-Powered Intelligence");
     expect(await screen.findByText("$25/mo")).toBeInTheDocument();
     expect(screen.getByText("or $250/yr with yearly billing")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Day Trader" }));
     expect(screen.getByRole("img")).toHaveAttribute("src", "/landing/day-current.jpg");
-    await u.click(screen.getByRole("link", { name: "Create a free account" }));
+    await u.click(screen.getByRole("link", { name: "Start Exploring" }));
     await waitFor(() => expect(events().map((e) => e.event)).toEqual(["landing_visit", "primary_cta_click"]));
     expect(events()[0]!.attribution).toEqual({ utm_source: "reddit", utm_campaign: "launch" });
     expect(events()[1]!.surface).toBe("hero");

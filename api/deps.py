@@ -60,10 +60,10 @@ def current_account(request: Request,
     expected = tokens.credential_version(username, account.get("password") or "", settings)
     if not hmac.compare_digest(claims["cv"], expected):
         raise HTTPException(401, _UNAUTHORIZED, headers={"WWW-Authenticate": "Bearer"})
-    from api import referrals
+    from api import plan_access
 
     _note_activity(username)
-    return referrals.apply_to_account({k: v for k, v in account.items() if k != "password"})
+    return plan_access.apply_to_account({k: v for k, v in account.items() if k != "password"})
 
 
 def _note_activity(username: str) -> None:
