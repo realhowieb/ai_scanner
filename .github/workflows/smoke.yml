@@ -48,7 +48,7 @@ jobs:
       - name: Verify billing schema, transactions and concurrency
         env:
           HSF_TEST_BILLING_PG_URL: postgresql://billing_test:billing_test_only@localhost:5432/billing_test
-        run: python -m pytest tests/test_billing_postgres.py -v --tb=short
+        run: python -m pytest tests/test_billing_postgres.py tests/test_founding_postgres.py -v --tb=short
 
   billing-contract:
     runs-on: ubuntu-24.04
