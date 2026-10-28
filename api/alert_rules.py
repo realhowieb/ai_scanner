@@ -587,11 +587,11 @@ def metrics() -> Dict[str, Any]:
 
 # ---- evaluator --------------------------------------------------------------------------------------
 def _plan(rule: Dict[str, Any]) -> Tuple[str, Dict[str, bool], int]:
-    from api import referrals
+    from api import plan_access
     from api.main import entitlements_for
 
-    tier, _until = referrals.effective_tier(str(rule.get("user_id") or ""), rule.get("owner_tier"),
-                                            bool(rule.get("owner_is_admin")))
+    tier = plan_access.effective_tier(str(rule.get("user_id") or ""), rule.get("owner_tier"),
+                                      bool(rule.get("owner_is_admin")))["tier"]
     ent = entitlements_for({"tier": tier, "is_admin": rule.get("owner_is_admin")})
     return ent["tier"], ent["entitlements"], int(ent["alert_limit"])
 
