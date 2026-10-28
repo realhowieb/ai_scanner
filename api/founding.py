@@ -244,3 +244,178 @@ def cancel_checkout(account: Dict[str, Any]) -> Dict[str, Any]:
             return {"released": False, "paid": True}
     return {"released": db.release(int(res["id"]), reason="cancelled")}
 
+
+
+# ---- refunds (db/founding_refunds.py, legal/founding_refunds.v1.txt) ------------------------------
+#
+# Members can always ask for a refund of their own payments (a request is only a record;
+# late ones go to a person). Admins approve or deny one request at a time. Money moves
+# only when FOUNDING_REFUNDS_ENABLED=1: then an approval sends the refund to Stripe, and
+# access changes only when Stripe confirms it (the charge.refunded webhook). Permanent-
+# discontinuation (prorated) approvals also need FOUNDING_PRORATED_REFUNDS_ENABLED=1.
+
+def refunds_live() -> bool:
+    return _flag("FOUNDING_REFUNDS_ENABLED")
+
+
+def _notify(name: str, *args, **kwargs) -> None:
+    try:
+        from services import founding_emails
+
+        getattr(founding_emails, name)(*args, **kwargs)
+    except Exception as e:  # emails never block a refund step
+        log.warning("founding email %s failed: %s", name, type(e).__name__)
+
+
+def _refund_error(e: Exception) -> CodedError:
+    from db import founding as db
+
+    if isinstance(e, db.NotFound):
+        return CodedError(404, str(e) or "No such refund request.", "refund_not_found")
+    status = 400 if getattr(e, "code", "") == "refund_error" else 409
+    return CodedError(status, str(e), getattr(e, "code", "refund_error"))
+
+
+_MEMBER_PAYMENT = ("kind", "tier", "amount_cents", "currency", "paid_at", "refunded_cents", "deadline",
+                   "within_guarantee", "refundable_cents")
+_MEMBER_REQUEST = ("id", "kind", "status", "within_guarantee", "member_reason", "amount_cents", "requested_at",
+                   "due_at", "decided_at", "initiated_at", "completed_at")
+
+
+def _member_request(r: Dict[str, Any]) -> Dict[str, Any]:
+    out = {k: r.get(k) for k in _MEMBER_REQUEST}
+    out["within_guarantee"] = bool(int(r.get("within_guarantee") or 0))
+    # The member sees the reason only for a decision about them (never admin-only failure notes).
+    out["decision_reason"] = r.get("decision_reason") if r.get("status") == "denied" else None
+    return out
+
+
+def my_refunds(account: Dict[str, Any]) -> Dict[str, Any]:
+    """This account's founding payments (with the 14-day deadline) and refund requests."""
+    from db import founding_refunds as refunds
+    from domain import founding_refunds as rrules
+
+    user = str(account["username"]).strip().lower()
+    pays = [{k: p.get(k) for k in _MEMBER_PAYMENT} for p in refunds.payments(user)]
+    return {"payments": pays, "requests": [_member_request(r) for r in refunds.requests_for(user)],
+            "guarantee_days": rrules.GUARANTEE_DAYS, "start_within_business_days": rrules.START_WITHIN_BUSINESS_DAYS,
+            "support_email": policies.details()["support_email"]}
+
+
+def request_refund(account: Dict[str, Any], *, kind: str, reason: str) -> Dict[str, Any]:
+    """Only the signed-in account's own payment of that kind: the browser never names a
+    payment, so it can't point at someone else's."""
+    from db import founding_refunds as refunds
+
+    user = str(account["username"]).strip().lower()
+    try:
+        r = refunds.request_refund(user, kind, reason=reason)
+    except refunds.db.FoundingError as e:
+        raise _refund_error(e) from e
+    _notify("refund_received", user, r)
+    return _member_request(r)
+
+
+_ADMIN_REQUEST = _MEMBER_REQUEST + ("user_id", "basis", "decision_reason", "decided_by", "provider_refund_id",
+                                    "failure_reason", "tier", "payment_reference", "paid_cents", "refunded_cents",
+                                    "paid_at", "membership_number", "former_number", "membership_status",
+                                    "activated_at", "expires_at", "upgraded_at", "updated_at")
+
+
+def _admin_request(r: Dict[str, Any]) -> Dict[str, Any]:
+    out = {k: r.get(k) for k in _ADMIN_REQUEST}
+    out["within_guarantee"] = bool(int(r.get("within_guarantee") or 0))
+    out["number"] = rules.format_number(r.get("membership_number") or r.get("former_number"))
+    return out
+
+
+def admin_refunds(status: Optional[str]) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    return {"requests": [_admin_request(r) for r in refunds.all_requests(status)],
+            "refunds_live": refunds_live(), "prorated_live": _flag("FOUNDING_PRORATED_REFUNDS_ENABLED")}
+
+
+def admin_refund(request_id: int) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    r = refunds.get_request(request_id)
+    if not r:
+        raise CodedError(404, "No such refund request.", "refund_not_found")
+    accepted = [{"policy_type": a["policy_type"], "version": a["version"], "content_hash": a["content_hash"],
+                 "accepted_at": a["accepted_at"]} for a in refunds.accepted_policies(r["payment_reference"])]
+    audit = [{"at": a["at"], "actor": a["actor"], "action": a["action"], "detail": a.get("detail")}
+             for a in refunds.audit_for(request_id)]
+    return {"request": _admin_request(r), "accepted_policies": accepted, "audit": audit,
+            "refunds_live": refunds_live(), "prorated_live": _flag("FOUNDING_PRORATED_REFUNDS_ENABLED")}
+
+
+def admin_quote(request_id: int, stopped_at) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    try:
+        return refunds.prorated_quote(request_id, stopped_at)
+    except refunds.db.FoundingError as e:
+        raise _refund_error(e) from e
+
+
+def _send_to_provider(r: Dict[str, Any], admin: str) -> Dict[str, Any]:
+    """Create the Stripe refund for an approved request. A failure keeps it approved (and
+    retryable through the same approve call); nothing is marked refunded until Stripe
+    confirms it."""
+    from db import founding_refunds as refunds
+
+    if not refunds_live():
+        return {"sent": False, "note": "Refunds are switched off (FOUNDING_REFUNDS_ENABLED). Approved, not sent."}
+    from api import billing
+    from billing_service import founding_checkout
+
+    if not billing.embedded_enabled():
+        refunds.note_provider_error(r["id"], "billing unavailable", admin)
+        return {"sent": False, "note": "Billing is unavailable. Approved; try again later."}
+    try:
+        full = refunds.get_request(r["id"]) or r
+        out = founding_checkout.create_refund(_billing(), request=full)
+        if not out.get("id"):
+            raise RuntimeError("no refund id")
+    except Exception as e:
+        refunds.note_provider_error(r["id"], f"provider error: {type(e).__name__}", admin)
+        log.warning("founding refund %s not sent: %s", r["id"], type(e).__name__)
+        return {"sent": False, "note": "Stripe didn't accept the refund. It stays approved; try again."}
+    refunds.mark_initiated(r["id"], out["id"], admin)
+    return {"sent": True, "note": "Sent to Stripe. Access changes when Stripe confirms the refund."}
+
+
+def admin_approve(account: Dict[str, Any], request_id: int, *, basis: str, amount_cents: Optional[int],
+                  reason: str, stopped_at) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    admin = str(account["username"]).strip().lower()
+    if basis == "discontinuation" and not _flag("FOUNDING_PRORATED_REFUNDS_ENABLED"):
+        raise CodedError(403, "Prorated discontinuation refunds are switched off.", "prorated_refunds_off")
+    before = refunds.get_request(request_id)
+    try:
+        r = refunds.approve(request_id, admin, basis=basis, amount_cents=amount_cents, reason=reason,
+                            stopped_at=stopped_at)
+    except refunds.db.FoundingError as e:
+        raise _refund_error(e) from e
+    first_time = bool(before and before["status"] == "requested")
+    if first_time:
+        _notify("refund_approved", r["user_id"], {**r, "kind": before.get("kind")})
+    sent = _send_to_provider(r, admin)
+    if sent["sent"]:
+        _notify("refund_initiated", r["user_id"], {**r, "kind": before.get("kind") if before else None})
+    return {"request": _admin_request(refunds.get_request(request_id)), **sent}
+
+
+def admin_deny(account: Dict[str, Any], request_id: int, *, reason: str) -> Dict[str, Any]:
+    from db import founding_refunds as refunds
+
+    admin = str(account["username"]).strip().lower()
+    try:
+        r = refunds.deny(request_id, admin, reason=reason)
+    except refunds.db.FoundingError as e:
+        raise _refund_error(e) from e
+    full = refunds.get_request(request_id)
+    _notify("refund_denied", r["user_id"], {**r, "kind": full.get("kind") if full else None})
+    return {"request": _admin_request(full)}

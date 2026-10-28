@@ -14,6 +14,7 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etDate } from "@/lib/format";
 
+import { FounderRefunds } from "./FounderRefunds";
 import { POLICY_LINKS } from "./PolicyPage";
 
 type Disclosure = FoundingOffer["tiers"][number]["disclosure"];
@@ -101,6 +102,7 @@ export function FounderView() {
           </dl>
         </Card>
       )}
+      {m && <FounderRefunds />}
 
       {(!live || offer.upgrade.eligible) && (
         <Card title="Before you pay">
