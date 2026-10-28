@@ -1,8 +1,8 @@
 """Public validation errors without submitted values or validator context."""
 
+from fastapi import HTTPException as FastAPIHTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi import HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException
 
 

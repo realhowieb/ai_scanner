@@ -23,8 +23,8 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
-from db.engine import schema_once
 from db import founding as _db
+from db.engine import schema_once
 from domain import legal as policies
 
 log = logging.getLogger("hsf.legal")

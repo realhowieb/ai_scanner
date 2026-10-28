@@ -94,7 +94,8 @@ class PolicyTextTests(unittest.TestCase):
 
 class DbBase(unittest.TestCase):
     def setUp(self):
-        from db import founding, legal as legal_db
+        from db import founding
+        from db import legal as legal_db
 
         self.fdb, self.ldb = founding, legal_db
         self.conn = sqlite3.connect(":memory:", check_same_thread=False)
@@ -180,8 +181,8 @@ class ApiTests(DbBase):
 
         if not DEPS:
             self.skipTest("needs fastapi, httpx, PyJWT and bcrypt")
-        from tests.test_api_v1 import ApiTestCase
         from api import founding as svc
+        from tests.test_api_v1 import ApiTestCase
 
         self.svc = svc
         svc.clear_cache()
