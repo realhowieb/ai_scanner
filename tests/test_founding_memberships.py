@@ -169,13 +169,13 @@ class StoreTests(StoreBase):
         self.assertEqual((self.inv(PRO)["held"], self.inv(ELITE)["held"]), (0, 1))
         self.assertEqual(self.db.reservation(a["id"])["status"], "released")
 
-    def test_holds_count_against_seats_and_expire_after_15_minutes(self):
+    def test_holds_count_against_seats_and_expire_after_the_hold_time(self):
         for i in range(25):
             self.db.reserve(f"e{i}@x.com", ELITE, now=T0)
         self.assertEqual(self.db.availability(T0)["tiers"][ELITE]["remaining"], 0)
         with self.assertRaises(self.db.SoldOut):
             self.db.reserve("late@x.com", ELITE, now=T0 + dt.timedelta(minutes=14))
-        later = T0 + dt.timedelta(minutes=15)
+        later = T0 + dt.timedelta(minutes=rules.RESERVATION_MINUTES)
         self.assertEqual(self.db.availability(later)["tiers"][ELITE]["remaining"], 25)  # display ignores stale holds
         res = self.db.reserve("late@x.com", ELITE, now=later)  # the sweep frees them
         self.assertEqual(res["status"], "held")
@@ -201,14 +201,14 @@ class StoreTests(StoreBase):
 
     def test_payment_after_the_hold_expired(self):
         res = self.db.reserve("a@x.com", ELITE, now=T0)
-        late = T0 + dt.timedelta(minutes=20)
+        late = T0 + dt.timedelta(minutes=rules.RESERVATION_MINUTES + 5)
         out = self.db.fulfill(res["id"], payment_reference="pi_a", amount_cents=99_900, paid_at=late, now=late)
         self.assertEqual(out["outcome"], "activated")  # a seat was still free
         self.assertEqual(self.inv(ELITE), {"capacity": 25, "held": 0, "sold": 1})
 
     def test_payment_after_expiry_when_sold_out_is_flagged_not_granted(self):
         mine = self.db.reserve("slow@x.com", ELITE, now=T0)
-        later = T0 + dt.timedelta(minutes=16)
+        later = T0 + dt.timedelta(minutes=rules.RESERVATION_MINUTES + 1)
         for i in range(25):
             self.buy(f"e{i}@x.com", ELITE, at=later)
         out = self.db.fulfill(mine["id"], payment_reference="pi_slow", amount_cents=99_900, now=later)
@@ -305,7 +305,7 @@ class StoreTests(StoreBase):
         self.db.reserve("a@x.com", PRO, now=T0)
         self.db.reserve("b@x.com", ELITE, now=T0)
         self.assertEqual(self.db.sweep_holds(T0 + dt.timedelta(minutes=10)), 0)
-        self.assertEqual(self.db.sweep_holds(T0 + dt.timedelta(minutes=15)), 2)
+        self.assertEqual(self.db.sweep_holds(T0 + dt.timedelta(minutes=rules.RESERVATION_MINUTES)), 2)
         self.assertEqual((self.inv(PRO)["held"], self.inv(ELITE)["held"]), (0, 0))
 
     def test_a_failed_step_rolls_everything_back(self):

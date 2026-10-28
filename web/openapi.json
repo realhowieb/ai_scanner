@@ -1813,6 +1813,85 @@
     "title": "AdminPlanCount",
     "type": "object"
    },
+   "AdminPolicy": {
+    "properties": {
+     "content_hash": {
+      "description": "SHA-256 of the text shown; checkout sends it back",
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "effective_date": {
+      "title": "Effective Date",
+      "type": "string"
+     },
+     "missing_details": {
+      "description": "Settings still shown as placeholders",
+      "items": {
+       "type": "string"
+      },
+      "title": "Missing Details",
+      "type": "array"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "policy_type": {
+      "enum": [
+       "founding_terms",
+       "founding_refunds",
+       "privacy"
+      ],
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "sections": {
+      "items": {
+       "$ref": "#/components/schemas/PolicySection"
+      },
+      "title": "Sections",
+      "type": "array"
+     },
+     "status": {
+      "description": "proposed = pending legal review",
+      "enum": [
+       "proposed",
+       "approved"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     },
+     "version": {
+      "title": "Version",
+      "type": "integer"
+     },
+     "versions": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Versions",
+      "type": "array"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "title",
+     "effective_date",
+     "status",
+     "content_hash",
+     "path",
+     "sections",
+     "missing_details",
+     "versions"
+    ],
+    "title": "AdminPolicy",
+    "type": "object"
+   },
    "AdminProviders": {
     "properties": {
      "checked_at": {
@@ -5329,6 +5408,39 @@
     "title": "DeviceBody",
     "type": "object"
    },
+   "Disclosure": {
+    "properties": {
+     "duration": {
+      "title": "Duration",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "payment": {
+      "title": "Payment",
+      "type": "string"
+     },
+     "recurring": {
+      "title": "Recurring",
+      "type": "string"
+     },
+     "refund": {
+      "title": "Refund",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "payment",
+     "duration",
+     "recurring",
+     "refund"
+    ],
+    "title": "Disclosure",
+    "type": "object"
+   },
    "DiscordBody": {
     "properties": {
      "webhook_url": {
@@ -5968,6 +6080,230 @@
      "url"
     ],
     "title": "FilingEvent",
+    "type": "object"
+   },
+   "FounderMembership": {
+    "properties": {
+     "activated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Activated At"
+     },
+     "badge": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Badge"
+     },
+     "expires_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expires At"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "number": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Number"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     },
+     "upgraded_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Upgraded At"
+     }
+    },
+    "required": [
+     "tier",
+     "label",
+     "status"
+    ],
+    "title": "FounderMembership",
+    "type": "object"
+   },
+   "FoundingCancel": {
+    "properties": {
+     "paid": {
+      "default": false,
+      "title": "Paid",
+      "type": "boolean"
+     },
+     "released": {
+      "title": "Released",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "released"
+    ],
+    "title": "FoundingCancel",
+    "type": "object"
+   },
+   "FoundingCheckout": {
+    "properties": {
+     "checkout_url": {
+      "title": "Checkout Url",
+      "type": "string"
+     },
+     "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "checkout_url",
+     "expires_at"
+    ],
+    "title": "FoundingCheckout",
+    "type": "object"
+   },
+   "FoundingCheckoutBody": {
+    "properties": {
+     "acknowledged": {
+      "description": "The unticked-by-default acknowledgment box; must be true",
+      "title": "Acknowledged",
+      "type": "boolean"
+     },
+     "policies": {
+      "description": "The versions and hashes the page showed",
+      "items": {
+       "$ref": "#/components/schemas/PolicyRef"
+      },
+      "maxItems": 6,
+      "title": "Policies",
+      "type": "array"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     },
+     "upgrade": {
+      "default": false,
+      "description": "Founder Pro -> Founder Elite for $500",
+      "title": "Upgrade",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "tier",
+     "acknowledged",
+     "policies"
+    ],
+    "title": "FoundingCheckoutBody",
+    "type": "object"
+   },
+   "FoundingOffer": {
+    "properties": {
+     "acknowledgment": {
+      "title": "Acknowledgment",
+      "type": "string"
+     },
+     "checkout_open": {
+      "title": "Checkout Open",
+      "type": "boolean"
+     },
+     "membership": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/FounderMembership"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "missing_details": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Missing Details",
+      "type": "array"
+     },
+     "open": {
+      "title": "Open",
+      "type": "boolean"
+     },
+     "policies": {
+      "items": {
+       "$ref": "#/components/schemas/OfferPolicy"
+      },
+      "title": "Policies",
+      "type": "array"
+     },
+     "preview": {
+      "description": "Program still off; only admins see this page",
+      "title": "Preview",
+      "type": "boolean"
+     },
+     "tiers": {
+      "items": {
+       "$ref": "#/components/schemas/OfferTier"
+      },
+      "title": "Tiers",
+      "type": "array"
+     },
+     "upgrade": {
+      "$ref": "#/components/schemas/OfferUpgrade"
+     }
+    },
+    "required": [
+     "open",
+     "checkout_open",
+     "preview",
+     "tiers",
+     "upgrade",
+     "policies",
+     "acknowledgment",
+     "missing_details"
+    ],
+    "title": "FoundingOffer",
     "type": "object"
    },
    "FunnelEvent": {
@@ -7487,6 +7823,130 @@
      }
     },
     "title": "NoteBody",
+    "type": "object"
+   },
+   "OfferPolicy": {
+    "properties": {
+     "content_hash": {
+      "maxLength": 64,
+      "minLength": 64,
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "policy_type": {
+      "enum": [
+       "founding_terms",
+       "founding_refunds",
+       "privacy"
+      ],
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     },
+     "version": {
+      "minimum": 1.0,
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "content_hash",
+     "title",
+     "path",
+     "status"
+    ],
+    "title": "OfferPolicy",
+    "type": "object"
+   },
+   "OfferTier": {
+    "properties": {
+     "capacity": {
+      "title": "Capacity",
+      "type": "integer"
+     },
+     "disclosure": {
+      "$ref": "#/components/schemas/Disclosure"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "on_sale": {
+      "title": "On Sale",
+      "type": "boolean"
+     },
+     "plan": {
+      "title": "Plan",
+      "type": "string"
+     },
+     "price_cents": {
+      "title": "Price Cents",
+      "type": "integer"
+     },
+     "remaining": {
+      "title": "Remaining",
+      "type": "integer"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tier",
+     "label",
+     "plan",
+     "price_cents",
+     "capacity",
+     "remaining",
+     "on_sale",
+     "disclosure"
+    ],
+    "title": "OfferTier",
+    "type": "object"
+   },
+   "OfferUpgrade": {
+    "properties": {
+     "disclosure": {
+      "$ref": "#/components/schemas/Disclosure"
+     },
+     "eligible": {
+      "title": "Eligible",
+      "type": "boolean"
+     },
+     "on_sale": {
+      "title": "On Sale",
+      "type": "boolean"
+     },
+     "price_cents": {
+      "title": "Price Cents",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "price_cents",
+     "eligible",
+     "on_sale",
+     "disclosure"
+    ],
+    "title": "OfferUpgrade",
     "type": "object"
    },
    "OperationsSnapshot": {
@@ -10501,6 +10961,157 @@
      "rows"
     ],
     "title": "Plans",
+    "type": "object"
+   },
+   "Policy": {
+    "properties": {
+     "content_hash": {
+      "description": "SHA-256 of the text shown; checkout sends it back",
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "effective_date": {
+      "title": "Effective Date",
+      "type": "string"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "policy_type": {
+      "enum": [
+       "founding_terms",
+       "founding_refunds",
+       "privacy"
+      ],
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "sections": {
+      "items": {
+       "$ref": "#/components/schemas/PolicySection"
+      },
+      "title": "Sections",
+      "type": "array"
+     },
+     "status": {
+      "description": "proposed = pending legal review",
+      "enum": [
+       "proposed",
+       "approved"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     },
+     "version": {
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "title",
+     "effective_date",
+     "status",
+     "content_hash",
+     "path",
+     "sections"
+    ],
+    "title": "Policy",
+    "type": "object"
+   },
+   "PolicyBlock": {
+    "properties": {
+     "list": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "List"
+     },
+     "p": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P"
+     }
+    },
+    "title": "PolicyBlock",
+    "type": "object"
+   },
+   "PolicyRef": {
+    "properties": {
+     "content_hash": {
+      "maxLength": 64,
+      "minLength": 64,
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "policy_type": {
+      "enum": [
+       "founding_terms",
+       "founding_refunds",
+       "privacy"
+      ],
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "version": {
+      "minimum": 1.0,
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "content_hash"
+    ],
+    "title": "PolicyRef",
+    "type": "object"
+   },
+   "PolicySection": {
+    "properties": {
+     "blocks": {
+      "items": {
+       "$ref": "#/components/schemas/PolicyBlock"
+      },
+      "title": "Blocks",
+      "type": "array"
+     },
+     "heading": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Heading"
+     }
+    },
+    "required": [
+     "blocks"
+    ],
+    "title": "PolicySection",
     "type": "object"
    },
    "PortalBody": {
@@ -16117,6 +16728,79 @@
     "x-internal": true
    }
   },
+  "/v1/admin/founding/policies/{policy_type}": {
+   "get": {
+    "description": "Same text as the public page, available while the pages are still off, plus the\nbusiness details still missing and the versions on file.",
+    "operationId": "admin_policy_v1_admin_founding_policies__policy_type__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "policy_type",
+      "required": true,
+      "schema": {
+       "enum": [
+        "founding_terms",
+        "founding_refunds",
+        "privacy"
+       ],
+       "title": "Policy Type",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Version"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminPolicy"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Preview a Founding 100 policy (admin)"
+   }
+  },
   "/v1/admin/health": {
    "get": {
     "operationId": "admin_health_v1_admin_health_get",
@@ -19117,6 +19801,207 @@
      }
     },
     "summary": "Record a signed-out funnel event"
+   }
+  },
+  "/v1/founding/checkout": {
+   "post": {
+    "description": "Holds a seat and returns a Stripe Checkout link for the server-set price. Needs\nacknowledged=true and the current version and hash of all three policies; records\nwhat was accepted against the checkout session.",
+    "operationId": "checkout_v1_founding_checkout_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FoundingCheckoutBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FoundingCheckout"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Acknowledgment missing"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Checkout isn't open"
+     },
+     "409": {
+      "description": "Sold out, policies changed, already a member or a plan to cancel first"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "503": {
+      "description": "Billing unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Start a one-time founder checkout"
+   }
+  },
+  "/v1/founding/checkout/cancel": {
+   "post": {
+    "description": "Closes your open founder checkout and releases its seat. A paid one is kept.",
+    "operationId": "cancel_v1_founding_checkout_cancel_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FoundingCancel"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Give back an unfinished founder checkout"
+   }
+  },
+  "/v1/founding/offer": {
+   "get": {
+    "description": "Prices, seats left, the checkout disclosures, the policy versions to accept and\nthis account's membership. Admins can preview it before the program opens.",
+    "operationId": "get_offer_v1_founding_offer_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FoundingOffer"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "The Founding 100 isn't open"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Founding 100 tiers, seats left and your membership"
+   }
+  },
+  "/v1/founding/policies/{policy_type}": {
+   "get": {
+    "description": "The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,\nor an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1.",
+    "operationId": "get_policy_v1_founding_policies__policy_type__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "policy_type",
+      "required": true,
+      "schema": {
+       "enum": [
+        "founding_terms",
+        "founding_refunds",
+        "privacy"
+       ],
+       "title": "Policy Type",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "version",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Version"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Policy"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "Unknown policy, or the pages aren't published yet"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "A Founding 100 policy (public)"
    }
   },
   "/v1/journal": {

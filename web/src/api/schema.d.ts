@@ -184,6 +184,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/founding/policies/{policy_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview a Founding 100 policy (admin)
+         * @description Same text as the public page, available while the pages are still off, plus the
+         *     business details still missing and the versions on file.
+         */
+        get: operations["admin_policy_v1_admin_founding_policies__policy_type__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/health": {
         parameters: {
             query?: never;
@@ -1146,6 +1167,90 @@ export interface paths {
          *     Stores no email, name or IP. Best effort: always accepted.
          */
         post: operations["funnel_event_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a one-time founder checkout
+         * @description Holds a seat and returns a Stripe Checkout link for the server-set price. Needs
+         *     acknowledged=true and the current version and hash of all three policies; records
+         *     what was accepted against the checkout session.
+         */
+        post: operations["checkout_v1_founding_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/checkout/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give back an unfinished founder checkout
+         * @description Closes your open founder checkout and releases its seat. A paid one is kept.
+         */
+        post: operations["cancel_v1_founding_checkout_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Founding 100 tiers, seats left and your membership
+         * @description Prices, seats left, the checkout disclosures, the policy versions to accept and
+         *     this account's membership. Admins can preview it before the program opens.
+         */
+        get: operations["get_offer_v1_founding_offer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/policies/{policy_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A Founding 100 policy (public)
+         * @description The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,
+         *     or an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1.
+         */
+        get: operations["get_policy_v1_founding_policies__policy_type__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3302,6 +3407,42 @@ export interface components {
             /** Users */
             users: number;
         };
+        /** AdminPolicy */
+        AdminPolicy: {
+            /**
+             * Content Hash
+             * @description SHA-256 of the text shown; checkout sends it back
+             */
+            content_hash: string;
+            /** Effective Date */
+            effective_date: string;
+            /**
+             * Missing Details
+             * @description Settings still shown as placeholders
+             */
+            missing_details: string[];
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Sections */
+            sections: components["schemas"]["PolicySection"][];
+            /**
+             * Status
+             * @description proposed = pending legal review
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+            /** Versions */
+            versions: number[];
+        };
         /** AdminProviders */
         AdminProviders: {
             /** Checked At */
@@ -4550,6 +4691,19 @@ export interface components {
              */
             push_token: string;
         };
+        /** Disclosure */
+        Disclosure: {
+            /** Duration */
+            duration: string;
+            /** Name */
+            name: string;
+            /** Payment */
+            payment: string;
+            /** Recurring */
+            recurring: string;
+            /** Refund */
+            refund: string;
+        };
         /** DiscordBody */
         DiscordBody: {
             /**
@@ -4810,6 +4964,91 @@ export interface components {
             labels: string[];
             /** Url */
             url: string;
+        };
+        /** FounderMembership */
+        FounderMembership: {
+            /** Activated At */
+            activated_at?: string | null;
+            /** Badge */
+            badge?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Label */
+            label: string;
+            /** Number */
+            number?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /** Upgraded At */
+            upgraded_at?: string | null;
+        };
+        /** FoundingCancel */
+        FoundingCancel: {
+            /**
+             * Paid
+             * @default false
+             */
+            paid: boolean;
+            /** Released */
+            released: boolean;
+        };
+        /** FoundingCheckout */
+        FoundingCheckout: {
+            /** Checkout Url */
+            checkout_url: string;
+            /** Expires At */
+            expires_at: string;
+        };
+        /** FoundingCheckoutBody */
+        FoundingCheckoutBody: {
+            /**
+             * Acknowledged
+             * @description The unticked-by-default acknowledgment box; must be true
+             */
+            acknowledged: boolean;
+            /**
+             * Policies
+             * @description The versions and hashes the page showed
+             */
+            policies: components["schemas"]["PolicyRef"][];
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /**
+             * Upgrade
+             * @description Founder Pro -> Founder Elite for $500
+             * @default false
+             */
+            upgrade: boolean;
+        };
+        /** FoundingOffer */
+        FoundingOffer: {
+            /** Acknowledgment */
+            acknowledgment: string;
+            /** Checkout Open */
+            checkout_open: boolean;
+            membership?: components["schemas"]["FounderMembership"] | null;
+            /** Missing Details */
+            missing_details: string[];
+            /** Open */
+            open: boolean;
+            /** Policies */
+            policies: components["schemas"]["OfferPolicy"][];
+            /**
+             * Preview
+             * @description Program still off; only admins see this page
+             */
+            preview: boolean;
+            /** Tiers */
+            tiers: components["schemas"]["OfferTier"][];
+            upgrade: components["schemas"]["OfferUpgrade"];
         };
         /** FunnelEvent */
         FunnelEvent: {
@@ -5442,6 +5681,55 @@ export interface components {
         NoteBody: {
             /** Note */
             note?: string | null;
+        };
+        /** OfferPolicy */
+        OfferPolicy: {
+            /** Content Hash */
+            content_hash: string;
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** OfferTier */
+        OfferTier: {
+            /** Capacity */
+            capacity: number;
+            disclosure: components["schemas"]["Disclosure"];
+            /** Label */
+            label: string;
+            /** On Sale */
+            on_sale: boolean;
+            /** Plan */
+            plan: string;
+            /** Price Cents */
+            price_cents: number;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+        };
+        /** OfferUpgrade */
+        OfferUpgrade: {
+            disclosure: components["schemas"]["Disclosure"];
+            /** Eligible */
+            eligible: boolean;
+            /** On Sale */
+            on_sale: boolean;
+            /** Price Cents */
+            price_cents: number;
         };
         /** OperationsSnapshot */
         OperationsSnapshot: {
@@ -6576,6 +6864,61 @@ export interface components {
             rows: components["schemas"]["PlanRow"][];
             /** Tiers */
             tiers: components["schemas"]["PlanTier"][];
+        };
+        /** Policy */
+        Policy: {
+            /**
+             * Content Hash
+             * @description SHA-256 of the text shown; checkout sends it back
+             */
+            content_hash: string;
+            /** Effective Date */
+            effective_date: string;
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Sections */
+            sections: components["schemas"]["PolicySection"][];
+            /**
+             * Status
+             * @description proposed = pending legal review
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** PolicyBlock */
+        PolicyBlock: {
+            /** List */
+            list?: string[] | null;
+            /** P */
+            p?: string | null;
+        };
+        /** PolicyRef */
+        PolicyRef: {
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Version */
+            version: number;
+        };
+        /** PolicySection */
+        PolicySection: {
+            /** Blocks */
+            blocks: components["schemas"]["PolicyBlock"][];
+            /** Heading */
+            heading?: string | null;
         };
         /** PortalBody */
         PortalBody: {
@@ -9057,6 +9400,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackItem"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_policy_v1_admin_founding_policies__policy_type__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPolicy"];
                 };
             };
             /** @description Not signed in */
@@ -11820,6 +12210,193 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    checkout_v1_founding_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundingCheckoutBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingCheckout"];
+                };
+            };
+            /** @description Acknowledgment missing */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Checkout isn't open */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sold out, policies changed, already a member or a plan to cancel first */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Billing unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_v1_founding_checkout_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingCancel"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    get_offer_v1_founding_offer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingOffer"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Founding 100 isn't open */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    get_policy_v1_founding_policies__policy_type__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Unknown policy, or the pages aren't published yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };

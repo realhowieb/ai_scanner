@@ -32,9 +32,34 @@ def _billing_emails(email, before, after, prior_tier):
         pass
 
 
+def _founding_session(kind, data):
+    """A Founding 100 one-time checkout (billing_service/founding_checkout.py). Absent in
+    the standalone billing service, which never creates one."""
+    try:
+        from billing_service.founding_checkout import is_founding
+    except ImportError:
+        return False
+    return is_founding(kind, data)
+
+
 class Engine:
     def __init__(self, billing, store):
         self.b, self.store = billing, store
+
+    def founding(self, event_id, kind, data):
+        """Founder payments: fulfilled in db/founding under the account lock, recorded in the
+        same event ledger, and never passed to the subscription sync (users.tier)."""
+        from billing_service import founding_checkout
+
+        email = self.b._validate_email(str((data.get("metadata") or {}).get("user_email") or ""))
+        with self.store.transaction(email) as tx:
+            if tx.processed(event_id):
+                return JSONResponse({"received": True, "type": kind, "note": "already_processed"})
+            result = founding_checkout.apply_event(kind, data)
+            tx.mark(event_id, kind)
+        if result["outcome"] == "needs_review":
+            self.b._log.warning("founding payment needs review: event=%s reason=%s", event_id, result.get("reason"))
+        return JSONResponse({"received": True, "type": kind, "founding": result["outcome"]})
 
     def reconcile(self, tx, customer_id=None):
         user = dict(tx.user)
@@ -183,6 +208,8 @@ class Engine:
             if self.store.processed(event_id):
                 return JSONResponse({"received": True, "type": kind, "note": "already_processed"})
             data = event.get("data", {}).get("object", {})
+            if _founding_session(kind, data):
+                return self.founding(event_id, kind, data)
             customer_id = data.get("customer")
             if not isinstance(customer_id, str) or not customer_id:
                 raise HTTPException(400, "Missing Stripe customer")

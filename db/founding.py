@@ -6,7 +6,7 @@ Tables:
 * founding_inventory: one row per tier (founder_pro 75, founder_elite 25) with `held`
   (open checkout holds) and `sold` (memberships that occupy a seat). A CHECK keeps
   held + sold <= capacity, so an oversold seat can't be written even by a bug.
-* founding_reservations: a 15-minute hold on one seat for one account, linked to its
+* founding_reservations: a short hold (domain.founding.RESERVATION_MINUTES) on one seat for one account, linked to its
   checkout session; one open hold per account. Closed holds keep their row (converted,
   released, expired, or needs_review when a verified payment couldn't be fulfilled).
 * founding_memberships: one row per purchase. membership_number 1..100 is UNIQUE and
@@ -251,7 +251,7 @@ def _lock_tiers(tx: _Tx, tiers: List[str]) -> Dict[str, Dict[str, Any]]:
 
 
 def _sweep_expired(tx: _Tx, tier: str, now: dt.datetime) -> int:
-    """Close holds on `tier` whose 15 minutes ran out and give their seats back."""
+    """Close holds on `tier` whose hold time ran out and give their seats back."""
     stale = tx.rows("SELECT id FROM founding_reservations WHERE tier = %s AND status = 'held' AND expires_at <= %s",
                     (tier, _iso(now)))
     if not stale:
@@ -345,6 +345,13 @@ def any_members() -> bool:
     """Cheap check so accounts skip the per-account lookup until the first sale."""
     with _transaction(write=False) as tx:
         return tx.one("SELECT 1 AS x FROM founding_memberships WHERE status = 'active' LIMIT 1") is not None
+
+
+def open_reservation(user_id: str, now: Optional[dt.datetime] = None) -> Optional[Dict[str, Any]]:
+    """The account's unexpired seat hold, if any."""
+    with _transaction(write=False) as tx:
+        return tx.one("SELECT * FROM founding_reservations WHERE user_id = %s AND status = 'held' AND expires_at > %s",
+                      (user_id.strip().lower(), _iso(_utc(now))))
 
 
 def reservation(reservation_id: int) -> Optional[Dict[str, Any]]:

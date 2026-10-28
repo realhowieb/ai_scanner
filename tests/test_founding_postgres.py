@@ -147,6 +147,27 @@ class FoundingPostgresTest(unittest.TestCase):
         self.assertEqual(total, distinct)
         self.assertEqual(total, 30 + outs.count("activated"))  # an upgrade never adds a member
 
+    def test_policy_versions_and_acceptances(self):
+        from db import legal as ldb
+        from domain import legal
+
+        rows = self._rush(8, lambda _: ldb.sync(legal.load(env={})))  # several servers starting together
+        self.assertTrue(all(r == rows[0] for r in rows))
+        ids = [r["id"] for r in rows[0].values()]
+        added = self._rush(6, lambda _: ldb.record_acceptance("a@example.com", ids, checkout_session_id="cs_pg",
+                                                              tier=PRO, kind="purchase", reservation_id=1))
+        self.assertEqual(sum(added), 3)
+        self.assertEqual(len(ldb.acceptances(checkout_session_id="cs_pg")), 3)
+        conn = _connect(self.schema)
+        try:
+            cur = conn.cursor()
+            with self.assertRaises(Exception):  # unknown version id
+                cur.execute("INSERT INTO user_policy_acceptances (user_id, policy_version_id, accepted_at, "
+                            "checkout_session_id) VALUES ('x', 99999, 'n', 'cs_x')")
+            conn.rollback()
+        finally:
+            conn.close()
+
     def test_constraints_hold_without_the_code(self):
         conn = _connect(self.schema)
         try:

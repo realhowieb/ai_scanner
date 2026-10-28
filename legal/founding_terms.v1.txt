@@ -1,0 +1,95 @@
+title: HSF AI Founding Membership Terms
+version: 1
+effective_date: Not yet in effect
+status: proposed
+---
+These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder Elite) sold by {legal_entity} ("HSF AI", "we"). They add to the terms that apply to every HSF AI account. Where the two differ for a founding membership, these terms apply.
+
+## 1. Program eligibility and membership limits
+- Founding memberships are limited to 100 in total: 75 Founder Pro and 25 Founder Elite. When a tier is sold out, it is not offered again.
+- You need an HSF AI account in good standing. Each account can hold one founding membership.
+- If your account has an active monthly or yearly HSF subscription, cancel it before you buy. A founding membership replaces the subscription; it is not added on top of it.
+- A seat is held for you while you complete checkout. If checkout isn't finished in time, the seat is released.
+
+## 2. One-time payment structure
+- Founder Pro: one payment of $499 USD.
+- Founder Elite: one payment of $999 USD.
+- There are no recurring membership charges, and the membership never renews automatically. We will not charge you again for the same membership.
+- Prices are set by HSF AI at checkout. Any taxes required by law are shown before you pay.
+- Payments are processed by our payment provider, Stripe. We never see or store your full card number.
+
+## 3. Five-year membership duration
+- Your membership lasts five calendar years from the moment it is activated. For example, a membership activated at 3:00 pm UTC on 2 November 2026 ends at 3:00 pm UTC on 2 November 2031. A membership activated on 29 February ends on 28 February five years later.
+- The end date is shown on your account page.
+- When the five years end, membership access stops. You can keep using HSF AI on the free Starter plan or choose any plan offered at that time.
+
+## 4. Membership activation
+- Your membership begins only after the payment provider confirms your payment. A started or abandoned checkout does not create a membership.
+- Founder numbers (#001 to #100) are given in the order payments are confirmed, across both tiers.
+- If a payment arrives after your seat hold expired and the tier has since sold out, no membership is created and the payment is refunded in full.
+
+## 5. Included features and exclusions
+- Founder Pro includes the features of the HSF Pro plan, as offered during your membership.
+- Founder Elite includes the features of the HSF Premium plan, as offered during your membership.
+- Features may be improved, changed or replaced during the five years. We will not reduce your membership to fewer features than the plan it is tied to offers paying subscribers at the same time.
+- Premium third-party market data is not included unless we say in writing that it is.
+- Brokerage services, trade execution and investment advice are not included.
+- Features we describe as planned are not part of what you are buying today. They will be marked "planned" until they are available, and we do not promise when, or whether, they will ship.
+
+## 6. Founder Elite API access limitations
+- Personal API access is a planned Founder Elite feature. It is not available today.
+- If it is released, it will be for your own personal, non-commercial use, with usage limits, and may not be resold, shared or used to redistribute HSF AI data.
+- We may suspend API credentials that are misused, shared or that put the service at risk.
+
+## 7. Refund eligibility
+- You can ask for a full refund within 14 calendar days of your purchase, for any reason. See the Founding Membership Refund Policy at {refunds_url} for how refunds work, including refunds of upgrades and refunds if the service is permanently discontinued.
+- Nothing in these terms limits a refund you are entitled to by law.
+
+## 8. Membership cancellation
+- You can stop using your membership at any time. Because there are no recurring charges, there is nothing to cancel to avoid future payments.
+- Stopping use after the 14-day refund window does not by itself entitle you to a refund. The refund policy lists the exceptions.
+- We may end a membership, without refund except where the law requires one, if the account is used for fraud, abuse of the service, sharing of the account, or a serious breach of these terms. We will tell you why.
+- If you delete your HSF AI account, your membership ends. We keep the payment records the law requires us to keep.
+
+## 9. Pro-to-Elite upgrades
+- A Founder Pro member can upgrade to Founder Elite for a one-time payment of $500 USD while Founder Elite seats remain.
+- An upgrade keeps your founder number and your original end date. It does not restart or extend the five years.
+- Your Founder Pro seat is released when the upgrade is confirmed.
+- The $500 upgrade payment has its own 14-day refund window. Refunding only the upgrade returns you to Founder Pro with the same founder number and end date.
+
+## 10. Founder badge and recognition
+- Active members are shown as "HSF AI Founder #NNN" (Founder Pro) or "HSF AI Elite Founder #NNN" (Founder Elite).
+- Your badge stays on your account after the five years end.
+- A membership that is refunded or ended under section 8 loses its badge and founder number.
+- A founding membership, number or badge is recognition only. It is not ownership of, equity in, a loan to, or an investment in {legal_entity} or HSF AI, and carries no right to profits, voting or company information.
+
+## 11. Account security
+- Memberships are personal and cannot be transferred, sold, shared or moved to another account.
+- Keep your password private. You are responsible for activity on your account.
+- Tell us at {support_email} if you think someone else has used your account.
+
+## 12. Financial information disclaimer
+- HSF AI is a market-research and decision-support tool. It does not give financial, investment, tax or legal advice and does not recommend buying or selling any security.
+- Scores, rankings, model outputs and AI-generated text are research estimates, not predictions or guarantees. Market data can be delayed, incomplete or wrong.
+- You are responsible for your own investment decisions.
+
+## 13. Platform availability
+- We work to keep HSF AI available, but we do not promise uninterrupted service. Maintenance, provider outages and market-data problems can make features unavailable for a time.
+- Temporary outages do not extend the membership or create a refund right, except where HSF AI materially fails to provide the purchased service, as described in the refund policy.
+
+## 14. Permanent service discontinuation
+- If HSF AI permanently stops providing the membership service before your five years end, you will be offered a prorated refund for the unused time, as set out in the refund policy.
+- We will give members notice by email before a planned permanent shutdown wherever we reasonably can.
+
+## 15. Changes to membership terms
+- We may update these terms, for example to describe new features. Each version is numbered and kept.
+- The version you accepted at checkout continues to govern your purchase. A later version cannot shorten your five years, add a charge, or reduce your refund rights for a membership you already bought.
+- Changes that only add benefits or explain things more clearly may apply to existing members.
+
+## 16. Governing law
+- These terms are governed by the laws of {governing_law}, without regard to its conflict-of-law rules.
+- Nothing in these terms takes away consumer rights that cannot be waived under the law where you live.
+
+## 17. Support contact information
+- Questions, refund requests and account issues: {support_email}.
+- Provider of the membership: {legal_entity}.
