@@ -184,6 +184,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/founding/policies/{policy_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview a Founding 100 policy (admin)
+         * @description Same text as the public page, available while the pages are still off, plus the
+         *     business details still missing and the versions on file.
+         */
+        get: operations["admin_policy_v1_admin_founding_policies__policy_type__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Founding refund requests (admin) */
+        get: operations["admin_refunds_v1_admin_founding_refunds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/refunds/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One founding refund request with policies accepted and its audit trail (admin) */
+        get: operations["admin_refund_v1_admin_founding_refunds__request_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/refunds/{request_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve one founding refund request (admin)
+         * @description Records the approval; sends it to Stripe only when FOUNDING_REFUNDS_ENABLED=1. Calling
+         *     it again on an approved request retries the Stripe step (never refunds twice).
+         */
+        post: operations["admin_approve_v1_admin_founding_refunds__request_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/refunds/{request_id}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deny one founding refund request (admin) */
+        post: operations["admin_deny_v1_admin_founding_refunds__request_id__deny_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/refunds/{request_id}/prorated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prorated discontinuation refund for a request (admin, read-only) */
+        get: operations["admin_quote_v1_admin_founding_refunds__request_id__prorated_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/health": {
         parameters: {
             query?: never;
@@ -1146,6 +1256,131 @@ export interface paths {
          *     Stores no email, name or IP. Best effort: always accepted.
          */
         post: operations["funnel_event_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a one-time founder checkout
+         * @description Holds a seat and returns a Stripe Checkout link for the server-set price. Needs
+         *     acknowledged=true and the current version and hash of all three policies; records
+         *     what was accepted against the checkout session.
+         */
+        post: operations["checkout_v1_founding_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/checkout/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give back an unfinished founder checkout
+         * @description Closes your open founder checkout and releases its seat. A paid one is kept.
+         */
+        post: operations["cancel_v1_founding_checkout_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Founding 100 tiers, seats left and your membership
+         * @description Prices, seats left, the checkout disclosures, the policy versions to accept and
+         *     this account's membership. Admins can preview it before the program opens.
+         */
+        get: operations["get_offer_v1_founding_offer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/policies/{policy_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A Founding 100 policy (public)
+         * @description The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,
+         *     or an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1.
+         */
+        get: operations["get_policy_v1_founding_policies__policy_type__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/refunds/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your founding payments and refund requests
+         * @description Each payment with its 14-day deadline and what is left to refund, and your requests.
+         */
+        get: operations["my_refunds_v1_founding_refunds_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/refunds/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for a refund of one of your founding payments
+         * @description Always accepted: within 14 days it's covered by the guarantee, later it is reviewed by
+         *     a person. Access is unchanged until a refund is actually made.
+         */
+        post: operations["request_refund_v1_founding_refunds_request_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2850,6 +3085,17 @@ export interface components {
             /** Ticker */
             ticker?: string | null;
         };
+        /** AcceptedPolicy */
+        AcceptedPolicy: {
+            /** Accepted At */
+            accepted_at: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Policy Type */
+            policy_type: string;
+            /** Version */
+            version: number;
+        };
         /** AdminActivity */
         AdminActivity: {
             /** Ai Usage */
@@ -3302,6 +3548,42 @@ export interface components {
             /** Users */
             users: number;
         };
+        /** AdminPolicy */
+        AdminPolicy: {
+            /**
+             * Content Hash
+             * @description SHA-256 of the text shown; checkout sends it back
+             */
+            content_hash: string;
+            /** Effective Date */
+            effective_date: string;
+            /**
+             * Missing Details
+             * @description Settings still shown as placeholders
+             */
+            missing_details: string[];
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Sections */
+            sections: components["schemas"]["PolicySection"][];
+            /**
+             * Status
+             * @description proposed = pending legal review
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+            /** Versions */
+            versions: number[];
+        };
         /** AdminProviders */
         AdminProviders: {
             /** Checked At */
@@ -3320,6 +3602,107 @@ export interface components {
             result?: string | null;
             /** Started At */
             started_at?: string | null;
+        };
+        /** AdminRefundDetail */
+        AdminRefundDetail: {
+            /** Accepted Policies */
+            accepted_policies: components["schemas"]["AcceptedPolicy"][];
+            /** Audit */
+            audit: components["schemas"]["AuditEntry"][];
+            /** Prorated Live */
+            prorated_live: boolean;
+            /** Refunds Live */
+            refunds_live: boolean;
+            request: components["schemas"]["AdminRefundRequest"];
+        };
+        /** AdminRefundRequest */
+        AdminRefundRequest: {
+            /** Activated At */
+            activated_at?: string | null;
+            /** Amount Cents */
+            amount_cents?: number | null;
+            /** Basis */
+            basis?: ("guarantee" | "legal_requirement" | "billing_error" | "service_failure" | "discontinuation" | "exception") | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decision Reason */
+            decision_reason?: string | null;
+            /**
+             * Due At
+             * @description Approved refunds start by this date (7 business days)
+             */
+            due_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Failure Reason */
+            failure_reason?: string | null;
+            /** Id */
+            id: number;
+            /** Initiated At */
+            initiated_at?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "purchase" | "upgrade";
+            /** Member Reason */
+            member_reason?: string | null;
+            /** Membership Status */
+            membership_status: string;
+            /** Number */
+            number?: string | null;
+            /** Paid At */
+            paid_at: string;
+            /** Paid Cents */
+            paid_cents: number;
+            /** Payment Reference */
+            payment_reference: string;
+            /** Provider Refund Id */
+            provider_refund_id?: string | null;
+            /** Refunded Cents */
+            refunded_cents: number;
+            /** Requested At */
+            requested_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "requested" | "approved" | "denied" | "initiated" | "completed" | "failed";
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /** Updated At */
+            updated_at?: string | null;
+            /** Upgraded At */
+            upgraded_at?: string | null;
+            /** User Id */
+            user_id: string;
+            /**
+             * Within Guarantee
+             * @description Asked within 14 days of that payment
+             */
+            within_guarantee: boolean;
+        };
+        /** AdminRefunds */
+        AdminRefunds: {
+            /**
+             * Prorated Live
+             * @description FOUNDING_PRORATED_REFUNDS_ENABLED
+             */
+            prorated_live: boolean;
+            /**
+             * Refunds Live
+             * @description FOUNDING_REFUNDS_ENABLED: approvals are sent to Stripe
+             */
+            refunds_live: boolean;
+            /** Requests */
+            requests: components["schemas"]["AdminRefundRequest"][];
         };
         /** AdminScanError */
         AdminScanError: {
@@ -3866,6 +4249,40 @@ export interface components {
             };
             /** Used */
             used: number;
+        };
+        /** ApproveBody */
+        ApproveBody: {
+            /**
+             * Amount Cents
+             * @description Defaults to all that is left, or the prorated amount for discontinuation
+             */
+            amount_cents?: number | null;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "guarantee" | "legal_requirement" | "billing_error" | "service_failure" | "discontinuation" | "exception";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Stopped At
+             * @description Discontinuation: when service stopped
+             */
+            stopped_at?: string | null;
+        };
+        /** AuditEntry */
+        AuditEntry: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string;
+            /** At */
+            at: string;
+            /** Detail */
+            detail?: string | null;
         };
         /** Bar */
         Bar: {
@@ -4499,6 +4916,14 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DenyBody */
+        DenyBody: {
+            /**
+             * Reason
+             * @description Shown to the member
+             */
+            reason: string;
+        };
         /** Device */
         Device: {
             /** App Version */
@@ -4549,6 +4974,19 @@ export interface components {
              * @description Token from APNs, FCM or Expo
              */
             push_token: string;
+        };
+        /** Disclosure */
+        Disclosure: {
+            /** Duration */
+            duration: string;
+            /** Name */
+            name: string;
+            /** Payment */
+            payment: string;
+            /** Recurring */
+            recurring: string;
+            /** Refund */
+            refund: string;
         };
         /** DiscordBody */
         DiscordBody: {
@@ -4810,6 +5248,121 @@ export interface components {
             labels: string[];
             /** Url */
             url: string;
+        };
+        /** FounderMembership */
+        FounderMembership: {
+            /** Activated At */
+            activated_at?: string | null;
+            /** Badge */
+            badge?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Label */
+            label: string;
+            /** Number */
+            number?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /** Upgraded At */
+            upgraded_at?: string | null;
+        };
+        /** FounderPayment */
+        FounderPayment: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** Currency */
+            currency?: string | null;
+            /**
+             * Deadline
+             * @description End of this payment's 14-day guarantee
+             */
+            deadline: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "purchase" | "upgrade";
+            /** Paid At */
+            paid_at: string;
+            /** Refundable Cents */
+            refundable_cents: number;
+            /** Refunded Cents */
+            refunded_cents: number;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /** Within Guarantee */
+            within_guarantee: boolean;
+        };
+        /** FoundingCancel */
+        FoundingCancel: {
+            /**
+             * Paid
+             * @default false
+             */
+            paid: boolean;
+            /** Released */
+            released: boolean;
+        };
+        /** FoundingCheckout */
+        FoundingCheckout: {
+            /** Checkout Url */
+            checkout_url: string;
+            /** Expires At */
+            expires_at: string;
+        };
+        /** FoundingCheckoutBody */
+        FoundingCheckoutBody: {
+            /**
+             * Acknowledged
+             * @description The unticked-by-default acknowledgment box; must be true
+             */
+            acknowledged: boolean;
+            /**
+             * Policies
+             * @description The versions and hashes the page showed
+             */
+            policies: components["schemas"]["PolicyRef"][];
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+            /**
+             * Upgrade
+             * @description Founder Pro -> Founder Elite for $500
+             * @default false
+             */
+            upgrade: boolean;
+        };
+        /** FoundingOffer */
+        FoundingOffer: {
+            /** Acknowledgment */
+            acknowledgment: string;
+            /** Checkout Open */
+            checkout_open: boolean;
+            membership?: components["schemas"]["FounderMembership"] | null;
+            /** Missing Details */
+            missing_details: string[];
+            /** Open */
+            open: boolean;
+            /** Policies */
+            policies: components["schemas"]["OfferPolicy"][];
+            /**
+             * Preview
+             * @description Program still off; only admins see this page
+             */
+            preview: boolean;
+            /** Tiers */
+            tiers: components["schemas"]["OfferTier"][];
+            upgrade: components["schemas"]["OfferUpgrade"];
         };
         /** FunnelEvent */
         FunnelEvent: {
@@ -5346,6 +5899,19 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** MyRefunds */
+        MyRefunds: {
+            /** Guarantee Days */
+            guarantee_days: number;
+            /** Payments */
+            payments: components["schemas"]["FounderPayment"][];
+            /** Requests */
+            requests: components["schemas"]["RefundRequest"][];
+            /** Start Within Business Days */
+            start_within_business_days: number;
+            /** Support Email */
+            support_email: string;
+        };
         /** NewSince */
         NewSince: {
             /**
@@ -5442,6 +6008,55 @@ export interface components {
         NoteBody: {
             /** Note */
             note?: string | null;
+        };
+        /** OfferPolicy */
+        OfferPolicy: {
+            /** Content Hash */
+            content_hash: string;
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** OfferTier */
+        OfferTier: {
+            /** Capacity */
+            capacity: number;
+            disclosure: components["schemas"]["Disclosure"];
+            /** Label */
+            label: string;
+            /** On Sale */
+            on_sale: boolean;
+            /** Plan */
+            plan: string;
+            /** Price Cents */
+            price_cents: number;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+        };
+        /** OfferUpgrade */
+        OfferUpgrade: {
+            disclosure: components["schemas"]["Disclosure"];
+            /** Eligible */
+            eligible: boolean;
+            /** On Sale */
+            on_sale: boolean;
+            /** Price Cents */
+            price_cents: number;
         };
         /** OperationsSnapshot */
         OperationsSnapshot: {
@@ -6577,6 +7192,61 @@ export interface components {
             /** Tiers */
             tiers: components["schemas"]["PlanTier"][];
         };
+        /** Policy */
+        Policy: {
+            /**
+             * Content Hash
+             * @description SHA-256 of the text shown; checkout sends it back
+             */
+            content_hash: string;
+            /** Effective Date */
+            effective_date: string;
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Sections */
+            sections: components["schemas"]["PolicySection"][];
+            /**
+             * Status
+             * @description proposed = pending legal review
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** PolicyBlock */
+        PolicyBlock: {
+            /** List */
+            list?: string[] | null;
+            /** P */
+            p?: string | null;
+        };
+        /** PolicyRef */
+        PolicyRef: {
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            /** Version */
+            version: number;
+        };
+        /** PolicySection */
+        PolicySection: {
+            /** Blocks */
+            blocks: components["schemas"]["PolicyBlock"][];
+            /** Heading */
+            heading?: string | null;
+        };
         /** PortalBody */
         PortalBody: {
             /**
@@ -6643,6 +7313,32 @@ export interface components {
              * @default []
              */
             rows: components["schemas"]["PremarketGapper"][];
+        };
+        /** ProratedQuote */
+        ProratedQuote: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** End */
+            end: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "purchase" | "upgrade";
+            /** Paid Cents */
+            paid_cents: number;
+            /** Refunded Cents */
+            refunded_cents: number;
+            /** Request Id */
+            request_id: number;
+            /** Start */
+            start: string;
+            /** Stopped At */
+            stopped_at: string;
+            /** Total Months */
+            total_months: string;
+            /** Unused Months */
+            unused_months: string;
         };
         /** ProviderDiagnostic */
         ProviderDiagnostic: {
@@ -6871,6 +7567,71 @@ export interface components {
         RefreshBody: {
             /** Refresh Token */
             refresh_token: string;
+        };
+        /** RefundDecision */
+        RefundDecision: {
+            /** Note */
+            note?: string | null;
+            request: components["schemas"]["AdminRefundRequest"];
+            /**
+             * Sent
+             * @default false
+             */
+            sent: boolean;
+        };
+        /** RefundRequest */
+        RefundRequest: {
+            /** Amount Cents */
+            amount_cents?: number | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decision Reason */
+            decision_reason?: string | null;
+            /**
+             * Due At
+             * @description Approved refunds start by this date (7 business days)
+             */
+            due_at: string;
+            /** Id */
+            id: number;
+            /** Initiated At */
+            initiated_at?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "purchase" | "upgrade";
+            /** Member Reason */
+            member_reason?: string | null;
+            /** Requested At */
+            requested_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "requested" | "approved" | "denied" | "initiated" | "completed" | "failed";
+            /**
+             * Within Guarantee
+             * @description Asked within 14 days of that payment
+             */
+            within_guarantee: boolean;
+        };
+        /** RefundRequestBody */
+        RefundRequestBody: {
+            /**
+             * Kind
+             * @description Which of your payments: the purchase or the upgrade
+             * @enum {string}
+             */
+            kind: "purchase" | "upgrade";
+            /**
+             * Reason
+             * @description Optional
+             * @default
+             */
+            reason: string;
         };
         /** RequestDiagnostic */
         RequestDiagnostic: {
@@ -9057,6 +9818,288 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackItem"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_policy_v1_admin_founding_policies__policy_type__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPolicy"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_refunds_v1_admin_founding_refunds_get: {
+        parameters: {
+            query?: {
+                status?: ("requested" | "approved" | "denied" | "initiated" | "completed" | "failed") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRefunds"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_refund_v1_admin_founding_refunds__request_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRefundDetail"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_approve_v1_admin_founding_refunds__request_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundDecision"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_deny_v1_admin_founding_refunds__request_id__deny_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DenyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundDecision"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_quote_v1_admin_founding_refunds__request_id__prorated_get: {
+        parameters: {
+            query: {
+                stopped_at: string;
+            };
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProratedQuote"];
                 };
             };
             /** @description Not signed in */
@@ -11820,6 +12863,276 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    checkout_v1_founding_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundingCheckoutBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingCheckout"];
+                };
+            };
+            /** @description Acknowledgment missing */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Checkout isn't open */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sold out, policies changed, already a member or a plan to cancel first */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Billing unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_v1_founding_checkout_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingCancel"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    get_offer_v1_founding_offer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingOffer"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Founding 100 isn't open */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    get_policy_v1_founding_policies__policy_type__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Unknown policy, or the pages aren't published yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    my_refunds_v1_founding_refunds_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyRefunds"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    request_refund_v1_founding_refunds_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefundRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundRequest"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already requested, or nothing left to refund */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };

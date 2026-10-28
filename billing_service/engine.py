@@ -16,7 +16,10 @@ except ImportError:  # standalone Render root
 
 EVENTS = {"checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed",
           "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
-          "invoice.paid", "invoice.payment_failed"}
+          "invoice.paid", "invoice.payment_failed",
+          # Founding 100 refunds (billing_service/founding_checkout.py); other refunds are ignored.
+          "charge.refunded", "refund.failed"}
+REFUND_ONLY = {"charge.refunded", "refund.failed"}
 
 
 def _billing_emails(email, before, after, prior_tier):
@@ -32,9 +35,71 @@ def _billing_emails(email, before, after, prior_tier):
         pass
 
 
+def _founding_session(kind, data):
+    """A Founding 100 one-time checkout (billing_service/founding_checkout.py). Absent in
+    the standalone billing service, which never creates one."""
+    try:
+        from billing_service.founding_checkout import is_founding
+    except ImportError:
+        return False
+    return is_founding(kind, data)
+
+
+def _founding_refund_owner(kind, data):
+    try:
+        from billing_service.founding_checkout import refund_event_user
+    except ImportError:
+        return None
+    return refund_event_user(kind, data)
+
+
+def _founding_notify(name, *args, **kwargs):
+    """Founder emails (services/founding_emails.py); never fail a webhook."""
+    try:
+        from services import founding_emails
+
+        getattr(founding_emails, name)(*args, **kwargs)
+    except Exception:
+        pass
+
+
 class Engine:
     def __init__(self, billing, store):
         self.b, self.store = billing, store
+
+    def founding(self, event_id, kind, data):
+        """Founder payments: fulfilled in db/founding under the account lock, recorded in the
+        same event ledger, and never passed to the subscription sync (users.tier)."""
+        from billing_service import founding_checkout
+
+        email = self.b._validate_email(str((data.get("metadata") or {}).get("user_email") or ""))
+        with self.store.transaction(email) as tx:
+            if tx.processed(event_id):
+                return JSONResponse({"received": True, "type": kind, "note": "already_processed"})
+            result = founding_checkout.apply_event(kind, data)
+            tx.mark(event_id, kind)
+        if result["outcome"] == "needs_review":
+            self.b._log.warning("founding payment needs review: event=%s reason=%s", event_id, result.get("reason"))
+        if result["outcome"] in ("activated", "upgraded"):
+            _founding_notify("purchase_confirmation", email, upgrade=result["outcome"] == "upgraded")
+        return JSONResponse({"received": True, "type": kind, "founding": result["outcome"]})
+
+    def founding_refund(self, event_id, kind, data, email):
+        """A refund of a founding payment, confirmed by Stripe: recorded and applied to
+        access in db/founding_refunds, under the account lock and the same event ledger."""
+        from billing_service import founding_checkout
+
+        with self.store.transaction(email) as tx:
+            if tx.processed(event_id):
+                return JSONResponse({"received": True, "type": kind, "note": "already_processed"})
+            result = founding_checkout.apply_refund_event(kind, data)
+            tx.mark(event_id, kind)
+        if result.get("access") == "needs_review":
+            self.b._log.warning("founding refund needs review: event=%s", event_id)
+        if result["outcome"] == "completed":
+            _founding_notify("refund_completed", email, kind=result.get("kind"),
+                             amount_cents=result.get("refunded_cents"), full=bool(result.get("full")))
+        return JSONResponse({"received": True, "type": kind, "founding_refund": result["outcome"]})
 
     def reconcile(self, tx, customer_id=None):
         user = dict(tx.user)
@@ -183,6 +248,13 @@ class Engine:
             if self.store.processed(event_id):
                 return JSONResponse({"received": True, "type": kind, "note": "already_processed"})
             data = event.get("data", {}).get("object", {})
+            if _founding_session(kind, data):
+                return self.founding(event_id, kind, data)
+            if kind in REFUND_ONLY:
+                owner = _founding_refund_owner(kind, data)
+                if not owner:
+                    return JSONResponse({"received": True, "type": kind, "note": "ignored"})
+                return self.founding_refund(event_id, kind, data, owner)
             customer_id = data.get("customer")
             if not isinstance(customer_id, str) or not customer_id:
                 raise HTTPException(400, "Missing Stripe customer")

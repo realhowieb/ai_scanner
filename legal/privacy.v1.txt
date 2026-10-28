@@ -1,0 +1,66 @@
+title: HSF AI Privacy Policy
+version: 1
+effective_date: Not yet in effect
+status: proposed
+---
+This policy explains what personal information {legal_entity} ("HSF AI", "we") collects when you use HSF AI at app.hsfinest.com, why, who we share it with and the choices you have. Questions: {support_email}.
+
+## What we collect
+- Account details: your email address, a securely hashed password (we never store the password itself), your plan, and when you signed up and last signed in.
+- What you save in HSF AI: watchlists, alerts and alert rules, journal entries, custom scans, saved views and preferences, and email settings.
+- Notification details you choose to connect: browser push subscriptions, a linked Telegram chat, or a Discord webhook URL.
+- Paper trading: if you connect an Alpaca paper-trading account, its API keys are stored encrypted and used only to place the paper trades you ask for.
+- Payments: Stripe handles payment details. We receive and keep your Stripe customer and subscription or payment references, plan, amounts and payment status. We never receive your full card number.
+- Founding memberships: your tier, founder number, purchase and end dates, the policy versions you accepted and when, and any refund requests and their outcome.
+- Questions you send to AI features, such as Ask HSF, and the answers.
+- Feedback and support messages you send us.
+- Technical information: a record of requests to our service (time, page or endpoint, and a request ID), error reports, and the network address used, which we use for security and rate limits.
+
+## Usage analytics
+- If you allow it in Account settings, we record product events (for example, pages opened and features used) with PostHog to learn which features help people. You can turn this off at any time.
+- When you first visit, we may note the campaign tags in the link (utm tags), the site that sent you and any invite code, to understand how people find HSF AI.
+- We do not sell your personal information and we do not use advertising trackers.
+
+## Cookies and browser storage
+- Sign-in uses two cookies that browser scripts cannot read. They exist only to keep you signed in.
+- Some preferences and analytics settings are kept in your browser's local storage.
+
+## How we use information
+- To run your account and the features you use, including sending the emails, alerts and notifications you turn on.
+- To process payments and memberships, and to handle refunds.
+- To keep the service secure, prevent abuse and fix problems.
+- To understand and improve HSF AI.
+- To meet legal, tax and accounting obligations.
+
+## Who we share it with
+We share information only with service providers that help us run HSF AI, and only what each needs:
+- Stripe (payments and refunds).
+- Render (hosting) and Neon (database).
+- Our email delivery provider (account and notification emails).
+- PostHog (usage analytics, when you allow it) and Sentry (error reports).
+- Anthropic (to answer questions you send to AI features).
+- Alpaca (market data, and paper trading if you connect it).
+- Cloudflare (a bot check on sign-up and password reset, when enabled).
+- Telegram or Discord (only alerts you choose to send there).
+We may also disclose information when the law requires it, to protect the rights and safety of our users or HSF AI, or as part of a sale or reorganization of the business, in which case this policy continues to apply.
+
+## How long we keep it
+- Account information is kept while your account is open.
+- When you delete your account in Account settings, we delete your account and the data saved in it. We keep payment, membership and refund records for as long as tax, accounting or other legal rules require.
+- Request logs and error reports are kept for a limited time and then deleted.
+
+## Your choices and rights
+- You can see and change most of your information in the app, download a copy from Account settings, turn emails and analytics on or off, and delete your account.
+- Depending on where you live, you may have other rights, such as to access, correct or delete your information, or to object to some uses. Email {support_email} and we will respond as the law requires.
+
+## Security
+We use encryption in transit, hashed passwords and encrypted storage of paper-trading keys, and we limit who can reach production data. No system is perfectly secure; if a breach affects your information, we will tell you as the law requires.
+
+## Children
+HSF AI is not meant for anyone under 18, and we do not knowingly collect information from children.
+
+## Changes to this policy
+We will post any new version here with its version number and date. If a change materially affects how we use information we already hold, we will tell you before it takes effect.
+
+## Contact
+{legal_entity}: {support_email}.

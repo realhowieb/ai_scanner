@@ -1,0 +1,51 @@
+title: HSF AI Founding Membership Refund Policy
+version: 1
+effective_date: Not yet in effect
+status: proposed
+---
+This policy explains refunds for HSF AI Founder Pro and Founder Elite memberships sold by {legal_entity}. It is part of the Founding Membership Terms at {terms_url}. Nothing in it limits a refund you are entitled to by law.
+
+## 14-day refund guarantee
+- You can ask for a full refund within 14 calendar days of your original membership purchase: $499 for Founder Pro or $999 for Founder Elite.
+- You don't need to give a reason.
+- Using HSF AI during those 14 days does not, by itself, stop you from getting a refund.
+- The 14 days are counted from the time your payment was confirmed. A request sent before the end of the 14th day counts, even if we handle it later.
+
+## Upgrade refunds
+- The $500 Pro-to-Elite upgrade payment has its own 14-day refund window, counted from the time the upgrade payment was confirmed.
+- Refunding only the upgrade returns you to Founder Pro. You keep your founder number and your original end date.
+- Refunding your original purchase ends the whole membership. If you also paid for an upgrade, the upgrade payment is refunded on its own terms in this policy.
+
+## How to ask for a refund
+- Use Request refund on your account's founder page, or email {support_email} from the address on your account.
+- We record when your request arrives. That time decides whether it is inside the 14 days.
+- We check the payment and the membership, then reply. Approved refunds are started within seven business days of your request.
+- Refunds go back to the original payment method through our payment provider wherever possible. When the money appears depends on your bank or card issuer, so we can't promise a date.
+- Each payment can be refunded once. If a refund has already been sent, a second request for the same payment is closed, and we tell you.
+- Your access continues while a request is being reviewed. Access changes only after the refund has actually been made.
+
+## Refunds after 14 days
+Refunds are generally not available after the 14 days. We still review every request, and we refund, in full or in part, when:
+- the law where you live requires it;
+- a billing error happened, such as a duplicate or wrong charge;
+- HSF AI materially failed to provide the service you bought;
+- HSF AI permanently discontinued the service you bought (see below); or
+- an authorized HSF AI administrator approves an exception.
+You can always send a request, even after the 14 days. Late requests are reviewed by a person and are never refused automatically.
+
+## Permanent service discontinuation
+If HSF AI permanently stops providing the membership service before your five years end, you will be offered a prorated refund for the unused time.
+- Refund = amount paid × unused time ÷ total membership time, using your actual activation and end times. Time is counted in calendar months; a part of a month counts as its share of that month.
+- Example: Founder Elite paid $999, five-year (60-month) membership, service permanently discontinued after 24 months. Unused time is 36 months, so the refund is $999 × 36 ÷ 60 = $599.40.
+- Upgrades: the original payment and the $500 upgrade are worked out separately. The original payment is spread over the full five years. The upgrade payment is spread over the time from your upgrade to your original end date, because that is the time it paid for.
+- Amounts are rounded to the nearest cent (half a cent rounds up).
+- A refund never exceeds what you paid for that payment, less any amount already refunded on it.
+- Each refund is approved by an authorized administrator and recorded. Where the law gives you a larger remedy, you receive that instead.
+
+## What happens after a refund
+- Full refund: membership access, any personal API credentials and the founder badge and number end. Your HSF AI account stays, on the free Starter plan unless you choose another plan.
+- Upgrade-only refund: you return to Founder Pro with the same founder number and end date. Elite-only features end.
+- We keep the payment and refund records that the law requires.
+
+## Contact
+Refund questions: {support_email}.
