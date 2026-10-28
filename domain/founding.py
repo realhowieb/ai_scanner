@@ -26,7 +26,10 @@ CURRENCY = "usd"
 PRICE_CENTS: Dict[str, int] = {FOUNDER_PRO: 49_900, FOUNDER_ELITE: 99_900}
 UPGRADE_PRICE_CENTS = 50_000  # Founder Pro -> Founder Elite
 TERM_YEARS = 5
-RESERVATION_MINUTES = 15
+# Stripe Checkout sessions last at least 30 minutes, so a seat is held a little longer
+# than the session that pays for it (CHECKOUT_MINUTES).
+RESERVATION_MINUTES = 35
+CHECKOUT_MINUTES = 31
 
 # The existing plan each founder tier unlocks while the membership is active.
 PLAN_FOR_TIER: Dict[str, str] = {FOUNDER_PRO: "pro", FOUNDER_ELITE: "premium"}
@@ -39,7 +42,8 @@ RESERVATION_STATUSES = ("held", "converted", "released", "expired", "needs_revie
 
 # Payments stay off until each switch is set to 1 on purpose (unlike most HSF switches,
 # where unset means on).
-FLAGS = ("FOUNDING_100_ENABLED", "FOUNDING_CHECKOUT_ENABLED", "FOUNDING_ELITE_ENABLED", "FOUNDING_UPGRADES_ENABLED")
+FLAGS = ("FOUNDING_100_ENABLED", "FOUNDING_CHECKOUT_ENABLED", "FOUNDING_ELITE_ENABLED", "FOUNDING_UPGRADES_ENABLED",
+         "FOUNDING_LEGAL_PAGES_ENABLED", "FOUNDING_REFUNDS_ENABLED", "FOUNDING_PRORATED_REFUNDS_ENABLED")
 
 
 def flag(name: str, env: Optional[Dict[str, str]] = None) -> bool:
@@ -129,3 +133,20 @@ def entitlements_for(plan: str, founder_tier: Optional[str] = None) -> Dict[str,
         else:
             out[name] = has_min_tier(plan, str(rule["min_plan"]))
     return out
+
+
+def price_label(cents: int) -> str:
+    return f"${cents / 100:,.0f}" if cents % 100 == 0 else f"${cents / 100:,.2f}"
+
+
+def disclosure(tier: str, kind: str = "purchase") -> Dict[str, str]:
+    """What checkout must show before payment (the Founding 100 legal brief, Phase 4)."""
+    amount = expected_amount(kind, tier)
+    name = f"HSF AI {TIER_LABEL[tier]}"
+    if kind == "upgrade":
+        return {"name": f"{name} upgrade", "payment": f"One-time payment: {price_label(amount)}",
+                "duration": "Membership duration: Keeps your current end date",
+                "recurring": "Recurring payments: None", "refund": "Refund guarantee: 14 days"}
+    return {"name": name, "payment": f"One-time payment: {price_label(amount)}",
+            "duration": "Membership duration: Five years", "recurring": "Recurring payments: None",
+            "refund": "Refund guarantee: 14 days"}

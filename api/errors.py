@@ -2,6 +2,7 @@
 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi import HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException
 
 
@@ -33,9 +34,18 @@ def validation_response(request, exc: RequestValidationError):
 
 
 def http_response(request, exc: HTTPException):
-    code = {400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
+    code = getattr(exc, "code", None) or {400: "invalid_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
             409: "conflict", 429: "rate_limited", 502: "upstream_unavailable",
             503: "service_unavailable", 504: "upstream_timeout"}.get(exc.status_code, "request_failed")
-    return JSONResponse({"detail": exc.detail, "code": code,
+    extra = getattr(exc, "extra", None) or {}
+    return JSONResponse({**extra, "detail": exc.detail, "code": code,
                          "request_id": getattr(request.state, "request_id", None)},
                         status_code=exc.status_code, headers=exc.headers)
+
+
+class CodedError(FastAPIHTTPException):
+    """An HTTP error with a stable `code` (and optional extra JSON fields) for the web app."""
+
+    def __init__(self, status_code: int, detail: str, code: str, **extra):
+        super().__init__(status_code, detail)
+        self.code, self.extra = code, extra
