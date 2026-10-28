@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+
+import { publicMetadata } from "@/lib/seo";
 import Link from "@/components/Link";
 import { PublicHeader, PublicFooter } from "@/features/Landing";
 
-export const metadata: Metadata = { title: "How HSF works" };
+export const metadata: Metadata = publicMetadata("/how-hsf-works", "How HSF AI works",
+  "What the HSF Score means, how scans cover the U.S. market, why a stock appears, and how HSF measures its own methods. Educational research, not financial advice.");
 
 // The classic app's methodology page (ui/methodology.py, ui/product_copy.py), word for
 // word. Public, like the original: readable signed in or out.
