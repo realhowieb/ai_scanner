@@ -62,15 +62,51 @@ def _query_params() -> dict[str, str]:
         return {}
 
 
+# (source, utm_source values, referrer host fragments), checked in order after an invite code.
+SOURCES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    ("x", ("x", "twitter", "x.com", "twitter.com"), ("x.com", "twitter.com", "t.co")),
+    ("reddit", ("reddit",), ("reddit.com",)),
+    ("google", ("google",), ("google.",)),
+    ("youtube", ("youtube", "yt"), ("youtube.com", "youtu.be")),
+    ("tiktok", ("tiktok",), ("tiktok.com",)),
+    ("discord", ("discord",), ("discord.com", "discord.gg", "discordapp.com")),
+    ("stocktwits", ("stocktwits",), ("stocktwits.com",)),
+    ("facebook", ("facebook", "fb", "instagram", "ig", "meta"), ("facebook.com", "instagram.com", "fb.com")),
+    ("linkedin", ("linkedin",), ("linkedin.com", "lnkd.in")),
+)
+SOURCE_NAMES = ("invite", *(s for s, _, _ in SOURCES), "direct", "other_unknown")
+
+
+def _host(referrer: str) -> str:
+    try:
+        host = urlparse(referrer if "//" in referrer else f"//{referrer}").netloc
+    except Exception:
+        host = referrer
+    host = host.split("@")[-1].split(":")[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def _host_matches(host: str, pattern: str) -> bool:
+    """'reddit.com' matches reddit.com and old.reddit.com; 'google.' matches google.com, google.co.uk."""
+    if pattern.endswith("."):
+        return host.startswith(pattern) or ("." + pattern) in host
+    return host == pattern or host.endswith("." + pattern)
+
+
 def classify_source(params: Mapping[str, object] | None, referrer: str | None = None) -> str:
-    """Classify acquisition source into reddit/direct/other_unknown."""
+    """The sign-up channel: 'invite' for an invite link (?ref= code), then a known site from
+    utm_source or the outside referrer (x, reddit, google, ...), 'other_unknown' for any other
+    tag or referrer, 'direct' for none."""
     params = params or {}
+    if _first(params.get("ref")).strip():
+        return "invite"
     src = _first(params.get("utm_source")).strip().lower()
     medium = _first(params.get("utm_medium")).strip().lower()
-    ref = (referrer or _first(params.get("ref")) or _first(params.get("referrer"))).strip().lower()
-    if src == "reddit" or "reddit.com" in ref:
-        return "reddit"
-    if src or medium or ref:
+    host = _host((referrer or _first(params.get("referrer"))).strip().lower())
+    for name, tags, hosts in SOURCES:
+        if src in tags or (host and any(_host_matches(host, h) for h in hosts)):
+            return name
+    if src or medium or host:
         return "other_unknown"
     return "direct"
 
@@ -82,7 +118,7 @@ def attribution_from_params(params: Mapping[str, object] | None, referrer: str |
         value = _clean(_first(params.get(key)))
         if value:
             out[key] = value
-    ref = _clean(referrer or _first(params.get("referrer")) or _first(params.get("ref")), max_len=180)
+    ref = _clean(referrer or _first(params.get("referrer")), max_len=180)
     if ref:
         try:
             out["referrer_domain"] = _clean(urlparse(ref).netloc or ref, max_len=120)

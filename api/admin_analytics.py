@@ -135,7 +135,10 @@ def _product(days: int, now: Optional[dt.datetime]) -> Dict[str, Any]:
 # ---- sign-up funnel ------------------------------------------------------------------------------
 FUNNEL_STEPS = (("signed_up", "Signed up"), ("verified", "Verified email"),
                 ("engaged", "Saved a stock or alert"), ("paid", "Pays for Pro"))
-SOURCE_LABELS = {"reddit": "Reddit", "direct": "Direct", "other_unknown": "Other"}
+SOURCE_LABELS = {"invite": "Invite link", "x": "X", "reddit": "Reddit", "google": "Google", "youtube": "YouTube",
+                 "tiktok": "TikTok", "discord": "Discord", "stocktwits": "Stocktwits",
+                 "facebook": "Facebook / Instagram", "linkedin": "LinkedIn", "direct": "Direct",
+                 "other_unknown": "Other"}
 
 
 def _funnel(days: int) -> Optional[Dict[str, Any]]:

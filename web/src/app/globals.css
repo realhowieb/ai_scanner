@@ -1136,3 +1136,8 @@ a.chip { display: inline-flex; align-items: center; }
 /* Brief: the 60-second read above the dashboard */
 .brief-glance { display: flex; flex-direction: column; gap: var(--sp-2); }
 .brief-glance .stat-value a { color: inherit; }
+
+/* Landing: feature cards and numbered steps */
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--text-2); }
+.steps b { color: var(--text); }
+.feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }

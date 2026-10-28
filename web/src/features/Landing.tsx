@@ -20,21 +20,31 @@ import { captureAttribution, track } from "@/lib/funnel";
 
 type Plans = Schemas["Plans"];
 
-const TAGLINE = "Turn the whole market into a short list.";
+export const HEADLINE = "Find Market Opportunities with AI-Powered Intelligence";
+export const SUBHEADLINE = "Discover momentum, analyze technical signals, and monitor market activity from one intelligent platform.";
 const POSITIONING = "Signal intelligence, not a prediction machine. HSF continuously scans thousands of tradable U.S. stocks and organizes noteworthy setups so you can focus your research.";
 const SCORE_LINE = "HSF Score (0–100) ranks setups by how strongly the current technical evidence lines up. It is not a probability of profit or a prediction.";
 const DISCLAIMER = "HSF is a market-research and decision-support tool, not financial advice. It does not recommend buying or selling any security.";
-const PILLARS: [string, string][] = [
-  ["Scan", "Continuously monitors thousands of tradable U.S. stocks through the trading day."],
-  ["Rank", "Surfaces the setups that stand out right now."],
-  ["Explain", "Shows the technical evidence behind each setup."],
-  ["Track", "Shows how setups change through the session."],
+// Each one is a working part of the app today (no roadmap items).
+export const FEATURES: [string, string][] = [
+  ["AI Stock Scanner", "Scheduled scans of thousands of tradable U.S. stocks rank the setups that stand out, each with an HSF Score from 0 to 100."],
+  ["Market Intelligence", "The Market Brief shows indexes, breadth, sectors, pre-market movers and the earnings calendar before you look at a single setup."],
+  ["Technical Analysis", "Interactive price charts with moving averages, RSI and volume, plus the evidence behind every score: relative volume, gaps, trend and strength against the S&P 500."],
+  ["Watchlists", "Save the stocks you follow, see how they move against the S&P 500 and get alerts when a price, score or setup changes."],
+  ["Momentum and Breakout Discovery", "Day Trader ranks intraday movers, and early breakout and steady stair-step setups flag stocks while they are still building."],
+  ["Historical Signal Tracking", "Every result is recorded as the scanner saw it. Score history and the Track record show how past setups developed, never revised with hindsight."],
+];
+const HOW: [string, string][] = [
+  ["Discover stocks", "Start from the ranked Scanner, the Market Brief or your own custom scan."],
+  ["Evaluate market signals", "Open any stock to see its chart, HSF Score and the evidence and risks behind it."],
+  ["Monitor opportunities", "Save it to a watchlist and set an alert, so HSF tells you when something changes."],
 ];
 const TRUST: [string, string][] = [
   ["Fresh market data", "Every result shows when it was scanned."],
   ["Transparent explanations", "Each setup lists the evidence that put it there."],
   ["Point-in-time scanning", "Results are recorded as the scanner saw them, never revised with hindsight."],
   ["Research-first methodology", "HSF measures its own methods forward before making claims about them."],
+  ["Estimates are not outcomes", "Model outputs such as breakout or outcome probabilities are research estimates for defined events. They are not profits, returns or trading results."],
 ];
 const VIEWS = [
   { id: "scanner", tab: "Scanner", title: "Ranked opportunities", text: "Thousands of symbols. One focused shortlist.",
@@ -208,12 +218,12 @@ export function Landing() {
       <main id="main" className="pub-main stack">
         <section className="hero hero-with-preview">
           <div className="stack-sm">
-          <p className="eyebrow">HSF AI Stock Scanner</p>
-          <h1 className="hero-title">{TAGLINE}</h1>
-          <p className="hero-text">{POSITIONING}</p>
+          <p className="eyebrow">HSF AI · Discover opportunities. Understand the signals. Trade with intelligence.</p>
+          <h1 className="hero-title">{HEADLINE}</h1>
+          <p className="hero-text">{SUBHEADLINE}</p>
           <div className="row-actions">
-            <SignupLink surface="hero">Create a free account</SignupLink>
-            <Link href="/demo" className="btn">View demo</Link>
+            <SignupLink surface="hero">Start Exploring</SignupLink>
+            <Link href="/how-hsf-works" className="btn">See How It Works</Link>
             <Link href="/login" className="hero-signin">Sign in</Link>
           </div>
           <p className="cap">Starter plan is free, no card needed.</p>
@@ -221,22 +231,29 @@ export function Landing() {
           <SampleSetupPreview />
         </section>
 
+        <section aria-labelledby="features" className="stack-sm">
+          <h2 id="features" className="h2">What you can do with HSF</h2>
+          <p className="body-sm">{POSITIONING}</p>
+          <div className="feature-grid">
+            {FEATURES.map(([t, d]) => <div key={t} className="card tile"><p className="strong">{t}</p><p className="body-sm">{d}</p></div>)}
+          </div>
+        </section>
+
         <Showcase />
 
-        <section aria-labelledby="what" className="stack-sm">
-          <h2 id="what" className="h2">What HSF does</h2>
-          <div className="tiles">
-            {PILLARS.map(([t, d]) => <div key={t} className="card tile"><p className="strong">{t}</p><p className="body-sm">{d}</p></div>)}
-          </div>
-          <p className="cap">{SCORE_LINE}</p>
+        <section aria-labelledby="how" className="stack-sm">
+          <h2 id="how" className="h2">How it works</h2>
+          <ol className="steps">
+            {HOW.map(([t, d]) => <li key={t}><b>{t}.</b> {d}</li>)}
+          </ol>
         </section>
 
         <section aria-labelledby="trust" className="stack-sm">
           <h2 id="trust" className="h2">Why you can trust what you see</h2>
-          <div className="tiles">
+          <div className="feature-grid">
             {TRUST.map(([t, d]) => <div key={t} className="card tile"><p className="strong">{t}</p><p className="body-sm">{d}</p></div>)}
           </div>
-          <p className="cap"><Link href="/how-hsf-works">How HSF works, in full</Link></p>
+          <p className="cap">{SCORE_LINE} <Link href="/how-hsf-works">How HSF works, in full</Link></p>
         </section>
 
         <section aria-labelledby="plans" className="stack-sm" id="pricing">
