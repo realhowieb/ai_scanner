@@ -22,7 +22,7 @@ These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder E
 - Your membership lasts five calendar years from the moment it is activated. For example, a membership activated at 3:00 pm UTC on 2 November 2026 ends at 3:00 pm UTC on 2 November 2031. A membership activated on 29 February ends on 28 February five years later.
 - The end date is shown on your account page.
 - When the five years end, membership access stops. You can keep using HSF AI on the free Starter plan or choose any plan offered at that time.
-- Founder rate: when your five years end, you can subscribe to any HSF AI plan at 50% off its price at that time, for as long as you keep that subscription without a break. This applies to members whose membership reached its end date, not to memberships that were refunded or ended under section 8.
+- Founder rate: when your five years end, you can subscribe to any yearly HSF AI plan at 50% off its yearly price at that time, for as long as you keep that subscription without a break. This applies to members whose membership reached its end date, not to memberships that were refunded or ended under section 8.
 
 ## 4. Membership activation
 - Your membership begins only after the payment provider confirms your payment. A started or abandoned checkout does not create a membership.

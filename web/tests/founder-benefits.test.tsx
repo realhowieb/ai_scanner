@@ -42,7 +42,7 @@ describe("founder benefits", () => {
   it("lists the benefits, toggles the badge and votes", async () => {
     const u = userEvent.setup();
     render(<FounderBenefits />);
-    expect(await screen.findByText(/any HSF plan is 50% off/)).toBeInTheDocument();
+    expect(await screen.findByText(/any yearly HSF plan is 50% off/)).toBeInTheDocument();
     expect(screen.getByText(/Up to 50 active alerts/)).toBeInTheDocument();
     expect(screen.getByText(/2 of 3 left/)).toBeInTheDocument();
     await u.click(screen.getByRole("checkbox", { name: /Show my founder badge/ }));
