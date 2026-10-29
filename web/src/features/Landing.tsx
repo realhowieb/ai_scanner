@@ -14,7 +14,7 @@ import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
-import { SampleSetupPreview } from "@/features/SampleSetupPreview";
+import { LiveSetupsPreview } from "@/features/LiveSetupsPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
 
@@ -222,13 +222,13 @@ export function Landing() {
           <h1 className="hero-title">{HEADLINE}</h1>
           <p className="hero-text">{SUBHEADLINE}</p>
           <div className="row-actions">
-            <SignupLink surface="hero">Start Exploring</SignupLink>
+            <SignupLink surface="hero">Try it free</SignupLink>
             <Link href="/how-hsf-works" className="btn">See How It Works</Link>
             <Link href="/login" className="hero-signin">Sign in</Link>
           </div>
-          <p className="cap">Starter plan is free, no card needed.</p>
+          <p className="cap">Starter plan is free forever, no card needed. Takes under a minute.</p>
           </div>
-          <SampleSetupPreview />
+          <LiveSetupsPreview />
         </section>
 
         <section aria-labelledby="features" className="stack-sm">

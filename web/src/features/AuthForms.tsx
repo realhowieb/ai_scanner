@@ -58,7 +58,8 @@ function nextAfterSignup(): string {
   }
 }
 
-export function SignupForm() {
+/** `terms`: the Terms of Service are published, so the agreement links them. */
+export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
   const fieldId = useId();
   const [showPasswords, setShowPasswords] = useState(false);
   const [email, setEmail] = useState("");
@@ -118,7 +119,10 @@ export function SignupForm() {
         </label>
         {mismatch && <p className="form-error" id={`${fieldId}-mismatch`} role="status">The passwords don&apos;t match.</p>}
         <label className="check"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          <span>I agree to use this tool for educational/informational purposes only.</span></label>
+          {terms ? (
+            <span>I agree to the <Link href="/terms" target="_blank">Terms of Service</Link> and have read the{" "}
+              <Link href="/privacy" target="_blank">Privacy Policy</Link>. I understand HSF AI is a research tool, not financial advice.</span>
+          ) : <span>I agree to use this tool for educational/informational purposes only.</span>}</label>
         <Turnstile action="signup" onToken={setCaptcha} resetKey={captchaReset} />
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !username || !pw || pw !== pw2 || !agree || needsCaptcha}>

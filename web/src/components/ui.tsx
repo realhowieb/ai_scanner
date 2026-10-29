@@ -11,6 +11,7 @@ import { freshness, etTime } from "@/lib/format";
 import { beginBilling } from "@/lib/billingReturn";
 import { captureUsage } from "@/lib/usageAnalytics";
 import { readCachedMe } from "@/session/meCache";
+import { useOptionalMe } from "@/session/SessionProvider";
 import { checkout } from "@/lib/checkout";
 
 /** Where a section's content comes from, so observed data, HSF's ranking, model estimates
@@ -160,6 +161,7 @@ export function Locked({ title, plan, children }: { title: string; plan: "pro" |
 
 export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?: string }) {
   const [interval] = useBillingInterval();
+  const legal = !!useOptionalMe()?.terms_published;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<ApiError | null>(null);
   const go = async () => {
@@ -180,7 +182,8 @@ export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?
       <button type="button" className="btn btn-primary" onClick={go} disabled={busy}>
         {busy ? "Opening checkout…" : label ?? `Upgrade to ${plan === "pro" ? "Pro" : "Premium"}`}
       </button>
-      <p className="cap">{interval === "year" ? "Yearly billing" : "Monthly billing"}</p>
+      <p className="cap">{interval === "year" ? "Yearly billing" : "Monthly billing"}. Renews automatically until you cancel in Account.</p>
+      {legal && <p className="cap">By continuing you agree to the <Link href="/terms" target="_blank">Terms of Service</Link>.</p>}
       {err && <p className="cap" role="alert">{err.message}{err.requestId ? ` (support code ${err.requestId})` : ""}</p>}
     </div>
   );

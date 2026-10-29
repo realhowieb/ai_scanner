@@ -90,6 +90,20 @@ def register(app: FastAPI) -> None:
             raise HTTPException(403, "Admins only.")
         return store.recent_feedback(50)
 
+    @app.get("/v1/public/top-setups", response_model=models.PublicTopSetups,
+             responses={429: {"description": "Too many requests"}},
+             summary="The latest scan's top setups, for the landing page (signed out)")
+    def public_top_setups(_l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        """The top three ranked setups of the latest market scan (ticker, HSF Score, setup type,
+        day change) and how many more a free account sees. Everything else needs an account."""
+        from api import share
+
+        try:
+            return share.public_top_setups()
+        except Exception as e:
+            log.warning(json.dumps({"event": "public_top_setups_failed", "error": type(e).__name__}))
+            raise HTTPException(503, "The live preview isn't available right now.") from None
+
     @app.get("/v1/public/stocks/{ticker}", response_model=models.PublicStock,
              responses={404: {"description": "Not a listed US stock"}, 429: {"description": "Too many requests"}},
              summary="A stock's public snapshot for shared links (signed out)")

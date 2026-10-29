@@ -5,6 +5,8 @@ import { json, requestIdFor, sameOrigin } from "./bff";
 
 const ROUTES: Record<string, ReadonlyArray<"GET" | "POST">> = {
   "v1/plans": ["GET"],
+  "v1/legal/status": ["GET"],
+  "v1/public/top-setups": ["GET"],
   "v1/events": ["POST"],
   "v1/client-errors": ["POST"],
   "v1/email-preferences/unsubscribe": ["GET", "POST"],

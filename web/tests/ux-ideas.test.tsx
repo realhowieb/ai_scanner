@@ -97,6 +97,25 @@ describe("Getting started", () => {
     expect(calls.find((c) => c.path === "/v1/alerts/rules")!.body).toMatchObject({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: 7, threshold: 75 });
   });
 
+  it("sets a brand-new account up in one tap: top setups watchlist plus a score alert", async () => {
+    const u = userEvent.setup();
+    let state = checklist({});
+    routes["GET /v1/me/getting-started"] = () => state;
+    routes["GET /v1/scans/latest"] = () => ({ scan_at: "2026-10-27T14:35:00Z", total: 3, max_results: 25, limited: false,
+      setups: ["AAA", "BBB", "CCC"].map((ticker, i) => ({ ticker, score: 90 - i, signals: [] })) });
+    routes["GET /v1/watchlists"] = () => [];
+    routes["POST /v1/watchlists"] = () => ({ id: 9, name: "Today's top setups", is_default: true, symbol_count: 0 });
+    routes["POST /v1/watchlists/9/tickers"] = () => ({ added: ["AAA", "BBB", "CCC"], skipped: [] });
+    routes["POST /v1/alerts/rules"] = () => { state = checklist({ watchlist: true, alert: true }); return { id: 1 }; };
+    render(<GettingStarted />);
+    await u.click(await screen.findByRole("button", { name: "Set me up" }));
+    await screen.findByText("2 of 4 done");
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.path))
+      .toEqual(["/v1/watchlists", "/v1/watchlists/9/tickers", "/v1/alerts/rules"]);
+    expect(calls.find((c) => c.path === "/v1/alerts/rules")!.body).toMatchObject({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: 9, threshold: 75 });
+    expect(screen.queryByRole("button", { name: "Set me up" })).not.toBeInTheDocument();
+  });
+
   it("shows nothing when the API says it's done or can't answer", async () => {
     const { container } = render(<GettingStarted />);
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/me/getting-started")).toBe(true));

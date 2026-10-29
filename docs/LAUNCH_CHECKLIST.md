@@ -8,8 +8,8 @@
 - [x] Add explicit disclosure: "educational; not investment advice; predictive
       effectiveness UNVALIDATED" on scanner/brief/alerts
 - [ ] Confirm production Neon + Alpaca secrets set in all three stores
-      (Streamlit Cloud, GitHub Actions, host) — see three-secret-stores memory
-- [ ] Confirm error monitoring (Sentry DSN) live for app + cron
+      (GitHub Actions and Render; Streamlit Cloud is gone) — see GO_LIVE.md section 2
+- [x] Confirm error monitoring (Sentry DSN) live for the API (2026-10-22)
 - [x] Verify scheduled scan + maturation workflows enabled on default branch
       (GitHub default branch `main`; workflows active. Latest checked successful
       `main` runs on 2026-10-10 UTC: Scheduled Market Scans
@@ -21,20 +21,23 @@
 - [ ] Load-test multi-user Neon path (concurrent users, watchlist writes)
       Tooling ready: scripts/neon_load_test.py + the manual "Neon Load Test"
       workflow (run against a Neon branch). Schema-setup deadlocks fixed (P1-44).
-- [ ] Billing/entitlements verified end-to-end (billing_service/)
+- [x] Billing/entitlements verified end-to-end (live purchase 2026-10-28; billing embedded in hsf-api-v1)
 - [ ] Move perf_history + operational telemetry to durable storage
 - [ ] Document + test market-data provider failover
-- [ ] Backup/restore runbook for Neon (below)
+- [x] Backup/restore runbook for Neon: docs/PROVIDER_FAILOVER_AND_RESTORE.md
+- [ ] Run the Database restore drill workflow and record its timings (monthly after that)
+- [ ] Raise the Neon restore window above 1 day
 - [x] Secret rotation policy — docs/SECRET_ROTATION.md (P1-45)
 
 ## Before PUBLIC LAUNCH
 - [ ] Security pentest + secret rotation
-- [ ] Legal review of all product/marketing language
+- [ ] Legal review of all product/marketing language, then publish the Terms of Service and
+      Privacy Policy (`HSF_LEGAL_PAGES_ENABLED=1`, see GO_LIVE.md section 4)
 - [ ] Scale test (1,000+ users) + cost model confirmed with real provider tiers
-- [ ] Consider frontend (see Run 50 §24 on Next.js timing)
+- [x] Next.js frontend live at app.hsfinest.com
 - [ ] SLA / status page / incident runbook
 
 ## Backup/recovery (current-stage)
-- Neon provides point-in-time restore (managed) — confirm retention setting.
+- Neon point-in-time restore: 1 day on the current plan (confirmed in the runbook).
 - Observations/outcomes/runs are append-only (recoverable from Neon).
-- No app-side backup needed at beta scale; document Neon restore steps.
+- Restore steps and the monthly drill: docs/PROVIDER_FAILOVER_AND_RESTORE.md.

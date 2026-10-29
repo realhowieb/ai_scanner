@@ -178,7 +178,14 @@ def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
             "email_verified": acct.is_verified(str(account["username"]).strip().lower()),
             "entitlements": ent["entitlements"],
             "pro_trial_until": account.get("pro_trial_until"),
-            "billing_attention": acct.billing_attention(str(account["username"]), ent["tier"])}
+            "billing_attention": acct.billing_attention(str(account["username"]), ent["tier"]),
+            "terms_published": _terms_published()}
+
+
+def _terms_published() -> bool:
+    from domain.legal import general_pages_open
+
+    return general_pages_open()
 
 
 def _user(account: Dict[str, Any]) -> str:

@@ -1,0 +1,55 @@
+name: Database restore drill
+
+# Manual only. Copies the live database (schema, plus the rows of every table except very
+# large research tables) into a throwaway Postgres on the runner, checks row counts and
+# times it. Read-only against production; the dump is deleted when the job ends and is
+# never uploaded. See scripts/restore_drill.sh and docs/PROVIDER_FAILOVER_AND_RESTORE.md.
+on:
+  workflow_dispatch:
+    inputs:
+      big_table_mb:
+        description: "Copy only the schema of tables bigger than this (MB on disk)"
+        required: true
+        default: "50"
+      max_dump_mb:
+        description: "Stop before downloading more than this (Neon counts it as network transfer)"
+        required: true
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Postgres client and a throwaway server matching production
+        env:
+          SOURCE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          major=$(/usr/lib/postgresql/17/bin/psql "$SOURCE_URL" -X -A -t -c "SHOW server_version_num" | cut -c1-2)
+          echo "production is Postgres $major"
+          sudo apt-get install -y -qq "postgresql-$major" >/dev/null
+          echo "/usr/lib/postgresql/$major/bin" >> "$GITHUB_PATH"
+          # Its own cluster on its own port, whatever the runner image already has.
+          sudo pg_createcluster "$major" drill -p 55432 --start
+          sudo -u postgres psql -p 55432 -X -q -c "ALTER USER postgres PASSWORD 'drill'" -c "CREATE DATABASE hsf_restore_drill"
+      - name: Run the drill
+        env:
+          SOURCE_URL: ${{ secrets.DATABASE_URL }}
+          RESTORE_URL: postgresql://postgres:drill@localhost:55432/hsf_restore_drill
+          BIG_TABLE_MB: ${{ inputs.big_table_mb }}
+          MAX_DUMP_MB: ${{ inputs.max_dump_mb }}
+        run: bash scripts/restore_drill.sh

@@ -11,6 +11,7 @@ import type { AlertRuleCreate } from "@/api/userData";
 import { Card, ErrorLine } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
 const STARTER_COUNT = 5;
@@ -132,6 +133,39 @@ export function StarterScoreAlertButton({ onDone }: { onDone: () => void }) {
         {act.busy ? "Adding…" : "Add score alert"}
       </button>
       <p className="cap">When a stock on {list.name} reaches HSF 75</p>
+      <ErrorLine error={act.error} />
+    </div>
+  );
+}
+
+/** First run, one tap: a watchlist of today's top setups plus an alert when any of them
+ * reaches HSF 75, so a brand-new account has something working right away. */
+export function StarterSetupButton({ onDone }: { onDone: () => void }) {
+  const latest = useApi("starter-top", (signal) =>
+    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT } }, signal })));
+  const lists = useApi("watchlists", (signal) => watchlists.list(signal));
+  const act = useAction();
+  const picks = (latest.data?.setups.map((s) => s.ticker) ?? []).slice(0, STARTER_COUNT);
+  if (!picks.length || !lists.data) return null;
+  const start = () => void act.run(async () => {
+    const existing = lists.data?.find((w) => w.is_default) ?? lists.data?.[0];
+    const id = existing?.id ?? (await watchlists.create(STARTER_NAME, true)).id;
+    await watchlists.addTickers(id, picks);
+    await alertRules.create({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: id, threshold: 75, enabled: true,
+      delivery_channels: ["in_app"] });
+    captureUsage("quick_setup_completed");
+    onDone();
+    return true;
+  });
+  return (
+    <div className="gs-setup stack-xs">
+      <p className="strong">Set me up in one tap</p>
+      <p className="cap">Saves today&apos;s top {picks.length} ({picks.join(", ")}) to a watchlist and alerts you when any of them reaches HSF 75. Change or remove either anytime.</p>
+      <div className="row-actions">
+        <button type="button" className="btn btn-primary" onClick={start} disabled={act.busy}>
+          {act.busy ? "Setting up…" : "Set me up"}
+        </button>
+      </div>
       <ErrorLine error={act.error} />
     </div>
   );

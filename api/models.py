@@ -115,6 +115,7 @@ class Me(BaseModel):
     pro_trial_until: Optional[str] = Field(default=None, description="Set while a free Pro month from an invite is running")
     billing_attention: Optional[BillingAttention] = Field(default=None, description=(
         "Set while the last charge for a paid plan failed (the app shows an 'update your card' banner)"))
+    terms_published: bool = Field(default=False, description="The Terms of Service are live (upgrade buttons link them)")
 
 
 class Referrals(BaseModel):
@@ -1928,6 +1929,21 @@ class FeedbackItem(BaseModel):
     plan: Optional[str] = None
     build: Optional[str] = None
     created_at: str
+
+
+class PublicTopSetup(BaseModel):
+    ticker: str
+    hsf_score: Optional[int] = None
+    setup: Optional[str] = None
+    change_pct: Optional[float] = None
+
+
+class PublicTopSetups(BaseModel):
+    scan_at: Optional[str] = None
+    stale: bool = Field(default=False, description="The latest scan is older than expected")
+    setups: List[PublicTopSetup] = Field(description="Top three ranked setups (HSF Score 40 or more)")
+    ranked_total: int = Field(description="Ranked setups in the latest scan")
+    free_rows: int = Field(description="How many of them a free Starter account sees in the Scanner")
 
 
 class PublicStock(BaseModel):
