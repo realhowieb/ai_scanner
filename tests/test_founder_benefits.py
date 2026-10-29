@@ -2,6 +2,7 @@
 limits, the founder badge on shared links and in the digest, founder feedback and the
 founder poll."""
 import datetime as dt
+import importlib.util as _ilu
 import os
 import sqlite3
 import sys
@@ -12,6 +13,8 @@ from unittest import mock
 from domain import founding as rules
 from domain import legal
 from tests.test_founding_legal import DbBase
+
+_NEEDS_API = unittest.skipUnless(_ilu.find_spec("fastapi"), "needs fastapi")
 
 UTC = dt.timezone.utc
 NOW = dt.datetime.now(UTC)
@@ -107,6 +110,7 @@ class LimitTests(Base):
         self.assertEqual(self.pa.ai_daily_limit("p@example.com", 25), 25)
         self.assertEqual(self.pa.ai_daily_limit("e@example.com", 0), 0, "0 still means unlimited")
 
+    @_NEEDS_API
     def test_entitlements_and_early_access(self):
         from api.deps import entitlements_for
 
@@ -234,6 +238,7 @@ class ApiTests(Base):
 
 
 class FeedbackAndDigestTests(Base):
+    @_NEEDS_API
     def test_founder_feedback_is_marked(self):
         from api import web_state
 
