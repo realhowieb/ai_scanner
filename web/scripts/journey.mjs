@@ -56,6 +56,23 @@ async function signIn(ctx, who, pw) {
   await page.waitForURL(/\/today/, { timeout: 90_000 });
   return page;
 }
+
+// Deletes zz-e2e-* watchlists and the 999,999 price alerts that an earlier run failed to
+// clean up (a leftover duplicate alert would make "create an alert" fail every later run).
+// Goes through the BFF with the signed-in page's session; it never fails the run.
+async function sweepLeftovers(p, label) {
+  const removed = await p.evaluate(async (threshold) => {
+    const get = async (path) => (await fetch(`/api/hsf${path}`)).json();
+    const del = (path) => fetch(`/api/hsf${path}`, { method: "DELETE" });
+    let n = 0;
+    const alerts = (await get("/v1/alerts")).alerts || [];
+    for (const a of alerts) if (a.type === "price" && Number(a.threshold) >= threshold) { await del(`/v1/alerts/${a.id}`); n++; }
+    const lists = await get("/v1/watchlists");
+    for (const w of Array.isArray(lists) ? lists : []) if (String(w.name || "").startsWith("zz-e2e-")) { await del(`/v1/watchlists/${w.id}`); n++; }
+    return n;
+  }, Number(THRESHOLD)).catch((e) => `error: ${String(e.message || e).slice(0, 120)}`);
+  console.log(`[INFO] ${label}: removed ${removed} leftover test records`);
+}
 // The Alerts page opens on Activity; saved alerts live under the Rules tab.
 const rulesTab = (p) => p.getByRole("tab", { name: "Rules" }).click();
 const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
@@ -63,6 +80,7 @@ const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, fullP
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 let page = await signIn(ctx, email, password);
 check("sign in through the BFF", true);
+await sweepLeftovers(page, "before the run");
 let ticker = null;
 let watchlistUrl = null;
 
@@ -208,7 +226,12 @@ if (email2) {
   });
 }
 
+// Clean up from a fresh sign-in, so a step that failed half way (signed out, closed page)
+// doesn't also leave this run's records behind.
+const cleanCtx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 await step("clean up: delete the alert and the watchlist (confirmed)", async () => {
+  page = await signIn(cleanCtx, email, password);
+  if (!ticker || !watchlistUrl) throw new Error("nothing to clean up: an earlier step failed before creating it");
   await page.goto(`${BASE}/alerts`);
   await rulesTab(page);
   await page.getByRole("button", { name: `Delete: ${ticker} price rises above $${SHOWN}` }).click();
@@ -224,6 +247,7 @@ await step("clean up: delete the alert and the watchlist (confirmed)", async () 
   check("clean up: delete the alert and the watchlist (confirmed)", left === 0, `${left} references left`);
 });
 
+if (!page.isClosed()) await sweepLeftovers(page, "after the run");
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;
 if (problems.length) console.log("BROWSER PROBLEMS:\n" + problems.join("\n"));
