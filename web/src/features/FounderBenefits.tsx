@@ -50,7 +50,7 @@ export function BenefitsBody({ data, onChange }: { data: Benefits; onChange: (b:
   return (
     <div className="stack-sm">
       <ul className="stack-xs">
-        <li><strong>Founder rate for life.</strong> When your five years end, any HSF plan is {data.alumni_discount_percent}% off for as long as you keep it.</li>
+        <li><strong>Founder rate for life.</strong> When your five years end, any yearly HSF plan is {data.alumni_discount_percent}% off for as long as you keep it.</li>
         {data.elite_limits && (
           <li><strong>Elite limits.</strong> Up to {data.elite_limits.alert_limit} active alerts and {data.elite_limits.ai_multiplier}× the daily AI allowance.</li>
         )}
