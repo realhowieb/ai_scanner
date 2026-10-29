@@ -53,7 +53,7 @@ A custom-domain change must update `APP_BASE_URL`, `API_CORS_ORIGINS` and
 
 ## 4. Legal pages
 
-- [ ] Review `legal/terms.v1.txt` (Terms of Service) and `legal/privacy.v1.txt`; when approved,
+- [x] Review `legal/terms.v1.txt` (Terms of Service) and `legal/privacy.v1.txt`; when approved,
       change `status: proposed` to `approved` and set `effective_date` (a small PR)
 - [ ] Then set `HSF_LEGAL_PAGES_ENABLED=1` on hsf-api-v1. This publishes /terms and /privacy,
       links them from the sign-up box and upgrade buttons, and records each acceptance

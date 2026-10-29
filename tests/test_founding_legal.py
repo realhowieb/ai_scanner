@@ -27,7 +27,8 @@ class PolicyTextTests(unittest.TestCase):
             cur = legal.current(self.p)[ptype]
             self.assertEqual(cur["version"], 1)
             self.assertEqual(len(cur["content_hash"]), 64)
-            self.assertEqual(cur["status"], "proposed")
+            expected = "approved" if ptype in legal.GENERAL_POLICIES else "proposed"
+            self.assertEqual(cur["status"], expected)
             self.assertTrue(cur["sections"])
             self.assertNotRegex(cur["text"], r"\{[a-z_]+\}", "every placeholder filled")
 

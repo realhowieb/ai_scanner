@@ -1,7 +1,7 @@
 title: HSF AI Terms of Service
 version: 1
-effective_date: Not yet in effect
-status: proposed
+effective_date: October 29, 2026
+status: approved
 ---
 These terms apply to every HSF AI account and to the HSF AI website and apps at app.hsfinest.com, provided by {legal_entity} ("HSF AI", "we"). By creating an account or using HSF AI, you agree to them. Our Privacy Policy ({privacy_url}) explains how we handle your information. Founding memberships also have their own Founding Membership Terms; where the two differ for a founding membership, those apply.
 
