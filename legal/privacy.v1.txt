@@ -1,7 +1,7 @@
 title: HSF AI Privacy Policy
 version: 1
-effective_date: Not yet in effect
-status: proposed
+effective_date: October 29, 2026
+status: approved
 ---
 This policy explains what personal information {legal_entity} ("HSF AI", "we") collects when you use HSF AI at app.hsfinest.com, why, who we share it with and the choices you have. Questions: {support_email}.
 

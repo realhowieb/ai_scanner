@@ -18,7 +18,7 @@ class TermsTextTests(unittest.TestCase):
     def test_terms_of_service_text(self):
         cur = legal.current(legal.load(env={"HSF_SUPPORT_EMAIL": "help@hsf.test", "HSF_GOVERNING_LAW": "Ohio"}))
         terms = cur[legal.SITE_TERMS]
-        self.assertEqual((terms["version"], terms["status"], terms["path"]), (1, "proposed", "/terms"))
+        self.assertEqual((terms["version"], terms["status"], terms["path"]), (1, "approved", "/terms"))
         text = terms["text"].lower()
         for phrase in ("not give financial, investment", "renew automatically", "cancel anytime from account",
                        "at least 18", "help@hsf.test", "laws of ohio", "hsfinest llc", "/privacy",
