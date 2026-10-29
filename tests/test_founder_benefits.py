@@ -197,6 +197,22 @@ class ApiTests(Base):
         self.h = case.auth(case.login().json()["access_token"])
         self.admin = case.auth(case.login("boss@example.com").json()["access_token"])
 
+    def test_public_founding_status(self):
+        from api import founding as svc
+
+        svc.clear_cache()
+        closed = self.client.get("/v1/public/founding").json()
+        self.assertEqual(closed, {"open": False, "checkout_open": False, "tiers": [], "remaining": 0})
+        with mock.patch.dict(os.environ, {"FOUNDING_100_ENABLED": "1"}):
+            svc.clear_cache()
+            out = self.client.get("/v1/public/founding").json()
+        svc.clear_cache()
+        self.assertTrue(out["open"])
+        self.assertFalse(out["checkout_open"], "checkout and legal pages switches are still off")
+        self.assertEqual([(t["tier"], t["remaining"], t["on_sale"]) for t in out["tiers"]],
+                         [(PRO, 75, False), (ELITE, 25, False)])
+        self.assertEqual(out["remaining"], 100)
+
     def test_non_members_get_404(self):
         r = self.client.get("/v1/founding/benefits", headers=self.h)
         self.assertEqual((r.status_code, r.json()["code"]), (404, "founding_not_member"))

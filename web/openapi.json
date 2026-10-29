@@ -12288,6 +12288,75 @@
     "title": "PublicFounderBadge",
     "type": "object"
    },
+   "PublicFounding": {
+    "properties": {
+     "checkout_open": {
+      "title": "Checkout Open",
+      "type": "boolean"
+     },
+     "open": {
+      "title": "Open",
+      "type": "boolean"
+     },
+     "remaining": {
+      "title": "Remaining",
+      "type": "integer"
+     },
+     "tiers": {
+      "items": {
+       "$ref": "#/components/schemas/PublicFoundingTier"
+      },
+      "title": "Tiers",
+      "type": "array"
+     }
+    },
+    "required": [
+     "open",
+     "checkout_open",
+     "tiers",
+     "remaining"
+    ],
+    "title": "PublicFounding",
+    "type": "object"
+   },
+   "PublicFoundingTier": {
+    "properties": {
+     "capacity": {
+      "title": "Capacity",
+      "type": "integer"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "on_sale": {
+      "title": "On Sale",
+      "type": "boolean"
+     },
+     "price_cents": {
+      "title": "Price Cents",
+      "type": "integer"
+     },
+     "remaining": {
+      "title": "Remaining",
+      "type": "integer"
+     },
+     "tier": {
+      "title": "Tier",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tier",
+     "label",
+     "price_cents",
+     "capacity",
+     "remaining",
+     "on_sale"
+    ],
+    "title": "PublicFoundingTier",
+    "type": "object"
+   },
    "PublicStock": {
     "properties": {
      "change_pct": {
@@ -25576,6 +25645,34 @@
      }
     },
     "summary": "The founder badge behind a shared link's invite code (public)"
+   }
+  },
+  "/v1/public/founding": {
+   "get": {
+    "operationId": "public_founding_v1_public_founding_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicFounding"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "Whether the Founding 100 is open, and seats left (public)"
    }
   },
   "/v1/public/stocks/{ticker}": {
