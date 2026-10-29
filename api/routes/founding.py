@@ -317,6 +317,22 @@ class LegalStatus(BaseModel):
     subscription_statement: Optional[str] = Field(default=None, description="Shown under upgrade buttons")
 
 
+class PublicFoundingTier(BaseModel):
+    tier: str
+    label: str
+    price_cents: int
+    capacity: int
+    remaining: int
+    on_sale: bool
+
+
+class PublicFounding(BaseModel):
+    open: bool
+    checkout_open: bool
+    tiers: List[PublicFoundingTier]
+    remaining: int
+
+
 def _policy_or_404(policy_type: str, version: Optional[int]) -> Dict[str, Any]:
     p = svc.policy(policy_type, version)
     if not p:
@@ -469,6 +485,15 @@ def register(app: FastAPI) -> None:
     def admin_poll(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         require_admin(account)
         return svc.admin_poll()
+
+    @app.get("/v1/public/founding", response_model=PublicFounding,
+             summary="Whether the Founding 100 is open, and seats left (public)")
+    def public_founding() -> Dict[str, Any]:
+        try:
+            return svc.public_status()
+        except Exception:
+            # The landing page treats this as "not open"; never break it.
+            return {"open": False, "checkout_open": False, "tiers": [], "remaining": 0}
 
     @app.get("/v1/public/founder-badge/{code}", response_model=PublicFounderBadge,
              responses={404: {"description": "No founder badge for this invite code"}},

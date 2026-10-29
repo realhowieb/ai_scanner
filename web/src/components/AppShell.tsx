@@ -14,6 +14,7 @@ import { InstallHint } from "@/components/InstallHint";
 import { MarketStatus } from "@/components/MarketStatus";
 import { NavIcon } from "@/components/NavIcon";
 import { WhatsNew } from "@/components/WhatsNew";
+import { FOUNDER_HREF, usePublicFounding } from "@/features/FoundingBanner";
 import { useSession } from "@/session/SessionProvider";
 
 /** Desktop sidebar groups (every section, always visible). `tab`: in the phone tab bar
@@ -101,6 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [path]);
   const { me, signOut } = useSession();
   const [menu, setMenu] = useState(false);
+  const founding = usePublicFounding();
   const closeMenu = useCallback(() => setMenu(false), []);
   useCloseOnNavigate(closeMenu, path);
   const unread = useUnreadAlerts(path, !!me);
@@ -156,6 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenu.Item asChild><Link href="/account" className="menu-item">Account &amp; billing</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/account#invite-h" className="menu-item">Invite a friend</Link></DropdownMenu.Item>
                 <DropdownMenu.Item asChild><Link href="/pricing" className="menu-item">Plans and pricing</Link></DropdownMenu.Item>
+                {founding && <DropdownMenu.Item asChild><Link href={FOUNDER_HREF} className="menu-item">Founding 100</Link></DropdownMenu.Item>}
                 <DropdownMenu.Item className="menu-item" onSelect={() => setFeedback(true)}>Send feedback</DropdownMenu.Item>
                 {me?.is_admin && <DropdownMenu.Item asChild><Link href="/admin" className="menu-item">Admin</Link></DropdownMenu.Item>}
                 <DropdownMenu.Item className="menu-item" onSelect={() => void signOut()}>Sign out</DropdownMenu.Item>
