@@ -1,6 +1,7 @@
-// The Founding 100 policy texts (GET /v1/founding/policies/{type}), fetched on the web
-// server for /founding-100/terms, /founding-100/refunds and /privacy. Until the pages are
-// switched on (FOUNDING_LEGAL_PAGES_ENABLED) the public call is 404; a signed-in admin
+// The policy texts (GET /v1/founding/policies/{type}), fetched on the web server for /terms,
+// /privacy, /founding-100/terms and /founding-100/refunds. Until the pages are switched on
+// (HSF_LEGAL_PAGES_ENABLED for /terms and /privacy, FOUNDING_LEGAL_PAGES_ENABLED for the
+// founding ones, which also opens /privacy) the public call is 404; a signed-in admin
 // then gets the same text from the admin preview, using their own session cookie.
 import "server-only";
 

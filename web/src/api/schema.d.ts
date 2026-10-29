@@ -1018,6 +1018,8 @@ export interface paths {
          * Billing Checkout
          * @description Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing
          *     subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser.
+         *     Once the Terms of Service are published, starting a checkout records that the account
+         *     accepted them (see GET /v1/legal/status).
          */
         post: operations["billing_checkout_v1_billing_checkout_post"];
         delete?: never;
@@ -1389,8 +1391,10 @@ export interface paths {
         };
         /**
          * A Founding 100 policy (public)
-         * @description The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,
-         *     or an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1.
+         * @description The Terms of Service, Founding Membership Terms, Refund Policy or Privacy Policy: the
+         *     newest version, or an earlier one with ?version=. Terms of Service and Privacy Policy are
+         *     found once HSF_LEGAL_PAGES_ENABLED=1; the founding ones once FOUNDING_LEGAL_PAGES_ENABLED=1
+         *     (which also opens the Privacy Policy).
          */
         get: operations["get_policy_v1_founding_policies__policy_type__get"];
         put?: never;
@@ -1529,6 +1533,27 @@ export interface paths {
         put?: never;
         /** Close a logged trade (Pro) */
         post: operations["journal_close_v1_journal__trade_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/legal/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Terms of Service status (public)
+         * @description Whether the Terms of Service and Privacy Policy are published, their current versions,
+         *     and the agreement text for the sign-up form and upgrade buttons.
+         */
+        get: operations["legal_status_v1_legal_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2316,6 +2341,27 @@ export interface paths {
          *     is in the latest scan's ranked setups. The rest of the stock page needs an account.
          */
         get: operations["public_stock_v1_public_stocks__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/top-setups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The latest scan's top setups, for the landing page (signed out)
+         * @description The top three ranked setups of the latest market scan (ticker, HSF Score, setup type,
+         *     day change) and how many more a free account sees. Everything else needs an account.
+         */
+        get: operations["public_top_setups_v1_public_top_setups_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3657,7 +3703,7 @@ export interface components {
              * Policy Type
              * @enum {string}
              */
-            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             /** Sections */
             sections: components["schemas"]["PolicySection"][];
             /**
@@ -5922,6 +5968,44 @@ export interface components {
              */
             total: number;
         };
+        /** LegalPolicyRef */
+        LegalPolicyRef: {
+            /** Content Hash */
+            content_hash: string;
+            /** Path */
+            path: string;
+            /**
+             * Policy Type
+             * @enum {string}
+             */
+            policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** LegalStatus */
+        LegalStatus: {
+            /**
+             * Open
+             * @description Terms of Service and Privacy Policy are published (HSF_LEGAL_PAGES_ENABLED)
+             */
+            open: boolean;
+            /** Policies */
+            policies: components["schemas"]["LegalPolicyRef"][];
+            /**
+             * Signup Statement
+             * @description The sign-up checkbox text
+             */
+            signup_statement?: string | null;
+            /**
+             * Subscription Statement
+             * @description Shown under upgrade buttons
+             */
+            subscription_statement?: string | null;
+        };
         /** LifecycleEvent */
         LifecycleEvent: {
             /** Delta */
@@ -6036,6 +6120,12 @@ export interface components {
              * @description Set while a free Pro month from an invite is running
              */
             pro_trial_until?: string | null;
+            /**
+             * Terms Published
+             * @description The Terms of Service are live (upgrade buttons link them)
+             * @default false
+             */
+            terms_published: boolean;
         };
         /** Message */
         Message: {
@@ -6184,7 +6274,7 @@ export interface components {
              * Policy Type
              * @enum {string}
              */
-            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             /** Status */
             status: string;
             /** Title */
@@ -7372,7 +7462,7 @@ export interface components {
              * Policy Type
              * @enum {string}
              */
-            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             /** Sections */
             sections: components["schemas"]["PolicySection"][];
             /**
@@ -7401,7 +7491,7 @@ export interface components {
              * Policy Type
              * @enum {string}
              */
-            policy_type: "founding_terms" | "founding_refunds" | "privacy";
+            policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             /** Version */
             version: number;
         };
@@ -7566,6 +7656,43 @@ export interface components {
             setup?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** PublicTopSetup */
+        PublicTopSetup: {
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Hsf Score */
+            hsf_score?: number | null;
+            /** Setup */
+            setup?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** PublicTopSetups */
+        PublicTopSetups: {
+            /**
+             * Free Rows
+             * @description How many of them a free Starter account sees in the Scanner
+             */
+            free_rows: number;
+            /**
+             * Ranked Total
+             * @description Ranked setups in the latest scan
+             */
+            ranked_total: number;
+            /** Scan At */
+            scan_at?: string | null;
+            /**
+             * Setups
+             * @description Top three ranked setups (HSF Score 40 or more)
+             */
+            setups: components["schemas"]["PublicTopSetup"][];
+            /**
+             * Stale
+             * @description The latest scan is older than expected
+             * @default false
+             */
+            stale: boolean;
         };
         /** QueueCount */
         QueueCount: {
@@ -8401,7 +8528,7 @@ export interface components {
         SignupBody: {
             /**
              * Accept Terms
-             * @description The usage agreement checkbox on the web sign-up form
+             * @description The sign-up agreement checkbox (Terms of Service and research-only use)
              */
             accept_terms: boolean;
             /**
@@ -10036,7 +10163,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+                policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             };
             cookie?: never;
         };
@@ -13330,7 +13457,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                policy_type: "founding_terms" | "founding_refunds" | "privacy";
+                policy_type: "founding_terms" | "founding_refunds" | "privacy" | "terms";
             };
             cookie?: never;
         };
@@ -13721,6 +13848,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    legal_status_v1_legal_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalStatus"];
+                };
             };
             /** @description Invalid request fields */
             422: {
@@ -15977,6 +16133,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    public_top_setups_v1_public_top_setups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicTopSetups"];
+                };
             };
             /** @description Invalid request fields */
             422: {

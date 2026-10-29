@@ -154,6 +154,26 @@ be undone.
    re-created. Check recent Stripe upgrades against user plans (Stripe dashboard →
    Events) and re-send any webhook for an upgrade made in the lost window.
 
+### Restore drill (monthly)
+
+The **Database restore drill** workflow (Actions → Database restore drill → Run workflow)
+proves the data can be copied out and restored, and times it. It reads `live`, dumps the
+schema plus the rows of every table under `big_table_mb` (default 50 MB; the big research
+tables are copied as schema only), restores into a throwaway Postgres on the runner and
+compares row counts table by table. The dump is deleted when the job ends and is never
+uploaded, and the job prints only counts, sizes and timings. Neon counts the download as
+network transfer, so the job stops before downloading more than `max_dump_mb` (default 300).
+Script: `scripts/restore_drill.sh`.
+
+This tests a second way back that does not depend on the 1-day restore window: a
+`pg_dump` copy of accounts, billing, watchlists, alerts and journals. Keeping such a copy
+off Neon (an encrypted nightly dump in private storage) is the next step if the window
+stays at 1 day; it needs a storage bucket the owner chooses.
+
+| Date | Tables | Dump | Restore | Whole drill | Result |
+|---|---|---|---|---|---|
+| (first run pending) | | | | | |
+
 ### Local development branch (P2-37)
 
 `dev-local` is a copy of `live` for local runs; the local `.streamlit/secrets.toml`
@@ -164,4 +184,4 @@ GitHub or Render. It holds a copy of customer data, so treat it like live.
 ### Recommended once (owner, Neon console)
 
 - Mark `live` as a **protected branch**, so it can't be deleted or reset by mistake.
-- Consider a longer restore window before scaling paid users (P1-44).
+- Raise the restore window above 1 day now that real payments are live (P1-44).

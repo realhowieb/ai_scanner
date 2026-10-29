@@ -13,7 +13,7 @@ from api import founding as svc
 from api import ratelimit
 from api.deps import _ADMIN, _AUTH, _user, current_account, require_admin
 
-PolicyType = Literal["founding_terms", "founding_refunds", "privacy"]
+PolicyType = Literal["founding_terms", "founding_refunds", "privacy", "terms"]
 FounderTier = Literal["founder_pro", "founder_elite"]
 
 
@@ -301,6 +301,22 @@ class PublicFounderBadge(BaseModel):
     badge: str
 
 
+class LegalPolicyRef(BaseModel):
+    policy_type: PolicyType
+    version: int
+    title: str
+    path: str
+    content_hash: str
+    status: str
+
+
+class LegalStatus(BaseModel):
+    open: bool = Field(description="Terms of Service and Privacy Policy are published (HSF_LEGAL_PAGES_ENABLED)")
+    policies: List[LegalPolicyRef]
+    signup_statement: Optional[str] = Field(default=None, description="The sign-up checkbox text")
+    subscription_statement: Optional[str] = Field(default=None, description="Shown under upgrade buttons")
+
+
 def _policy_or_404(policy_type: str, version: Optional[int]) -> Dict[str, Any]:
     p = svc.policy(policy_type, version)
     if not p:
@@ -313,11 +329,23 @@ def register(app: FastAPI) -> None:
              responses={404: {"description": "Unknown policy, or the pages aren't published yet"}},
              summary="A Founding 100 policy (public)")
     def get_policy(policy_type: PolicyType, version: Optional[int] = Query(default=None, ge=1)) -> Dict[str, Any]:
-        """The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,
-        or an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1."""
-        if not svc.pages_open():
+        """The Terms of Service, Founding Membership Terms, Refund Policy or Privacy Policy: the
+        newest version, or an earlier one with ?version=. Terms of Service and Privacy Policy are
+        found once HSF_LEGAL_PAGES_ENABLED=1; the founding ones once FOUNDING_LEGAL_PAGES_ENABLED=1
+        (which also opens the Privacy Policy)."""
+        from api import legal
+
+        if not legal.page_open(policy_type):
             raise HTTPException(404, "This page isn't published yet.")
         return svc.public_policy(_policy_or_404(policy_type, version))
+
+    @app.get("/v1/legal/status", response_model=LegalStatus, summary="Terms of Service status (public)")
+    def legal_status() -> Dict[str, Any]:
+        """Whether the Terms of Service and Privacy Policy are published, their current versions,
+        and the agreement text for the sign-up form and upgrade buttons."""
+        from api import legal
+
+        return legal.status()
 
     @app.get("/v1/admin/founding/policies/{policy_type}", response_model=AdminPolicy, responses=_ADMIN,
              summary="Preview a Founding 100 policy (admin)")

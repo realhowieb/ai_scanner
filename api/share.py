@@ -58,3 +58,21 @@ def public_stock(ticker: str) -> Dict[str, Any]:
         "reason": reasons[0] if ranked and reasons else None,
         "hidden_insights": hidden,
     }
+
+
+PREVIEW_COUNT = 3
+
+
+def public_top_setups(count: int = PREVIEW_COUNT) -> Dict[str, Any]:
+    """The landing page's live preview: the latest scan's top few ranked setups (the same
+    ticker, score and setup a shared link already shows), and how many more ranked setups
+    a free account sees. Signals, risks, reasons and the rest of the list need an account."""
+    from api.scans import latest_scan, max_results_for
+
+    data = latest_scan({}, "basic", limit=count, offset=0, min_score=RANKED_MIN)
+    rows = [{"ticker": r["ticker"], "hsf_score": round(float(r["score"])) if r.get("score") is not None else None,
+             "setup": r.get("primary_setup"), "change_pct": r.get("chg_pct")}
+            for r in data.get("setups") or [] if r.get("ticker")]
+    ranked = int(data.get("total") or 0)
+    return {"scan_at": data.get("scan_at"), "stale": bool(data.get("stale")), "setups": rows,
+            "ranked_total": ranked, "free_rows": min(ranked, max_results_for("basic"))}

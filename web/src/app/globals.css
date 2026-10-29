@@ -1148,3 +1148,12 @@ a.chip { display: inline-flex; align-items: center; }
 .hash { overflow-wrap: anywhere; font-size: 12px; }
 .founder-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .founder-disclosure { margin: 0; }
+
+/* Landing: live top setups from the latest scan. */
+.live-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.live-list li { gap: 10px; align-items: center; min-height: 40px; border-bottom: 1px solid var(--line-soft); }
+.live-list li:last-child { border-bottom: 0; }
+.live-list .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: middle; }
+.live-preview .btn { justify-content: center; }
+.gs-setup { padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--up-bg); }

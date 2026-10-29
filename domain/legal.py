@@ -1,4 +1,5 @@
-"""Customer-facing policies (Founding Membership Terms, Refund Policy, Privacy Policy):
+"""Customer-facing policies (Terms of Service, Founding Membership Terms, Refund Policy,
+Privacy Policy):
 reading the versioned texts in legal/, filling in business details, and hashing them.
 
 Each legal/<type>.v<N>.txt file is one version. The text a buyer sees is the file
@@ -15,10 +16,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 TERMS, REFUNDS, PRIVACY = "founding_terms", "founding_refunds", "privacy"
-POLICY_TYPES = (TERMS, REFUNDS, PRIVACY)
+SITE_TERMS = "terms"  # the Terms of Service every account agrees to
+POLICY_TYPES = (TERMS, REFUNDS, PRIVACY, SITE_TERMS)
+# Shown to everyone (sign-up, monthly checkout), switched on by HSF_LEGAL_PAGES_ENABLED;
+# the founding pages keep their own switch.
+GENERAL_POLICIES = (SITE_TERMS, PRIVACY)
+GENERAL_PAGES_FLAG = "HSF_LEGAL_PAGES_ENABLED"
 # What a founding checkout must accept, in this order.
 CHECKOUT_POLICIES = (TERMS, REFUNDS, PRIVACY)
-PATHS = {TERMS: "/founding-100/terms", REFUNDS: "/founding-100/refunds", PRIVACY: "/privacy"}
+PATHS = {TERMS: "/founding-100/terms", REFUNDS: "/founding-100/refunds", PRIVACY: "/privacy",
+         SITE_TERMS: "/terms"}
 STATUSES = ("proposed", "approved")
 
 ROOT = Path(__file__).resolve().parent.parent / "legal"
@@ -30,8 +37,22 @@ ACKNOWLEDGMENT = ("I understand that I am purchasing a five-year HSF AI Founding
                   "Membership Terms, Refund Policy, and Privacy Policy.")
 
 
+# What signing up and starting a monthly or yearly checkout mean, once the pages are live.
+SIGNUP_STATEMENT = ("I agree to the Terms of Service and have read the Privacy Policy. I understand HSF AI is a "
+                    "research tool, not financial advice.")
+SUBSCRIPTION_STATEMENT = ("Your plan renews automatically each month or year until you cancel in Account. By "
+                          "continuing you agree to the Terms of Service.")
+
+
 class PolicyError(ValueError):
     pass
+
+
+def general_pages_open(env: Optional[Mapping[str, str]] = None) -> bool:
+    """Terms of Service and Privacy Policy are public (and accepted at sign-up and
+    checkout). The founding pages switch also opens the Privacy Policy, as before."""
+    env = os.environ if env is None else env
+    return str(env.get(GENERAL_PAGES_FLAG, "0")).strip() == "1"
 
 
 def details(env: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
@@ -45,6 +66,7 @@ def details(env: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
         "terms_url": base + PATHS[TERMS],
         "refunds_url": base + PATHS[REFUNDS],
         "privacy_url": base + PATHS[PRIVACY],
+        "site_terms_url": base + PATHS[SITE_TERMS],
     }
 
 

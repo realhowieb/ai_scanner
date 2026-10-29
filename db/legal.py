@@ -90,6 +90,18 @@ def _ensure_schema(conn, sq: bool) -> None:
             reservation_id INTEGER,
             UNIQUE (checkout_session_id, policy_version_id)
         )""")
+    if not sq:
+        # Tables made before a policy type was added (the Terms of Service) keep the old
+        # CHECK list; widen it once.
+        cur.execute("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint "
+                    "WHERE conname = 'legal_policy_versions_policy_type_check'")
+        row = cur.fetchone()
+        current = (row["def"] if isinstance(row, dict) else row[0]) if row else None
+        if current is None or any(f"'{t}'" not in current for t in policies.POLICY_TYPES):
+            cur.execute("ALTER TABLE legal_policy_versions DROP CONSTRAINT IF EXISTS "
+                        "legal_policy_versions_policy_type_check")
+            cur.execute("ALTER TABLE legal_policy_versions ADD CONSTRAINT legal_policy_versions_policy_type_check "
+                        f"CHECK (policy_type IN ({types}))")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_policy_acceptances_user ON user_policy_acceptances (user_id)")
     conn.commit()
     cur.close()

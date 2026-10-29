@@ -1,0 +1,79 @@
+title: HSF AI Terms of Service
+version: 1
+effective_date: Not yet in effect
+status: proposed
+---
+These terms apply to every HSF AI account and to the HSF AI website and apps at app.hsfinest.com, provided by {legal_entity} ("HSF AI", "we"). By creating an account or using HSF AI, you agree to them. Our Privacy Policy ({privacy_url}) explains how we handle your information. Founding memberships also have their own Founding Membership Terms; where the two differ for a founding membership, those apply.
+
+## 1. What HSF AI is
+- HSF AI is a market-research and decision-support tool. It scans U.S. stocks, ranks setups with the HSF Score, and offers watchlists, alerts, charts, AI research features and paper trading.
+- HSF AI does not give financial, investment, tax or legal advice. It does not recommend buying or selling any security, and it is not a broker, investment adviser or exchange.
+- Scores, rankings, model outputs and AI-generated text are research estimates. They are not predictions, guarantees or trading results. Market data can be delayed, incomplete or wrong.
+- You alone are responsible for your investment decisions and any trades you make.
+
+## 2. Your account
+- You must be at least 18 years old and able to form a binding contract.
+- Give a real email address and keep your password private. You are responsible for activity on your account.
+- One person per account. Don't share your account or resell access to it.
+- Tell us at {support_email} if you think someone else has used your account.
+
+## 3. Plans and payment
+- The Starter plan is free. Pro and Premium are paid subscriptions, billed monthly or yearly in advance at the price shown at checkout. Any taxes required by law are shown before you pay.
+- Payments are processed by Stripe. We never see or store your full card number.
+- Subscriptions renew automatically at the end of each billing period, at the then-current price, until you cancel.
+- If a renewal payment fails, we may retry it and your paid features may stop until it succeeds.
+- We may change plan prices. We will email you at least 14 days before a price change applies to your subscription, and it takes effect only from your next billing period.
+
+## 4. Cancelling and refunds
+- You can cancel anytime from Account, which opens the Stripe billing portal. Cancelling stops the next renewal; you keep your paid features until the end of the period you already paid for.
+- Payments for subscription periods that have started are not refunded, except where the law requires it or we made a billing error. If you think you were charged by mistake, email {support_email} within 30 days.
+- Free or extended Pro time (for example from an invite link) ends on its stated date and does not turn into a paid subscription unless you choose to subscribe.
+- Founding memberships are one-time purchases with their own refund policy.
+
+## 5. Acceptable use
+You agree not to:
+- scrape, copy in bulk, resell or redistribute HSF AI data, scores or AI output, or use them to build a competing product;
+- get around plan limits, rate limits, security checks or access controls, or use another person's account;
+- probe, overload or disrupt the service, or upload malicious code;
+- use HSF AI for anything unlawful, including market manipulation;
+- present HSF AI output as personalized investment advice to others.
+We may suspend or close an account that breaks these rules. If we close a paid account for a reason other than a breach of these terms, we refund the unused part of the current period.
+
+## 6. AI features and third-party data
+- AI features send the question and the market facts needed to answer it to our AI provider. AI answers can be wrong or incomplete; check them before relying on them.
+- Market data comes from third-party providers. We don't control it and can't promise it is complete, accurate or on time.
+- Paper trading uses your own Alpaca paper-trading account. It is simulated and does not place real orders.
+
+## 7. Your content and our content
+- Watchlists, alerts, journal entries and other things you save belong to you. You let us store and process them to run HSF AI for you.
+- HSF AI's software, design, scores and text belong to {legal_entity}. You may use them for your own research while your account is open.
+- If you send us feedback or ideas, we may use them without owing you anything.
+
+## 8. Availability and changes to the service
+- We work to keep HSF AI available but don't promise uninterrupted service. Maintenance, provider outages and market-data problems can make features unavailable for a time.
+- We may add, change or remove features. If we remove a major paid feature from your plan, you can cancel and get a prorated refund for the unused part of the current period.
+
+## 9. Ending your account
+- You can delete your account anytime in Account settings. Cancel any paid subscription first.
+- We may suspend or end access if you break these terms, if the law requires it, or if we stop offering HSF AI. If we stop offering HSF AI, we will give notice by email where we reasonably can and refund unused prepaid time.
+
+## 10. Disclaimers
+- HSF AI is provided "as is" and "as available". To the extent the law allows, we disclaim all warranties, express or implied, including fitness for a particular purpose and accuracy of data.
+- Trading and investing involve risk, including the loss of all money invested. Past results of any setup, score or model do not predict future results.
+
+## 11. Limits on liability
+- To the extent the law allows, HSF AI is not liable for trading or investment losses, lost profits, or indirect, incidental or consequential damages arising from your use of HSF AI.
+- To the extent the law allows, our total liability for any claim about HSF AI is limited to the amount you paid us in the 12 months before the claim, or $100 if that is more.
+- Nothing in these terms limits liability that cannot be limited by law.
+
+## 12. Changes to these terms
+- We may update these terms. Each version is numbered and kept, and the current one is always at this page.
+- For a change that materially affects paid subscribers, we will email you at least 14 days before it takes effect. If you keep using HSF AI after that, the new version applies; if you don't agree, you can cancel before it takes effect.
+
+## 13. Governing law
+- These terms are governed by the laws of {governing_law}, without regard to its conflict-of-law rules.
+- Nothing in these terms takes away consumer rights that cannot be waived under the law where you live.
+
+## 14. Contact
+- Questions about these terms or your account: {support_email}.
+- Provider of HSF AI: {legal_entity}.

@@ -10,7 +10,7 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { captureUsage } from "@/lib/usageAnalytics";
 
-import { StarterScoreAlertButton, StarterWatchlistButton } from "./Starters";
+import { StarterScoreAlertButton, StarterSetupButton, StarterWatchlistButton } from "./Starters";
 
 type Data = Schemas["GettingStarted"];
 type Step = Schemas["GettingStartedStep"];
@@ -40,6 +40,8 @@ export function GettingStarted() {
   // The first two steps can be done right here in one tap; the link stays for doing it by hand.
   const refresh = () => { setLocal(null); res.reload(); };
   const hasStocks = data.steps.some((s) => s.id === "watchlist" && s.done);
+  // Brand-new account: both of the first two steps in one tap, above the list.
+  const fresh = !hasStocks && data.steps.some((s) => s.id === "alert" && !s.done);
   const quick = (s: Step) => s.id === "watchlist" ? <StarterWatchlistButton compact onDone={refresh} />
     : s.id === "alert" && hasStocks ? <StarterScoreAlertButton onDone={refresh} /> : null;
 
@@ -48,6 +50,7 @@ export function GettingStarted() {
       aside={<span className="mono">{data.done} of {data.total} done</span>}>
       <div className="gs-bar" role="progressbar" aria-label="Getting started progress" aria-valuemin={0}
         aria-valuemax={data.total} aria-valuenow={data.done}><span style={{ width: `${pct}%` }} /></div>
+      {fresh && <StarterSetupButton onDone={refresh} />}
       <ol className="gs-steps">
         {data.steps.map((s) => (
           <li key={s.id} className={s.done ? "gs-done" : undefined}>

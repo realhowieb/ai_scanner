@@ -12,7 +12,7 @@ export function me(plan: "basic" | "pro" | "premium"): Schemas["Me"] {
   const on = plan === "basic" ? new Set(["can_scan_sp500"]) : plan === "pro" ? PRO : PREMIUM;
   return {
     email: `${plan}@example.invalid`, name: plan, plan, plan_label: { basic: "Starter", pro: "Pro", premium: "Premium" }[plan],
-    is_admin: false, alert_limit: 1, email_verified: true,
+    is_admin: false, alert_limit: 1, email_verified: true, terms_published: false,
     entitlements: Object.fromEntries(FEATURES.map((f) => [f, on.has(f)])),
   };
 }

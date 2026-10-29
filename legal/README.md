@@ -13,4 +13,8 @@ them, fills in the `{placeholders}` from settings, hashes the result and records
 
 Placeholders: `{legal_entity}` (HSF_LEGAL_ENTITY, default HSFinest LLC),
 `{support_email}` (HSF_SUPPORT_EMAIL), `{governing_law}` (HSF_GOVERNING_LAW), plus the
-page links `{terms_url}`, `{refunds_url}`, `{privacy_url}`.
+page links `{terms_url}` (founding terms), `{refunds_url}`, `{privacy_url}`, `{site_terms_url}`.
+
+`terms` (Terms of Service, /terms) and `privacy` are the general policies: they go public,
+and are recorded at sign-up and at monthly/yearly checkout, once `HSF_LEGAL_PAGES_ENABLED=1`.
+The founding pages keep `FOUNDING_LEGAL_PAGES_ENABLED`.
