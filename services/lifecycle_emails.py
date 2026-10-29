@@ -161,7 +161,15 @@ def _still_on_trial(email: str, users_lookup) -> bool:
         return False
     if not user or not user.get("is_active", True) or user.get("is_admin"):
         return False
-    return str(user.get("tier") or "basic").strip().lower() in ("", "basic")
+    plan = str(user.get("tier") or "basic").strip().lower() or "basic"
+    if plan != "basic":
+        return False
+    try:  # a Founding 100 member isn't losing Pro (founder plans aren't in users.tier)
+        from api.plan_access import with_founder
+
+        return with_founder(email, plan) == "basic"
+    except Exception:
+        return True
 
 
 def run_trial_reminders(now: Optional[dt.datetime] = None, users_lookup=None) -> Dict[str, Any]:

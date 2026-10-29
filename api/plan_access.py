@@ -102,6 +102,55 @@ def effective_tier(user: str, tier: Optional[str], is_admin: bool = False) -> Di
     return out
 
 
+def with_founder(user: str, plan: Optional[str]) -> str:
+    """The higher of a stored plan and the account's founder plan, for background jobs
+    (emails, alerts) that read users.tier directly. 'admin' stays 'admin'; any lookup
+    error keeps the stored plan."""
+    stored = str(plan or "basic").strip().lower() or "basic"
+    if stored == "admin":
+        return stored
+    try:
+        from domain import founding as rules
+
+        f_tier, _ = founder_access(user)
+        if f_tier:
+            founder_plan = rules.PLAN_FOR_TIER[f_tier]
+            if _rank(founder_plan) > _rank(stored):
+                return founder_plan
+    except Exception as e:
+        log.debug("founder plan lookup failed: %s", type(e).__name__)
+    return stored
+
+
+def elite_alert_limit(founder_tier: Optional[str], base: int) -> int:
+    """Founder Elite's alert cap (above Premium's); everyone else keeps `base`."""
+    from domain import founding as rules
+
+    return max(int(base), rules.ELITE_ALERT_LIMIT) if founder_tier == rules.FOUNDER_ELITE else int(base)
+
+
+def founder_alert_limit(user: str, base: int) -> int:
+    """`base` raised to Founder Elite's cap for an active Elite founder (background jobs)."""
+    try:
+        return elite_alert_limit(founder_access(user)[0], base)
+    except Exception:
+        return int(base)
+
+
+def ai_daily_limit(user: str, base: int) -> int:
+    """The daily AI allowance: Founder Elite gets ELITE_AI_MULTIPLIER times `base`."""
+    from domain import founding as rules
+
+    if base <= 0:
+        return base
+    try:
+        if founder_access(user)[0] == rules.FOUNDER_ELITE:
+            return int(base) * rules.ELITE_AI_MULTIPLIER
+    except Exception:
+        pass
+    return int(base)
+
+
 def apply_to_account(account: Dict[str, Any]) -> Dict[str, Any]:
     """The signed-in account with invite trials and founder access applied."""
     eff = effective_tier(str(account.get("username") or ""), account.get("tier"), bool(account.get("is_admin")))

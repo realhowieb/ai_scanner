@@ -31,6 +31,44 @@ TERM_YEARS = 5
 RESERVATION_MINUTES = 35
 CHECKOUT_MINUTES = 31
 
+# ---- founder benefits (legal/founding_terms.v1.txt sections 3, 5 and 10) ----
+# After the five years: this % off any HSF plan, for as long as that subscription runs
+# without a break (Stripe coupon HSF_FOUNDER_ALUMNI_COUPON, duration "forever").
+ALUMNI_DISCOUNT_PERCENT = 50
+# Friends who join with an active founder's invite link get this many days of Pro
+# (instead of the usual HSF_REFERRAL_REWARD_DAYS) for the founder's first FOUNDER_INVITES.
+FOUNDER_INVITE_DAYS = 60
+FOUNDER_INVITES = 3
+# Founder Elite limits above Premium.
+ELITE_ALERT_LIMIT = 50
+ELITE_AI_MULTIPLIER = 2
+# Feature polls founders can vote in, as "key:Label" pairs separated by "|" in
+# HSF_FOUNDER_POLL (unset = this default list; empty = no poll).
+DEFAULT_POLL = ("options_flow:Options flow and unusual options activity|"
+                "crypto:Crypto scanner|"
+                "mobile_app:iPhone and Android app|"
+                "backtest:Backtest my own scan filters|"
+                "api:Personal API access")
+
+
+def poll_options(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    raw = (env if env is not None else os.environ).get("HSF_FOUNDER_POLL", DEFAULT_POLL)
+    out: Dict[str, str] = {}
+    for part in str(raw or "").split("|"):
+        key, _, label = part.partition(":")
+        key, label = key.strip().lower(), label.strip()
+        if key and label and key.replace("_", "").isalnum() and len(key) <= 40:
+            out[key] = label[:120]
+    return out
+
+
+def early_access_features(env: Optional[Dict[str, str]] = None) -> tuple:
+    """Plan features founders get before their plan does (HSF_FOUNDER_EARLY_ACCESS, comma
+    separated entitlement names such as can_early_breakout). Unset = none."""
+    raw = (env if env is not None else os.environ).get("HSF_FOUNDER_EARLY_ACCESS", "")
+    return tuple(x.strip() for x in str(raw).split(",") if x.strip())
+
+
 # The existing plan each founder tier unlocks while the membership is active.
 PLAN_FOR_TIER: Dict[str, str] = {FOUNDER_PRO: "pro", FOUNDER_ELITE: "premium"}
 TIER_LABEL: Dict[str, str] = {FOUNDER_PRO: "Founder Pro", FOUNDER_ELITE: "Founder Elite"}
