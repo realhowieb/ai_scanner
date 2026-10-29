@@ -1,6 +1,7 @@
 """Terms of Service for every account: the /terms text, the HSF_LEGAL_PAGES_ENABLED switch,
 and recording acceptance at sign-up and at monthly/yearly checkout. Plus the landing page's
 live top-setups preview."""
+import importlib.util as _ilu
 import os
 import unittest
 from unittest import mock
@@ -9,6 +10,8 @@ from domain import legal
 from tests.test_founding_legal import DbBase
 
 ON = {legal.GENERAL_PAGES_FLAG: "1"}
+# api.legal reaches api.founding, which imports fastapi (absent on the slim CI jobs).
+_NEEDS_API = unittest.skipUnless(_ilu.find_spec("fastapi"), "needs fastapi")
 
 
 class TermsTextTests(unittest.TestCase):
@@ -29,6 +32,7 @@ class TermsTextTests(unittest.TestCase):
         self.assertNotIn(legal.SITE_TERMS, legal.CHECKOUT_POLICIES, "founder checkout is unchanged")
 
 
+@_NEEDS_API
 class SwitchTests(unittest.TestCase):
     def test_status_and_page_open(self):
         from api import legal as svc
@@ -54,6 +58,7 @@ class SwitchTests(unittest.TestCase):
                              {"terms": False, "privacy": True, "founding_terms": True, "founding_refunds": True})
 
 
+@_NEEDS_API
 class RecordingTests(DbBase):
     def setUp(self):
         super().setUp()
