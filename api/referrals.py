@@ -119,13 +119,44 @@ def credit_signup(attribution: Optional[Dict[str, str]], email: str) -> bool:
     return ok
 
 
+def founder_invite_days(referrer: str, exclude: Optional[str] = None) -> int:
+    """Days of Pro a friend gets from this inviter: FOUNDER_INVITE_DAYS while the inviter
+    is an active founder and has used fewer than FOUNDER_INVITES since joining, else 0
+    (the usual reward applies)."""
+    from api.plan_access import founder_access
+    from db import founding
+    from db import referrals as store
+    from domain import founding as rules
+
+    tier, _ = founder_access(referrer)
+    if not tier:
+        return 0
+    m = founding.membership(referrer) or {}
+    used = store.rewarded_count(referrer, since=m.get("activated_at"), exclude=exclude)
+    return rules.FOUNDER_INVITE_DAYS if used < rules.FOUNDER_INVITES else 0
+
+
+def founder_invites_left(user: str) -> Optional[int]:
+    """For the founder page: bonus invites left, or None when the account isn't a founder."""
+    from api.plan_access import founder_access
+    from db import founding
+    from db import referrals as store
+    from domain import founding as rules
+
+    if not founder_access(user)[0]:
+        return None
+    m = founding.membership(user) or {}
+    return max(0, rules.FOUNDER_INVITES - store.rewarded_count(user, since=m.get("activated_at")))
+
+
 def reward_on_verify(email: str) -> bool:
     if not enabled():
         return False
     try:
         from db import referrals as store
 
-        referrer = store.reward_verified(email, days=reward_days(), cap_days=cap_days())
+        referrer = store.reward_verified(email, days=reward_days(), cap_days=cap_days(),
+                                         invited_days=founder_invite_days)
     except Exception as e:
         log.warning(json.dumps({"event": "referral_reward_failed", "error": type(e).__name__}))
         return False

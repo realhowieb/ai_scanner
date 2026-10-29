@@ -1920,6 +1920,27 @@
     "title": "AdminPolicy",
     "type": "object"
    },
+   "AdminPoll": {
+    "properties": {
+     "options": {
+      "items": {
+       "$ref": "#/components/schemas/PollOption"
+      },
+      "title": "Options",
+      "type": "array"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "options",
+     "total"
+    ],
+    "title": "AdminPoll",
+    "type": "object"
+   },
    "AdminProviders": {
     "properties": {
      "checked_at": {
@@ -4064,6 +4085,19 @@
      "action"
     ],
     "title": "AuditEntry",
+    "type": "object"
+   },
+   "BadgeBody": {
+    "properties": {
+     "show": {
+      "title": "Show",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "show"
+    ],
+    "title": "BadgeBody",
     "type": "object"
    },
    "Bar": {
@@ -6284,6 +6318,24 @@
     "title": "EarningsSetup",
     "type": "object"
    },
+   "EliteLimits": {
+    "properties": {
+     "ai_multiplier": {
+      "title": "Ai Multiplier",
+      "type": "integer"
+     },
+     "alert_limit": {
+      "title": "Alert Limit",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "alert_limit",
+     "ai_multiplier"
+    ],
+    "title": "EliteLimits",
+    "type": "object"
+   },
    "EmailPrefs": {
     "properties": {
      "alerts": {
@@ -6381,6 +6433,24 @@
      }
     },
     "title": "EmailPrefsUpdate",
+    "type": "object"
+   },
+   "FeatureRef": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key",
+     "label"
+    ],
+    "title": "FeatureRef",
     "type": "object"
    },
    "FeedbackBody": {
@@ -6543,6 +6613,112 @@
     "title": "FilingEvent",
     "type": "object"
    },
+   "FounderBenefits": {
+    "properties": {
+     "alumni_discount_percent": {
+      "description": "Off any plan after the five years, for life",
+      "title": "Alumni Discount Percent",
+      "type": "integer"
+     },
+     "alumni_rate_ready": {
+      "title": "Alumni Rate Ready",
+      "type": "boolean"
+     },
+     "badge": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Badge"
+     },
+     "early_access": {
+      "items": {
+       "$ref": "#/components/schemas/FeatureRef"
+      },
+      "title": "Early Access",
+      "type": "array"
+     },
+     "elite_limits": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/EliteLimits"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "invites": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/FounderInvites"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "poll": {
+      "$ref": "#/components/schemas/FounderPoll"
+     },
+     "show_badge": {
+      "description": "Shared stock links show the founder badge",
+      "title": "Show Badge",
+      "type": "boolean"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "tier": {
+      "enum": [
+       "founder_pro",
+       "founder_elite"
+      ],
+      "title": "Tier",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "tier",
+     "show_badge",
+     "alumni_discount_percent",
+     "alumni_rate_ready",
+     "early_access",
+     "poll"
+    ],
+    "title": "FounderBenefits",
+    "type": "object"
+   },
+   "FounderInvites": {
+    "properties": {
+     "days": {
+      "description": "Days of Pro each invited friend gets",
+      "title": "Days",
+      "type": "integer"
+     },
+     "left": {
+      "title": "Left",
+      "type": "integer"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "days",
+     "total",
+     "left"
+    ],
+    "title": "FounderInvites",
+    "type": "object"
+   },
    "FounderMembership": {
     "properties": {
      "activated_at": {
@@ -6691,6 +6867,38 @@
      "refundable_cents"
     ],
     "title": "FounderPayment",
+    "type": "object"
+   },
+   "FounderPoll": {
+    "properties": {
+     "choice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Choice"
+     },
+     "open": {
+      "title": "Open",
+      "type": "boolean"
+     },
+     "options": {
+      "items": {
+       "$ref": "#/components/schemas/PollOption"
+      },
+      "title": "Options",
+      "type": "array"
+     }
+    },
+    "required": [
+     "open",
+     "options"
+    ],
+    "title": "FounderPoll",
     "type": "object"
    },
    "FoundingCancel": {
@@ -11682,6 +11890,50 @@
     "title": "PolicySection",
     "type": "object"
    },
+   "PollBody": {
+    "properties": {
+     "option": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Option",
+      "type": "string"
+     }
+    },
+    "required": [
+     "option"
+    ],
+    "title": "PollBody",
+    "type": "object"
+   },
+   "PollOption": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "votes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Votes"
+     }
+    },
+    "required": [
+     "key",
+     "label"
+    ],
+    "title": "PollOption",
+    "type": "object"
+   },
    "PortalBody": {
     "properties": {
      "flow": {
@@ -11921,6 +12173,19 @@
      "at"
     ],
     "title": "ProviderDiagnostic",
+    "type": "object"
+   },
+   "PublicFounderBadge": {
+    "properties": {
+     "badge": {
+      "title": "Badge",
+      "type": "string"
+     }
+    },
+    "required": [
+     "badge"
+    ],
+    "title": "PublicFounderBadge",
     "type": "object"
    },
    "PublicStock": {
@@ -17602,6 +17867,45 @@
     "summary": "Preview a Founding 100 policy (admin)"
    }
   },
+  "/v1/admin/founding/poll": {
+   "get": {
+    "operationId": "admin_poll_v1_admin_founding_poll_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminPoll"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Founder poll results (admin)"
+   }
+  },
   "/v1/admin/founding/refunds": {
    "get": {
     "operationId": "admin_refunds_v1_admin_founding_refunds_get",
@@ -20900,6 +21204,92 @@
     "summary": "Record a signed-out funnel event"
    }
   },
+  "/v1/founding/benefits": {
+   "get": {
+    "description": "Founder rate after the five years, early access, founder invites, Elite limits,\nthe shared-link badge setting and the founder poll.",
+    "operationId": "get_benefits_v1_founding_benefits_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FounderBenefits"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not a founding member"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your founder benefits"
+   }
+  },
+  "/v1/founding/benefits/badge": {
+   "post": {
+    "operationId": "set_badge_v1_founding_benefits_badge_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BadgeBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FounderBenefits"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Show or hide your founder badge on shared links"
+   }
+  },
   "/v1/founding/checkout": {
    "post": {
     "description": "Holds a seat and returns a Stripe Checkout link for the server-set price. Needs\nacknowledged=true and the current version and hash of all three policies; records\nwhat was accepted against the checkout session.",
@@ -21099,6 +21489,55 @@
      }
     },
     "summary": "A Founding 100 policy (public)"
+   }
+  },
+  "/v1/founding/poll": {
+   "post": {
+    "operationId": "vote_v1_founding_poll_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PollBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FounderBenefits"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Active founders only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Vote in the founder poll (one choice; voting again changes it)"
    }
   },
   "/v1/founding/refunds/me": {
@@ -24871,6 +25310,49 @@
      }
     ],
     "summary": "Pre-market gappers (Pro)"
+   }
+  },
+  "/v1/public/founder-badge/{code}": {
+   "get": {
+    "operationId": "founder_badge_v1_public_founder_badge__code__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "code",
+      "required": true,
+      "schema": {
+       "pattern": "^[a-z0-9]{4,32}$",
+       "title": "Code",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicFounderBadge"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No founder badge for this invite code"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "The founder badge behind a shared link's invite code (public)"
    }
   },
   "/v1/public/stocks/{ticker}": {

@@ -51,3 +51,13 @@ export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
   requested: "Waiting for review", approved: "Approved", denied: "Not approved", initiated: "Refund started",
   completed: "Refunded", failed: "Refund failed",
 };
+
+// Founder benefits (members) and the founder poll results (admins).
+export type FounderBenefits = Schemas["FounderBenefits"];
+
+export const founderBenefits = {
+  get: (signal?: AbortSignal) => unwrap(api.GET("/v1/founding/benefits", { signal })),
+  showBadge: (show: boolean) => unwrap(api.POST("/v1/founding/benefits/badge", { body: { show } })),
+  vote: (option: string) => unwrap(api.POST("/v1/founding/poll", { body: { option } })),
+  pollResults: (signal?: AbortSignal) => unwrap(api.GET("/v1/admin/founding/poll", { signal })),
+};

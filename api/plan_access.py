@@ -122,6 +122,35 @@ def with_founder(user: str, plan: Optional[str]) -> str:
     return stored
 
 
+def elite_alert_limit(founder_tier: Optional[str], base: int) -> int:
+    """Founder Elite's alert cap (above Premium's); everyone else keeps `base`."""
+    from domain import founding as rules
+
+    return max(int(base), rules.ELITE_ALERT_LIMIT) if founder_tier == rules.FOUNDER_ELITE else int(base)
+
+
+def founder_alert_limit(user: str, base: int) -> int:
+    """`base` raised to Founder Elite's cap for an active Elite founder (background jobs)."""
+    try:
+        return elite_alert_limit(founder_access(user)[0], base)
+    except Exception:
+        return int(base)
+
+
+def ai_daily_limit(user: str, base: int) -> int:
+    """The daily AI allowance: Founder Elite gets ELITE_AI_MULTIPLIER times `base`."""
+    from domain import founding as rules
+
+    if base <= 0:
+        return base
+    try:
+        if founder_access(user)[0] == rules.FOUNDER_ELITE:
+            return int(base) * rules.ELITE_AI_MULTIPLIER
+    except Exception:
+        pass
+    return int(base)
+
+
 def apply_to_account(account: Dict[str, Any]) -> Dict[str, Any]:
     """The signed-in account with invite trials and founder access applied."""
     eff = effective_tier(str(account.get("username") or ""), account.get("tier"), bool(account.get("is_admin")))

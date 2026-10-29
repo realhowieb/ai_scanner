@@ -6,7 +6,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from api import founding as svc
@@ -245,6 +245,62 @@ class RefundDecision(BaseModel):
     note: Optional[str] = None
 
 
+class FeatureRef(BaseModel):
+    key: str
+    label: str
+
+
+class PollOption(FeatureRef):
+    votes: Optional[int] = None
+
+
+class FounderPoll(BaseModel):
+    open: bool
+    choice: Optional[str] = None
+    options: List[PollOption]
+
+
+class FounderInvites(BaseModel):
+    days: int = Field(description="Days of Pro each invited friend gets")
+    total: int
+    left: int
+
+
+class EliteLimits(BaseModel):
+    alert_limit: int
+    ai_multiplier: int
+
+
+class FounderBenefits(BaseModel):
+    status: str
+    tier: FounderTier
+    badge: Optional[str] = None
+    show_badge: bool = Field(description="Shared stock links show the founder badge")
+    alumni_discount_percent: int = Field(description="Off any plan after the five years, for life")
+    alumni_rate_ready: bool
+    early_access: List[FeatureRef]
+    invites: Optional[FounderInvites] = None
+    elite_limits: Optional[EliteLimits] = None
+    poll: FounderPoll
+
+
+class BadgeBody(BaseModel):
+    show: bool
+
+
+class PollBody(BaseModel):
+    option: str = Field(min_length=1, max_length=40)
+
+
+class AdminPoll(BaseModel):
+    options: List[PollOption]
+    total: int
+
+
+class PublicFounderBadge(BaseModel):
+    badge: str
+
+
 def _policy_or_404(policy_type: str, version: Optional[int]) -> Dict[str, Any]:
     p = svc.policy(policy_type, version)
     if not p:
@@ -359,3 +415,39 @@ def register(app: FastAPI) -> None:
     def admin_deny(request_id: int, body: DenyBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         require_admin(account)
         return svc.admin_deny(account, request_id, reason=body.reason)
+
+    @app.get("/v1/founding/benefits", response_model=FounderBenefits,
+             responses={**_AUTH, 404: {"description": "Not a founding member"}},
+             summary="Your founder benefits")
+    def get_benefits(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Founder rate after the five years, early access, founder invites, Elite limits,
+        the shared-link badge setting and the founder poll."""
+        return svc.benefits(account)
+
+    @app.post("/v1/founding/benefits/badge", response_model=FounderBenefits, responses=_AUTH,
+              summary="Show or hide your founder badge on shared links")
+    def set_badge(body: BadgeBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return svc.set_show_badge(account, body.show)
+
+    @app.post("/v1/founding/poll", response_model=FounderBenefits,
+              responses={**_AUTH, 403: {"description": "Active founders only"}},
+              summary="Vote in the founder poll (one choice; voting again changes it)")
+    def vote(body: PollBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        ratelimit.check("founding_refund", _user(account))
+        return svc.poll_vote(account, body.option)
+
+    @app.get("/v1/admin/founding/poll", response_model=AdminPoll, responses=_ADMIN,
+             summary="Founder poll results (admin)")
+    def admin_poll(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        require_admin(account)
+        return svc.admin_poll()
+
+    @app.get("/v1/public/founder-badge/{code}", response_model=PublicFounderBadge,
+             responses={404: {"description": "No founder badge for this invite code"}},
+             summary="The founder badge behind a shared link's invite code (public)")
+    def founder_badge(code: str = Path(pattern=r"^[a-z0-9]{4,32}$"),
+                      _l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        badge = svc.public_badge(code)
+        if not badge:
+            raise HTTPException(404, "No founder badge.")
+        return {"badge": badge}

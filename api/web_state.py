@@ -141,6 +141,10 @@ def send_feedback(account: Dict[str, Any], kind: str, message: str, path: Option
 
     user = _user(account)
     plan = entitlements_for(account)["tier"]
+    if account.get("founder_tier"):  # founders' feedback is marked so it stands out
+        from domain import founding as founding_rules
+
+        plan = f"{plan}, {founding_rules.TIER_LABEL.get(account['founder_tier'], 'founder')}"
     clean_path = (path or "").split("?")[0].split("#")[0][:200] or None
     web_state.add_feedback(user, kind, message.strip(), clean_path, plan, (build or "")[:64] or None)
     if not _enabled("HSF_FEEDBACK_NOTIFY"):
@@ -151,6 +155,6 @@ def send_feedback(account: Dict[str, Any], kind: str, message: str, path: Option
         label = FEEDBACK_KINDS.get(kind, "Feedback")
         text = (f"From: {user} ({plan})\nPage: {clean_path or 'unknown'}\n"
                 f"Build: {build or 'unknown'}\n\n{message.strip()}")
-        notify_ops(f"HSF feedback: {label}", text)
+        notify_ops(f"HSF feedback{' (founder)' if account.get('founder_tier') else ''}: {label}", text)
     except Exception as e:
         log.warning(json.dumps({"event": "feedback_notify_failed", "error": type(e).__name__}))

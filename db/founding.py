@@ -281,6 +281,15 @@ def _ensure_schema(conn, sq: bool) -> None:
             payment_reference TEXT,
             detail TEXT
         )""")
+    # Founder benefits (db/founding_benefits.py): badge on shared links and the feature poll.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS founding_member_prefs (
+            user_id TEXT PRIMARY KEY,
+            show_badge INTEGER NOT NULL DEFAULT 1,
+            poll_choice TEXT,
+            poll_at TEXT,
+            updated_at TEXT NOT NULL
+        )""")
     now = _iso(_utc())
     for tier, capacity in rules.CAPACITY.items():
         cur.execute(_sql("INSERT INTO founding_inventory (tier, capacity, held, sold, updated_at) "

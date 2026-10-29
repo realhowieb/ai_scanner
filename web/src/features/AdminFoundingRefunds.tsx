@@ -5,7 +5,7 @@
 // and access changes only when Stripe confirms it.
 import { useState } from "react";
 
-import { cents, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
+import { cents, founderBenefits, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
 import type { AdminRefundRequest, RefundBasis, RefundStatus } from "@/api/founding";
 import { Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
@@ -149,6 +149,25 @@ export function FoundingRefundsTab() {
             )}
       </div>
       {open !== null && <Decide id={open} onClose={() => setOpen(null)} onChanged={state.reload} />}
+    </Card>
+  );
+}
+
+export function FounderPollCard() {
+  const state = useApi("admin-founder-poll", (signal) => founderBenefits.pollResults(signal));
+  const d = state.data;
+  return (
+    <Card title="Founder poll">
+      {state.error && !d ? <ErrorState error={state.error} onRetry={state.reload} what="the founder poll" />
+        : !d ? <Skeleton rows={2} label="Loading the founder poll" />
+          : d.options.length === 0 ? <p className="cap">No poll is set (HSF_FOUNDER_POLL is empty).</p> : (
+            <div className="stack-xs">
+              <p className="cap">{d.total} founder vote{d.total === 1 ? "" : "s"}. Change the options with HSF_FOUNDER_POLL.</p>
+              <ul className="stack-xs">{[...d.options].sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0)).map((o) => (
+                <li key={o.key}><strong>{o.votes ?? 0}</strong> <span>{o.label}</span></li>
+              ))}</ul>
+            </div>
+          )}
     </Card>
   );
 }

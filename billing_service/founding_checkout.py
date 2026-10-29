@@ -182,3 +182,25 @@ def apply_refund_event(kind: str, data: Dict[str, Any], *, now: Optional[dt.date
         r = refunds.mark_failed(rid, str(data.get("failure_reason") or "failed"), "payment_provider", now=now)
         return {"outcome": "failed", "request_id": rid, "status": r["status"], "user_id": r["user_id"]}
     return {"outcome": "ignored"}
+
+
+# ---- founder rate after the five years (legal/founding_terms.v1.txt section 3) ---------------
+
+ALUMNI_COUPON_ENV = "HSF_FOUNDER_ALUMNI_COUPON"
+
+
+def alumni_coupon(email: str) -> Optional[str]:
+    """The Stripe coupon (50% off, duration forever) for a member whose five years ended,
+    or None: no coupon configured, never a member, or refunded/revoked."""
+    import os
+
+    coupon = os.environ.get(ALUMNI_COUPON_ENV, "").strip()
+    if not coupon:
+        return None
+    try:
+        from db import founding as db
+
+        m = db.membership(email)
+    except Exception:
+        return None
+    return coupon if m and m.get("status") == "expired" else None

@@ -28,8 +28,15 @@ def _over_daily_limit(username: str | None) -> bool:
         from config import AI_DAILY_LIMIT
         if AI_DAILY_LIMIT <= 0:
             return False
+        limit = AI_DAILY_LIMIT
+        try:  # Founder Elite gets a larger daily allowance
+            from api.plan_access import ai_daily_limit
+
+            limit = ai_daily_limit(username, AI_DAILY_LIMIT)
+        except Exception:
+            pass
         from db.ai_usage import ai_calls_today
-        return ai_calls_today(username) >= AI_DAILY_LIMIT
+        return ai_calls_today(username) >= limit
     except Exception:
         return False  # fail-open: never block a user on a counting error
 

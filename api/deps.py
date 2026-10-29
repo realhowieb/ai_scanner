@@ -119,9 +119,17 @@ def entitlements_for(account: Dict[str, Any]) -> Dict[str, Any]:
     is_admin = bool(account.get("is_admin"))
     tier = str(account.get("tier") or "basic").strip().lower()
     tier = "admin" if is_admin else (tier if tier in TIER_ORDER else "basic")
-    return {"tier": tier, "is_admin": is_admin,
-            "entitlements": compute_entitlements(tier_obj=tier, is_admin=is_admin, has_min_tier_fn=has_min_tier),
-            "alert_limit": ALERT_LIMIT_BY_TIER.get(tier, 1)}
+    from api.plan_access import elite_alert_limit
+    from domain import founding as founding_rules
+
+    founder = account.get("founder_tier")
+    ents = compute_entitlements(tier_obj=tier, is_admin=is_admin, has_min_tier_fn=has_min_tier)
+    if founder:  # early access: features switched on for founders before their plan gets them
+        for name in founding_rules.early_access_features():
+            if name in ents:
+                ents[name] = True
+    return {"tier": tier, "is_admin": is_admin, "entitlements": ents,
+            "alert_limit": elite_alert_limit(founder, ALERT_LIMIT_BY_TIER.get(tier, 1))}
 
 
 def _capabilities(ent: Dict[str, Any]) -> Dict[str, Any]:
