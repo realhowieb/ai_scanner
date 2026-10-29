@@ -849,7 +849,8 @@ def _create_checkout_for_account(email: str, payload: dict, *, user=None, idempo
             options["idempotency_key"] = idempotency_key
         if expires_at:
             options["expires_at"] = expires_at
-        coupon = _founder_alumni_coupon(email)
+        # The founder rate is for yearly plans only.
+        coupon = _founder_alumni_coupon(email) if interval == "year" else None
         if coupon:  # Stripe allows a coupon or promotion codes, not both
             options["discounts"] = [{"coupon": coupon}]
         else:

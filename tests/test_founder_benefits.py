@@ -36,7 +36,7 @@ class RuleTests(unittest.TestCase):
     def test_terms_describe_the_benefits(self):
         cur = legal.current(legal.load(env={}))[legal.TERMS]
         text = cur["text"]
-        for phrase in ("50% off its price at that time", "up to 50 active alerts", "twice Premium's daily AI allowance",
+        for phrase in ("50% off its yearly price at that time", "up to 50 active alerts", "twice Premium's daily AI allowance",
                        "Early access", "60 days of Pro", "never your name or email", "Founder polls are product feedback"):
             self.assertIn(phrase, text)
         self.assertEqual(len([s for s in cur["sections"] if s["heading"]]), 17)
@@ -167,12 +167,17 @@ class AlumniRateTests(Base):
             kw = self._create(b)
         self.assertTrue(kw["allow_promotion_codes"])
         self.assertNotIn("discounts", kw)
+        with mock.patch.object(b, "_founder_alumni_coupon", return_value="founder50"):
+            kw = self._create(b, interval="month")
+        self.assertNotIn("discounts", kw, "the founder rate is for yearly plans only")
+        self.assertTrue(kw["allow_promotion_codes"])
 
-    def _create(self, b):
+    def _create(self, b, interval="year"):
         b.stripe.checkout.Session.create.reset_mock()
         b.STRIPE_PRICE_PRO = "price_pro"
+        b.STRIPE_PRICE_PRO_YEARLY = "price_pro_year"
         with mock.patch.object(b, "_require_env"):
-            b._create_checkout_for_account("a@example.com", {"plan": "pro"}, user={"stripe_customer_id": None})
+            b._create_checkout_for_account("a@example.com", {"plan": "pro", "interval": interval}, user={"stripe_customer_id": None})
         return b.stripe.checkout.Session.create.call_args.kwargs
 
 

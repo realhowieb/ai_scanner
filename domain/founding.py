@@ -32,7 +32,7 @@ RESERVATION_MINUTES = 35
 CHECKOUT_MINUTES = 31
 
 # ---- founder benefits (legal/founding_terms.v1.txt sections 3, 5 and 10) ----
-# After the five years: this % off any HSF plan, for as long as that subscription runs
+# After the five years: this % off any yearly HSF plan, for as long as that subscription runs
 # without a break (Stripe coupon HSF_FOUNDER_ALUMNI_COUPON, duration "forever").
 ALUMNI_DISCOUNT_PERCENT = 50
 # Friends who join with an active founder's invite link get this many days of Pro
