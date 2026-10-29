@@ -14,7 +14,7 @@ import type { Schemas } from "@/api/client";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { AnalyticsTab, ResearchTab } from "@/features/AdminAnalytics";
-import { FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
+import { FounderPollCard, FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
@@ -453,7 +453,7 @@ export function AdminView() {
         ))}
       </div>
       <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
-        : tab === "health" ? <HealthTab /> : tab === "founding" ? <FoundingRefundsTab /> : <ToolsTab />}</div>
+        : tab === "health" ? <HealthTab /> : tab === "founding" ? <div className="stack"><FoundingRefundsTab /><FounderPollCard /></div> : <ToolsTab />}</div>
     </div>
   );
 }

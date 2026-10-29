@@ -712,6 +712,18 @@ def _subscription_cancel_flow(subscription_id: str, return_url: str) -> Optional
     }
 
 
+def _founder_alumni_coupon(email: str) -> Optional[str]:
+    """Founding members whose five years ended get the founder rate (a Stripe coupon)."""
+    try:
+        try:
+            from billing_service.founding_checkout import alumni_coupon
+        except ImportError:  # standalone Render root
+            from founding_checkout import alumni_coupon  # type: ignore
+        return alumni_coupon(email)
+    except Exception:
+        return None
+
+
 @app.post("/create-checkout-session")
 def create_checkout_session(payload: dict, request: Request):
     _require_env("STRIPE_PRICE_PRO", "STRIPE_PRICE_PREMIUM", "APP_SUCCESS_URL", "APP_CANCEL_URL", "DATABASE_URL")
@@ -837,6 +849,11 @@ def _create_checkout_for_account(email: str, payload: dict, *, user=None, idempo
             options["idempotency_key"] = idempotency_key
         if expires_at:
             options["expires_at"] = expires_at
+        coupon = _founder_alumni_coupon(email)
+        if coupon:  # Stripe allows a coupon or promotion codes, not both
+            options["discounts"] = [{"coupon": coupon}]
+        else:
+            options["allow_promotion_codes"] = True
         session = stripe.checkout.Session.create(
             **options,
             mode="subscription",
@@ -844,7 +861,6 @@ def _create_checkout_for_account(email: str, payload: dict, *, user=None, idempo
             customer=customer_id or None,
             customer_email=None if customer_id else email,
             line_items=[{"price": price_id, "quantity": 1}],
-            allow_promotion_codes=True,
             success_url=success_url,
             cancel_url=_cancel_url_for(success_url),
             metadata={

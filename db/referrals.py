@@ -210,7 +210,29 @@ def _extend(cur, sq: bool, user_id: str, days: int, cap_days: int, reason: str, 
     return _iso(until)
 
 
-def reward_verified(referred: str, *, days: int, cap_days: int) -> Optional[str]:
+def rewarded_count(referrer: str, *, since: Optional[str] = None, exclude: Optional[str] = None) -> int:
+    """How many of this account's invites verified (optionally since an ISO time, and
+    leaving out one referred account)."""
+    q = "SELECT COUNT(*) FROM hsf_referrals WHERE referrer = %s AND rewarded_at IS NOT NULL"
+    params: list = [referrer.strip().lower()]
+    if since:
+        q += " AND rewarded_at >= %s"
+        params.append(since)
+    if exclude:
+        q += " AND referred <> %s"
+        params.append(referred_key(exclude))
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql(q, sq), tuple(params))
+        row = _one(cur)
+        return int(row[0] or 0) if row else 0
+    finally:
+        _close(conn, sq)
+
+
+def reward_verified(referred: str, *, days: int, cap_days: int,
+                    invited_days: Optional[Callable[[str, str], int]] = None) -> Optional[str]:
     """When a credited account verifies its email: mark it verified and give both people
     `days` of Pro (added to any trial they still have, at most `cap_days` from now).
     Returns the referrer, or None when there is nothing to reward (never twice)."""
@@ -229,8 +251,15 @@ def reward_verified(referred: str, *, days: int, cap_days: int) -> Optional[str]
         cur.execute(_sql("SELECT referrer FROM hsf_referrals WHERE referred = %s", sq), (key,))
         row = _one(cur)
         referrer = str(row[0]) if row else None
+        mine = days
+        if referrer and invited_days is not None and days > 0:
+            try:  # e.g. a founder's invite gives the friend more days
+                mine = max(days, int(invited_days(referrer, referred)))
+            except Exception:
+                mine = days
+        if mine > 0:
+            _extend(cur, sq, referred, mine, max(cap_days, mine), "referral:invited", now)
         if days > 0:
-            _extend(cur, sq, referred, days, cap_days, "referral:invited", now)
             if referrer:
                 _extend(cur, sq, referrer, days, cap_days, "referral:inviter", now)
         conn.commit()

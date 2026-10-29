@@ -22,6 +22,7 @@ These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder E
 - Your membership lasts five calendar years from the moment it is activated. For example, a membership activated at 3:00 pm UTC on 2 November 2026 ends at 3:00 pm UTC on 2 November 2031. A membership activated on 29 February ends on 28 February five years later.
 - The end date is shown on your account page.
 - When the five years end, membership access stops. You can keep using HSF AI on the free Starter plan or choose any plan offered at that time.
+- Founder rate: when your five years end, you can subscribe to any HSF AI plan at 50% off its price at that time, for as long as you keep that subscription without a break. This applies to members whose membership reached its end date, not to memberships that were refunded or ended under section 8.
 
 ## 4. Membership activation
 - Your membership begins only after the payment provider confirms your payment. A started or abandoned checkout does not create a membership.
@@ -32,6 +33,8 @@ These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder E
 - Founder Pro includes the features of the HSF Pro plan, as offered during your membership.
 - Founder Elite includes the features of the HSF Premium plan, as offered during your membership.
 - Features may be improved, changed or replaced during the five years. We will not reduce your membership to fewer features than the plan it is tied to offers paying subscribers at the same time.
+- Founder Elite also has higher limits than Premium: up to 50 active alerts and twice Premium's daily AI allowance. We will not set these below Premium's limits during your membership.
+- Early access: we may let founders use some new features before other users. Early access is a preview. A feature can change before it launches, and once it launches it is available on the plan it belongs to.
 - Premium third-party market data is not included unless we say in writing that it is.
 - Brokerage services, trade execution and investment advice are not included.
 - Features we describe as planned are not part of what you are buying today. They will be marked "planned" until they are available, and we do not promise when, or whether, they will ship.
@@ -60,8 +63,11 @@ These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder E
 ## 10. Founder badge and recognition
 - Active members are shown as "HSF AI Founder #NNN" (Founder Pro) or "HSF AI Elite Founder #NNN" (Founder Elite).
 - Your badge stays on your account after the five years end.
+- When you share a stock page, it can show your founder badge (never your name or email). You can turn this off on your founder page.
+- Founder invites: the first 3 friends who join with your invite link and verify their email get 60 days of Pro instead of the usual invite reward.
+- Founder polls ask what we should build next. Results guide our plans but do not bind us.
 - A membership that is refunded or ended under section 8 loses its badge and founder number.
-- A founding membership, number or badge is recognition only. It is not ownership of, equity in, a loan to, or an investment in {legal_entity} or HSF AI, and carries no right to profits, voting or company information.
+- A founding membership, number or badge is recognition only. It is not ownership of, equity in, a loan to, or an investment in {legal_entity} or HSF AI, and carries no right to profits, company votes or company information. Founder polls are product feedback, not company votes.
 
 ## 11. Account security
 - Memberships are personal and cannot be transferred, sold, shared or moved to another account.

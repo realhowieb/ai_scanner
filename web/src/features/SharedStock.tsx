@@ -11,7 +11,7 @@ import type { Schemas } from "@/api/client";
 type PublicStock = Schemas["PublicStock"];
 
 /** The signed-out page behind a shared stock link: what a preview promised, then sign-up. */
-export function SharedStock({ stock: s, asked }: { stock: PublicStock | null; asked: string }) {
+export function SharedStock({ stock: s, asked, sharedBy }: { stock: PublicStock | null; asked: string; sharedBy?: string | null }) {
   useLandingVisit("share");
   const signup = s ? `/signup?next=${encodeURIComponent(`/stocks/${s.ticker}`)}` : "/signup";
   const cta = (label: string) => (
@@ -33,6 +33,7 @@ export function SharedStock({ stock: s, asked }: { stock: PublicStock | null; as
               <div>
                 <h1 className="h1 mono" id="share-h">{s.ticker}</h1>
                 {s.name && <p className="cap">{s.name}</p>}
+                {sharedBy && <p className="cap">Shared by <Pill tone="gold">{sharedBy}</Pill></p>}
               </div>
               {s.price != null && (
                 <p className="share-price mono"><span>{price(s.price)}</span>{" "}

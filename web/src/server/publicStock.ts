@@ -34,3 +34,24 @@ export async function loadPublicStock(raw: string): Promise<PublicStock | null> 
 export function siteUrl(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL || "https://app.hsfinest.com").replace(/\/+$/, "");
 }
+
+/** "HSF AI Founder #017" when a shared link's invite code belongs to a founder who shows
+ * the badge; null otherwise (or when the API can't answer). */
+export async function loadFounderBadge(ref: string | null | undefined): Promise<string | null> {
+  const code = String(ref || "").trim().toLowerCase();
+  if (!/^[a-z0-9]{4,32}$/.test(code)) return null;
+  let call = upstream;
+  try {
+    call = withClientAddress(new Request("http://share.local", { headers: await headers() }), upstream);
+  } catch {
+    /* outside a request */
+  }
+  try {
+    const res = await call(`/v1/public/founder-badge/${code}`, { method: "GET", headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { badge?: string };
+    return typeof body.badge === "string" ? body.badge : null;
+  } catch {
+    return null;
+  }
+}

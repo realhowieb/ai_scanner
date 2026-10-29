@@ -205,6 +205,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/founding/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Founder poll results (admin) */
+        get: operations["admin_poll_v1_admin_founding_poll_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/founding/refunds": {
         parameters: {
             query?: never;
@@ -1262,6 +1279,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/founding/benefits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your founder benefits
+         * @description Founder rate after the five years, early access, founder invites, Elite limits,
+         *     the shared-link badge setting and the founder poll.
+         */
+        get: operations["get_benefits_v1_founding_benefits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/benefits/badge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Show or hide your founder badge on shared links */
+        post: operations["set_badge_v1_founding_benefits_badge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/founding/checkout": {
         parameters: {
             query?: never;
@@ -1340,6 +1395,23 @@ export interface paths {
         get: operations["get_policy_v1_founding_policies__policy_type__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/founding/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vote in the founder poll (one choice; voting again changes it) */
+        post: operations["vote_v1_founding_poll_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2206,6 +2278,23 @@ export interface paths {
          *     yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.
          */
         get: operations["premarket_gappers_v1_premarket_gappers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/founder-badge/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The founder badge behind a shared link's invite code (public) */
+        get: operations["founder_badge_v1_public_founder_badge__code__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3584,6 +3673,13 @@ export interface components {
             /** Versions */
             versions: number[];
         };
+        /** AdminPoll */
+        AdminPoll: {
+            /** Options */
+            options: components["schemas"]["PollOption"][];
+            /** Total */
+            total: number;
+        };
         /** AdminProviders */
         AdminProviders: {
             /** Checked At */
@@ -4283,6 +4379,11 @@ export interface components {
             at: string;
             /** Detail */
             detail?: string | null;
+        };
+        /** BadgeBody */
+        BadgeBody: {
+            /** Show */
+            show: boolean;
         };
         /** Bar */
         Bar: {
@@ -5144,6 +5245,13 @@ export interface components {
              */
             time?: string | null;
         };
+        /** EliteLimits */
+        EliteLimits: {
+            /** Ai Multiplier */
+            ai_multiplier: number;
+            /** Alert Limit */
+            alert_limit: number;
+        };
         /** EmailPrefs */
         EmailPrefs: {
             /**
@@ -5184,6 +5292,13 @@ export interface components {
             tips?: boolean | null;
             /** Weekly */
             weekly?: boolean | null;
+        };
+        /** FeatureRef */
+        FeatureRef: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /** FeedbackBody */
         FeedbackBody: {
@@ -5249,6 +5364,47 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** FounderBenefits */
+        FounderBenefits: {
+            /**
+             * Alumni Discount Percent
+             * @description Off any plan after the five years, for life
+             */
+            alumni_discount_percent: number;
+            /** Alumni Rate Ready */
+            alumni_rate_ready: boolean;
+            /** Badge */
+            badge?: string | null;
+            /** Early Access */
+            early_access: components["schemas"]["FeatureRef"][];
+            elite_limits?: components["schemas"]["EliteLimits"] | null;
+            invites?: components["schemas"]["FounderInvites"] | null;
+            poll: components["schemas"]["FounderPoll"];
+            /**
+             * Show Badge
+             * @description Shared stock links show the founder badge
+             */
+            show_badge: boolean;
+            /** Status */
+            status: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "founder_pro" | "founder_elite";
+        };
+        /** FounderInvites */
+        FounderInvites: {
+            /**
+             * Days
+             * @description Days of Pro each invited friend gets
+             */
+            days: number;
+            /** Left */
+            left: number;
+            /** Total */
+            total: number;
+        };
         /** FounderMembership */
         FounderMembership: {
             /** Activated At */
@@ -5300,6 +5456,15 @@ export interface components {
             tier: "founder_pro" | "founder_elite";
             /** Within Guarantee */
             within_guarantee: boolean;
+        };
+        /** FounderPoll */
+        FounderPoll: {
+            /** Choice */
+            choice?: string | null;
+            /** Open */
+            open: boolean;
+            /** Options */
+            options: components["schemas"]["PollOption"][];
         };
         /** FoundingCancel */
         FoundingCancel: {
@@ -7247,6 +7412,20 @@ export interface components {
             /** Heading */
             heading?: string | null;
         };
+        /** PollBody */
+        PollBody: {
+            /** Option */
+            option: string;
+        };
+        /** PollOption */
+        PollOption: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Votes */
+            votes?: number | null;
+        };
         /** PortalBody */
         PortalBody: {
             /**
@@ -7350,6 +7529,11 @@ export interface components {
             name: string;
             /** Ok */
             ok: boolean;
+        };
+        /** PublicFounderBadge */
+        PublicFounderBadge: {
+            /** Badge */
+            badge: string;
         };
         /** PublicStock */
         PublicStock: {
@@ -9865,6 +10049,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminPolicy"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_poll_v1_admin_founding_poll_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPoll"];
                 };
             };
             /** @description Not signed in */
@@ -12866,6 +13093,89 @@ export interface operations {
             };
         };
     };
+    get_benefits_v1_founding_benefits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderBenefits"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a founding member */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    set_badge_v1_founding_benefits_badge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BadgeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderBenefits"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     checkout_v1_founding_checkout_post: {
         parameters: {
             query?: never;
@@ -13037,6 +13347,53 @@ export interface operations {
             };
             /** @description Unknown policy, or the pages aren't published yet */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    vote_v1_founding_poll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PollBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderBenefits"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active founders only */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15539,6 +15896,44 @@ export interface operations {
             };
             /** @description Pro feature */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    founder_badge_v1_public_founder_badge__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicFounderBadge"];
+                };
+            };
+            /** @description No founder badge for this invite code */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

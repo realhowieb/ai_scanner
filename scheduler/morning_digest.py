@@ -780,6 +780,21 @@ def _with_founder(email: str, key: str) -> str:
     return with_founder(email, key)
 
 
+def _founder_badge(email: str) -> str:
+    """'HSF AI Founder #017' for an active founding member, shown in the email header."""
+    try:
+        from api.plan_access import founder_access
+        from db import founding
+        from domain import founding as rules
+
+        if not founder_access(email)[0]:
+            return ""
+        m = founding.membership(email) or {}
+        return rules.badge_title(m.get("tier", ""), m.get("membership_number")) or ""
+    except Exception:
+        return ""
+
+
 def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[str, Any], get_user_tier) -> str:
     """Plan used for email delivery. Admin accounts (stored tier 'admin' or the DB
     is_admin flag) count as 'admin', whatever plan is stored, so they get the digest."""
@@ -948,7 +963,8 @@ def run_morning_digest(force: bool = False) -> None:
                 text_inner=text_inner,
                 unsubscribe_url=unsubscribe_link(email, "digest"),
                 title_line=f"Morning snapshot · {et_now():%A, %b %-d}"
-                           + (" · before the open" if preopen_gappers else ""),
+                           + (" · before the open" if preopen_gappers else "")
+                           + (f" · {badge}" if (badge := _founder_badge(email)) else ""),
                 glance_html=glance,
             ):
                 sent += 1

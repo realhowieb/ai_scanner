@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -419,3 +420,81 @@ def admin_deny(account: Dict[str, Any], request_id: int, *, reason: str) -> Dict
     full = refunds.get_request(request_id)
     _notify("refund_denied", r["user_id"], {**r, "kind": full.get("kind") if full else None})
     return {"request": _admin_request(full)}
+
+
+# ---- founder benefits (domain/founding.py; terms sections 3, 5 and 10) --------------------------
+
+def _feature_label(name: str) -> str:
+    return name.removeprefix("can_").replace("_", " ").capitalize()
+
+
+def benefits(account: Dict[str, Any]) -> Dict[str, Any]:
+    """What a founding member gets beyond their plan. 404 for accounts that never had a
+    membership (or whose membership was refunded or revoked)."""
+    from api import referrals
+    from db import founding as db
+    from db import founding_benefits as extras
+
+    user = str(account["username"]).strip().lower()
+    m = db.membership(user)
+    if not m or m["status"] not in ("active", "expired"):
+        raise CodedError(404, "This account doesn't have a founding membership.", "founding_not_member")
+    active = m["status"] == "active"
+    prefs = extras.prefs(user)
+    elite = m["tier"] == rules.FOUNDER_ELITE
+    options = rules.poll_options()
+    invites_left = referrals.founder_invites_left(user) if active and referrals.enabled() else None
+    return {
+        "status": m["status"], "tier": m["tier"],
+        "badge": rules.badge_title(m["tier"], m.get("membership_number") or m.get("former_number")),
+        "show_badge": prefs["show_badge"],
+        "alumni_discount_percent": rules.ALUMNI_DISCOUNT_PERCENT,
+        "alumni_rate_ready": (not active) and bool(os.environ.get("HSF_FOUNDER_ALUMNI_COUPON", "").strip()),
+        "early_access": [{"key": k, "label": _feature_label(k)} for k in rules.early_access_features()] if active else [],
+        "invites": None if invites_left is None else {"days": rules.FOUNDER_INVITE_DAYS, "total": rules.FOUNDER_INVITES,
+                                                       "left": invites_left},
+        "elite_limits": {"alert_limit": rules.ELITE_ALERT_LIMIT, "ai_multiplier": rules.ELITE_AI_MULTIPLIER}
+        if elite and active else None,
+        "poll": {"open": active and bool(options), "choice": prefs["poll_choice"],
+                 "options": [{"key": k, "label": v} for k, v in options.items()]},
+    }
+
+
+def set_show_badge(account: Dict[str, Any], show: bool) -> Dict[str, Any]:
+    from db import founding_benefits as extras
+
+    benefits(account)  # members only
+    extras.set_show_badge(str(account["username"]), show)
+    return benefits(account)
+
+
+def poll_vote(account: Dict[str, Any], option: str) -> Dict[str, Any]:
+    from db import founding as db
+    from db import founding_benefits as extras
+
+    out = benefits(account)
+    if not out["poll"]["open"]:
+        raise CodedError(403, "The founder poll is for active founding members.", "poll_closed")
+    try:
+        extras.vote(str(account["username"]), option)
+    except db.FoundingError as e:
+        raise CodedError(400, str(e), "poll_unknown_option") from e
+    return benefits(account)
+
+
+def admin_poll() -> Dict[str, Any]:
+    from db import founding_benefits as extras
+
+    counts = extras.tally()
+    options = rules.poll_options()
+    return {"options": [{"key": k, "label": v, "votes": counts.get(k, 0)} for k, v in options.items()],
+            "total": sum(counts.values())}
+
+
+def public_badge(code: str) -> Optional[str]:
+    """The founder badge behind an invite code on a shared link, if its owner shows it."""
+    from db import founding_benefits as extras
+    from db import referrals as store
+
+    owner = store.owner_of(code)
+    return extras.public_badge(owner) if owner else None

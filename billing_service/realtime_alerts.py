@@ -172,15 +172,16 @@ def _apply_founder_plans(alerts: List[Dict[str, Any]]) -> None:
     premium), which is never stored in users.tier. Skipped where the app's modules
     aren't importable (a standalone billing deploy)."""
     try:
-        from api.plan_access import with_founder
+        from api.plan_access import founder_alert_limit, with_founder
     except Exception:
         return
-    seen: Dict[Any, str] = {}
+    seen: Dict[Any, Any] = {}
     for alert in alerts:
         key = (str(alert["user_id"]), str(alert.get("tier") or "basic"))
         if key not in seen:
-            seen[key] = with_founder(*key)
-        alert["tier"] = seen[key]
+            tier = with_founder(*key)
+            seen[key] = (tier, founder_alert_limit(key[0], ALERT_LIMITS.get(tier, 1)))
+        alert["tier"], alert["alert_limit"] = seen[key]
 
 
 def _apply_plan_limits(alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -189,7 +190,7 @@ def _apply_plan_limits(alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     per_user: Dict[str, int] = {}
     for alert in alerts:
         user_id = str(alert["user_id"])
-        limit = ALERT_LIMITS.get(str(alert.get("tier") or "basic"), 1)
+        limit = int(alert.get("alert_limit") or ALERT_LIMITS.get(str(alert.get("tier") or "basic"), 1))
         if per_user.get(user_id, 0) >= limit:
             continue
         per_user[user_id] = per_user.get(user_id, 0) + 1

@@ -448,9 +448,15 @@ def _alert_limit_for_user(user_id: str) -> int:
     try:
         from ui.app_session import alert_limit_for_tier
 
-        return int(alert_limit_for_tier(_tier_key_for_user(user_id)))
+        base = int(alert_limit_for_tier(_tier_key_for_user(user_id)))
     except Exception:
         return 1
+    try:
+        from api.plan_access import founder_alert_limit
+
+        return founder_alert_limit(user_id, base)
+    except Exception:
+        return base
 
 
 def _alert_emails_on(user_id: str) -> bool:

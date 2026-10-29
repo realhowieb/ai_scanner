@@ -14,6 +14,7 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etDate } from "@/lib/format";
 
+import { FounderBenefits } from "./FounderBenefits";
 import { FounderRefunds } from "./FounderRefunds";
 import { POLICY_LINKS } from "./PolicyPage";
 
@@ -102,6 +103,7 @@ export function FounderView() {
           </dl>
         </Card>
       )}
+      {m && (m.status === "active" || m.status === "expired") && <FounderBenefits />}
       {m && <FounderRefunds />}
 
       {(!live || offer.upgrade.eligible) && (
