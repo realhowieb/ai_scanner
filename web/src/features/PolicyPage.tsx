@@ -1,10 +1,12 @@
-// One Founding 100 policy page (Terms, Refund Policy or Privacy Policy), rendered on the
-// server from the API's text. A proposed text says so at the top: it is not yet reviewed.
+// One policy page (Terms of Service, Founding Membership Terms, Refund Policy or Privacy
+// Policy), rendered on the server from the API's text. A proposed text says so at the top:
+// it is not yet reviewed.
 import Link from "@/components/Link";
 import { PublicFooter, PublicHeader } from "@/features/Landing";
 import type { LoadedPolicy } from "@/server/policy";
 
 export const POLICY_LINKS = [
+  { type: "terms", href: "/terms", label: "Terms of Service" },
   { type: "founding_terms", href: "/founding-100/terms", label: "Founding Membership Terms" },
   { type: "founding_refunds", href: "/founding-100/refunds", label: "Refund Policy" },
   { type: "privacy", href: "/privacy", label: "Privacy Policy" },
@@ -31,7 +33,7 @@ export function PolicyPage({ loaded }: { loaded: LoadedPolicy | null }) {
   return (
     <div className="pub"><PublicHeader /><main id="main" className="doc">
       <article className="card stack-sm policy">
-        {preview && <p className="banner" role="note">Admin preview: this page is not public yet (FOUNDING_LEGAL_PAGES_ENABLED is off).</p>}
+        {preview && <p className="banner" role="note">Admin preview: this page is not public yet ({policy.policy_type === "terms" || policy.policy_type === "privacy" ? "HSF_LEGAL_PAGES_ENABLED" : "FOUNDING_LEGAL_PAGES_ENABLED"} is off).</p>}
         {policy.status === "proposed" && (
           <p className="banner" role="note">Proposed terms, pending legal review. Not yet in effect.</p>
         )}

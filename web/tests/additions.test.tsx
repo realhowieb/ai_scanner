@@ -81,7 +81,7 @@ describe("landing and pricing", () => {
     expect(screen.getByText("or $250/yr with yearly billing")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Day Trader" }));
     expect(screen.getByRole("img")).toHaveAttribute("src", "/landing/day-current.jpg");
-    await u.click(screen.getByRole("link", { name: "Start Exploring" }));
+    await u.click(screen.getByRole("link", { name: "Try it free" }));
     await waitFor(() => expect(events().map((e) => e.event)).toEqual(["landing_visit", "primary_cta_click"]));
     expect(events()[0]!.attribution).toEqual({ utm_source: "reddit", utm_campaign: "launch" });
     expect(events()[1]!.surface).toBe("hero");

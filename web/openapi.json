@@ -1868,7 +1868,8 @@
       "enum": [
        "founding_terms",
        "founding_refunds",
-       "privacy"
+       "privacy",
+       "terms"
       ],
       "title": "Policy Type",
       "type": "string"
@@ -7994,6 +7995,96 @@
     "title": "LatestScan",
     "type": "object"
    },
+   "LegalPolicyRef": {
+    "properties": {
+     "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "policy_type": {
+      "enum": [
+       "founding_terms",
+       "founding_refunds",
+       "privacy",
+       "terms"
+      ],
+      "title": "Policy Type",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     },
+     "version": {
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "policy_type",
+     "version",
+     "title",
+     "path",
+     "content_hash",
+     "status"
+    ],
+    "title": "LegalPolicyRef",
+    "type": "object"
+   },
+   "LegalStatus": {
+    "properties": {
+     "open": {
+      "description": "Terms of Service and Privacy Policy are published (HSF_LEGAL_PAGES_ENABLED)",
+      "title": "Open",
+      "type": "boolean"
+     },
+     "policies": {
+      "items": {
+       "$ref": "#/components/schemas/LegalPolicyRef"
+      },
+      "title": "Policies",
+      "type": "array"
+     },
+     "signup_statement": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The sign-up checkbox text",
+      "title": "Signup Statement"
+     },
+     "subscription_statement": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Shown under upgrade buttons",
+      "title": "Subscription Statement"
+     }
+    },
+    "required": [
+     "open",
+     "policies"
+    ],
+    "title": "LegalStatus",
+    "type": "object"
+   },
    "LifecycleEvent": {
     "properties": {
      "delta": {
@@ -8294,6 +8385,12 @@
       ],
       "description": "Set while a free Pro month from an invite is running",
       "title": "Pro Trial Until"
+     },
+     "terms_published": {
+      "default": false,
+      "description": "The Terms of Service are live (upgrade buttons link them)",
+      "title": "Terms Published",
+      "type": "boolean"
      }
     },
     "required": [
@@ -8617,7 +8714,8 @@
       "enum": [
        "founding_terms",
        "founding_refunds",
-       "privacy"
+       "privacy",
+       "terms"
       ],
       "title": "Policy Type",
       "type": "string"
@@ -11758,7 +11856,8 @@
       "enum": [
        "founding_terms",
        "founding_refunds",
-       "privacy"
+       "privacy",
+       "terms"
       ],
       "title": "Policy Type",
       "type": "string"
@@ -11844,7 +11943,8 @@
       "enum": [
        "founding_terms",
        "founding_refunds",
-       "privacy"
+       "privacy",
+       "terms"
       ],
       "title": "Policy Type",
       "type": "string"
@@ -12289,6 +12389,98 @@
      "hidden_insights"
     ],
     "title": "PublicStock",
+    "type": "object"
+   },
+   "PublicTopSetup": {
+    "properties": {
+     "change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Pct"
+     },
+     "hsf_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hsf Score"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "PublicTopSetup",
+    "type": "object"
+   },
+   "PublicTopSetups": {
+    "properties": {
+     "free_rows": {
+      "description": "How many of them a free Starter account sees in the Scanner",
+      "title": "Free Rows",
+      "type": "integer"
+     },
+     "ranked_total": {
+      "description": "Ranked setups in the latest scan",
+      "title": "Ranked Total",
+      "type": "integer"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "setups": {
+      "description": "Top three ranked setups (HSF Score 40 or more)",
+      "items": {
+       "$ref": "#/components/schemas/PublicTopSetup"
+      },
+      "title": "Setups",
+      "type": "array"
+     },
+     "stale": {
+      "default": false,
+      "description": "The latest scan is older than expected",
+      "title": "Stale",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "setups",
+     "ranked_total",
+     "free_rows"
+    ],
+    "title": "PublicTopSetups",
     "type": "object"
    },
    "QueueCount": {
@@ -14308,7 +14500,7 @@
    "SignupBody": {
     "properties": {
      "accept_terms": {
-      "description": "The usage agreement checkbox on the web sign-up form",
+      "description": "The sign-up agreement checkbox (Terms of Service and research-only use)",
       "title": "Accept Terms",
       "type": "boolean"
      },
@@ -17807,7 +17999,8 @@
        "enum": [
         "founding_terms",
         "founding_refunds",
-        "privacy"
+        "privacy",
+        "terms"
        ],
        "title": "Policy Type",
        "type": "string"
@@ -20414,7 +20607,7 @@
   },
   "/v1/billing/checkout": {
    "post": {
-    "description": "Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing\nsubscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser.",
+    "description": "Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing\nsubscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser.\nOnce the Terms of Service are published, starting a checkout records that the account\naccepted them (see GET /v1/legal/status).",
     "operationId": "billing_checkout_v1_billing_checkout_post",
     "requestBody": {
      "content": {
@@ -21428,7 +21621,7 @@
   },
   "/v1/founding/policies/{policy_type}": {
    "get": {
-    "description": "The Founding Membership Terms, Refund Policy or Privacy Policy: the newest version,\nor an earlier one with ?version=. Not found until FOUNDING_LEGAL_PAGES_ENABLED=1.",
+    "description": "The Terms of Service, Founding Membership Terms, Refund Policy or Privacy Policy: the\nnewest version, or an earlier one with ?version=. Terms of Service and Privacy Policy are\nfound once HSF_LEGAL_PAGES_ENABLED=1; the founding ones once FOUNDING_LEGAL_PAGES_ENABLED=1\n(which also opens the Privacy Policy).",
     "operationId": "get_policy_v1_founding_policies__policy_type__get",
     "parameters": [
      {
@@ -21439,7 +21632,8 @@
        "enum": [
         "founding_terms",
         "founding_refunds",
-        "privacy"
+        "privacy",
+        "terms"
        ],
        "title": "Policy Type",
        "type": "string"
@@ -21879,6 +22073,35 @@
      }
     ],
     "summary": "Close a logged trade (Pro)"
+   }
+  },
+  "/v1/legal/status": {
+   "get": {
+    "description": "Whether the Terms of Service and Privacy Policy are published, their current versions,\nand the agreement text for the sign-up form and upgrade buttons.",
+    "operationId": "legal_status_v1_legal_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LegalStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "Terms of Service status (public)"
    }
   },
   "/v1/market/tape": {
@@ -25402,6 +25625,38 @@
      }
     },
     "summary": "A stock's public snapshot for shared links (signed out)"
+   }
+  },
+  "/v1/public/top-setups": {
+   "get": {
+    "description": "The top three ranked setups of the latest market scan (ticker, HSF Score, setup type,\nday change) and how many more a free account sees. Everything else needs an account.",
+    "operationId": "public_top_setups_v1_public_top_setups_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicTopSetups"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests"
+     }
+    },
+    "summary": "The latest scan's top setups, for the landing page (signed out)"
    }
   },
   "/v1/quotes": {

@@ -116,7 +116,8 @@ class PolicyVersionTests(DbBase):
         first = self.ldb.sync(legal.load(env={}))
         again = self.ldb.sync(legal.load(env={}))
         self.assertEqual(first, again)
-        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM legal_policy_versions").fetchone()[0], 3)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM legal_policy_versions").fetchone()[0],
+                         len(legal.POLICY_TYPES))
         self.assertTrue(all(r["available"] for r in first.values()))
 
     def test_draft_text_can_change_until_someone_accepts_it(self):
@@ -145,13 +146,13 @@ class PolicyVersionTests(DbBase):
     def test_acceptances_are_insert_only_and_idempotent(self):
         ids = [r["id"] for r in self.ldb.sync(legal.load(env={})).values()]
         self.assertEqual(self.ldb.record_acceptance("A@x.com", ids, checkout_session_id="cs_1", tier=PRO,
-                                                    kind="purchase", reservation_id=7), 3)
+                                                    kind="purchase", reservation_id=7), len(legal.POLICY_TYPES))
         self.assertEqual(self.ldb.record_acceptance("a@x.com", ids, checkout_session_id="cs_1", tier=PRO,
                                                     kind="purchase", reservation_id=7), 0)
         rows = self.ldb.acceptances(checkout_session_id="cs_1")
         self.assertEqual({r["policy_type"] for r in rows}, set(legal.POLICY_TYPES))
         self.assertTrue(all(r["user_id"] == "a@x.com" and len(r["content_hash"]) == 64 for r in rows))
-        self.assertEqual(len(self.ldb.acceptances(user_id="a@x.com")), 3)
+        self.assertEqual(len(self.ldb.acceptances(user_id="a@x.com")), len(legal.POLICY_TYPES))
         with self.assertRaises(ValueError):
             self.ldb.record_acceptance("a@x.com", ids, checkout_session_id="", tier=PRO, kind="purchase")
         with self.assertRaises(sqlite3.IntegrityError):  # not a real policy version
@@ -304,7 +305,7 @@ class ApiTests(DbBase):
         self.assertEqual(res["checkout_session_id"], f"cs_test_{res['id']}")
         acc = self.ldb.acceptances(checkout_session_id=res["checkout_session_id"])
         self.assertEqual({(a["policy_type"], a["tier"], a["user_id"]) for a in acc},
-                         {(t, ELITE, "pro@example.com") for t in legal.POLICY_TYPES})
+                         {(t, ELITE, "pro@example.com") for t in legal.CHECKOUT_POLICIES})
         # Clicking again reuses the same open session and seat.
         again = self.checkout(self.body(ELITE))
         self.assertEqual(again.json()["checkout_url"], "https://checkout.stripe.test/open")

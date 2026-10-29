@@ -1,150 +1,96 @@
-# 🚀 Go-Live Checklist
+# Go-live checklist
 
-The **code is production-ready** and `main` == `dev`. This is the config +
-verification checklist for flipping the switch to real users.
+How production is set up today, and what to check before and after a release. Updated
+2026-10-29 (the Streamlit app and the separate billing service are gone; older steps that
+pointed at them were removed). Only setting names are listed here, never values.
 
----
-
-## 1. Streamlit Cloud secrets (Settings → Secrets)
-
-```toml
-# --- Database (required) ---
-NEON_DATABASE_URL = "postgresql://..."
-AI_SCANNER_SQLITE_FALLBACK = "false"        # never silently fall back to sqlite in prod
-
-# --- Sessions / auth ---
-COOKIE_PASSWORD = "..."                      # required for session restore after Stripe redirect
-APP_BASE_URL = "https://hsfinestai.streamlit.app"   # production app; the BETA app (hsf-beta) sets "https://hsf-beta.streamlit.app"
-
-# --- Email (password reset, verification, digests; Resend over SMTP) ---
-SMTP_HOST = "smtp.resend.com"
-SMTP_PORT = "587"
-SMTP_USER = "resend"
-SMTP_PASS = "re_..."                         # Resend API key
-SMTP_FROM = "alerts@ai.hsfinest.com"
-# SMTP_FROM_NAME = "HSF Alerts"              # optional display name (default "HSF Alerts")
-
-# --- Billing service ---
-BILLING_API_BASE = "https://ai-scanner-h2c8.onrender.com"
-
-# --- AI features ---
-ANTHROPIC_API_KEY = "sk-ant-..."
-ANTHROPIC_MODEL = "claude-haiku-4-5"         # recommended: ~5x cheaper; unset = claude-opus-4-8 (config.py default)
-AI_ENABLED = "1"                             # set "0" to kill all AI instantly, no redeploy
-AI_DAILY_LIMIT = "25"                        # per-user AI calls / 24h (0 = unlimited)
-
-# --- Alerting (optional) ---
-SLACK_WEBHOOK_URL = "..."                    # scan-error spike alerts
-ALERT_EMAIL = "..."                          # email fallback if Slack absent
-
-# --- Watchlist digests (optional; off by default) ---
-# WATCHLIST_ALERTS_ENABLED = "1"             # enable scheduled per-user email digests
-```
-
-## 2. Render (billing service) env vars
-
-```
-STRIPE_SECRET_KEY            # LIVE key (sk_live_...) at launch
-STRIPE_WEBHOOK_SECRET        # LIVE webhook signing secret
-STRIPE_PRICE_PRO            # LIVE price id, $25 / month
-STRIPE_PRICE_PREMIUM        # LIVE price id, $40 / month
-STRIPE_PRICE_PRO_YEARLY     # LIVE price id, $250 / year (set both yearly ids or neither)
-STRIPE_PRICE_PREMIUM_YEARLY # LIVE price id, $400 / year
-STRIPE_PRICE_PRO_LEGACY     # optional: older LIVE price ids still billed (comma-separated); none at first launch
-STRIPE_PRICE_PREMIUM_LEGACY # optional, same
-DATABASE_URL                # same Neon DB
-APP_SUCCESS_URL  = https://hsfinestai.streamlit.app
-APP_CANCEL_URL   = https://hsfinestai.streamlit.app
-APP_PORTAL_RETURN_URL = https://hsfinestai.streamlit.app/billing
-
-# Real-time price-alert worker (runs inside the billing service)
-REALTIME_ALERTS_ENABLED = 1  # "0" or unset = worker off
-REALTIME_POLL_SECONDS = 60   # optional, default 60
-ALPACA_API_KEY_ID           # same keys as Streamlit / GitHub
-ALPACA_API_SECRET_KEY
-SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values as section 1
-SMTP_FROM_NAME              # optional
-```
-
-The GitHub **Realtime Alerts** job (cron-job.org, every 5 minutes on weekdays)
-checks the same alerts with GitHub's own secrets, so alerts keep firing when the
-Render service sleeps. Both mark `user_alerts.last_fired_at`, so an alert never
-fires twice.
-
-## 2b. Render (HSF API service) env vars
-
-Separate Render web service (`hsf-api`), set up per [docs/API.md](docs/API.md):
-
-```
-DATABASE_URL       # same Neon DB
-API_JWT_SECRET     # 32+ random characters; only on this service, never in chat or git
-API_CORS_ORIGINS   # comma-separated exact https origins of the web frontend (no wildcard/path); empty = no browser access
-SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM   # same Resend values; sign-up and reset emails
-ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY                   # same keys as Streamlit; needed for custom scans (POST /v1/scans)
-API_SCAN_WORKERS   # optional, default 1: custom scans run at once (memory-bound)
-ANTHROPIC_API_KEY  # same as Streamlit; /v1/ai/* (Premium)
-APP_ENCRYPTION_KEY # same as Streamlit; stores paper-trading keys (/v1/paper/*)
-```
-
-- [ ] Health check path `/healthz`
-- [ ] Move off the free plan (it sleeps after 15 idle minutes) before the app has real users
-
-## 3. Stripe dashboard
-
-- [ ] **Switch from Test mode → Live mode** ⚠️ (the #1 launch step)
-- [ ] Use **live** publishable/secret keys and **live** price IDs
-- [ ] Webhook endpoint → `https://ai-scanner-h2c8.onrender.com/webhook` (the service has no `/stripe/webhook` route; that path would return 404 and paid users would not be upgraded)
-- [ ] Webhook events subscribed:
-  - `checkout.session.completed`
-  - `customer.subscription.updated`
-  - `customer.subscription.deleted`
-- [ ] Settings → Billing → **Customer portal → Cancellations**: "At end of billing period" (P2-49; set it in live mode too)
-- [ ] Set a **monthly spend alert** in the Anthropic console as an AI-cost backstop
-
-## 3b. Billing pre-flight (after the live env vars are saved on Render)
-
-1. Render → Environment: add `BILLING_DEBUG_STATUS = 1` and let it redeploy.
-2. Open `https://ai-scanner-h2c8.onrender.com/debug/status` and look at `billing_preflight`:
-   - `stripe_mode` must say `"live"`.
-   - `ok` must be `true` and `problems` empty. It flags any price that is missing, in the
-     wrong mode (a test price with the live key), archived, the wrong amount or interval,
-     a yearly pair with only one id set, and a webhook endpoint that isn't enabled at
-     `/webhook` or misses one of the three events.
-   - A `warnings` line about webhooks means the key can't list endpoints; check them by hand.
-3. Remove `BILLING_DEBUG_STATUS` again (the page is hidden without it).
-
-The page shows only whether values are set and what is wrong; it never shows keys or price ids.
+Unchecked boxes are still open.
 
 ---
 
-## 4. Final smoke test (do it on the live app, ~5 min)
+## 1. What runs where
 
-- [ ] Sign up with a **real** email → verification email arrives
-- [ ] Log in → run a scan → "✨ Generate AI summary" returns a result (confirms ANTHROPIC_API_KEY)
-- [ ] Do a **real** small upgrade with a live card → land back as Pro, **no re-login**
-- [ ] `curl https://ai-scanner-h2c8.onrender.com/health` → shows `"features": [...]`
-- [ ] Render → Settings → Health Check Path = `/healthz` (liveness only; `/health` checks the database and would keep Neon awake 24/7)
-- [ ] Trigger a password reset → reset email arrives and works
+| Piece | Where | Deploys from |
+|---|---|---|
+| Web app (Next.js), app.hsfinest.com | Render `hsf-web-v1` (Virginia, Starter) | `main` |
+| API (FastAPI), billing embedded, alert worker | Render `hsf-api-v1` (Virginia, Starter) | `main` |
+| Database | Neon, branch `live` (AWS us-east-1) | — |
+| Scans, digests, maturation, health jobs | GitHub Actions on `main`, started by cron-job.org | `main` |
+| Payments | Stripe, live mode since 2026-10-28 | — |
 
----
+Work goes into `dev`; a promote PR (`dev` → `main`) releases it. The **Live acceptance**
+workflow runs the API checks and the browser journey after each promote.
 
-## 5. Emergency levers (know these before launch)
+## 2. Settings by service (names only)
 
-| Situation | Lever |
+**hsf-api-v1:** `DATABASE_URL`, `API_JWT_SECRET`, `APP_ENCRYPTION_KEY`, `HSF_PROXY_SECRET`,
+`APP_BASE_URL` (= https://app.hsfinest.com), `APP_RETURN_HOSTS`, `API_CORS_ORIGINS`,
+`ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`, `ANTHROPIC_API_KEY`, `SMTP_HOST` / `SMTP_PORT` /
+`SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`, `BILLING_MODE=embedded`, `STRIPE_SECRET_KEY` (live),
+`STRIPE_WEBHOOK_SECRET` (live), `STRIPE_PRICE_PRO` / `STRIPE_PRICE_PREMIUM` and their `_YEARLY`
+ids, `REALTIME_ALERTS_ENABLED=1`, `SENTRY_DSN`, `TURNSTILE_SECRET_KEY`, `TELEGRAM_*`,
+`HSF_SUPPORT_EMAIL`, `HSF_GOVERNING_LAW`, `REDIS_URL`.
+
+**hsf-web-v1:** `HSF_API_BASE_URL`, `HSF_PROXY_SECRET` (same value as the API),
+`NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`,
+`NODE_VERSION`, `SENTRY_AUTH_TOKEN`.
+
+**GitHub Actions secrets:** `DATABASE_URL`, Alpaca keys, SMTP values, `ANTHROPIC_API_KEY`
+(digest AI rundown), plus the test-account secrets the Live acceptance journey uses.
+
+A custom-domain change must update `APP_BASE_URL`, `API_CORS_ORIGINS` and
+`APP_RETURN_HOSTS` together.
+
+## 3. Stripe (live)
+
+- [x] Live keys and the four live price ids on hsf-api-v1 (Pro $25/mo, $250/yr; Premium $40/mo, $400/yr)
+- [x] Webhook `https://hsf-api-v1.onrender.com/billing/webhook` with `checkout.session.completed`,
+      `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+      `invoice.payment_failed`, `charge.refunded`, `refund.failed`
+- [x] Customer portal cancels at the end of the billing period
+- [x] Real purchase verified end to end (2026-10-28); Admin → Health → Billing diagnostics shows mode live, sync errors 0
+- [ ] Optional: add `consent_collection` / Terms URL in Stripe Checkout settings once the Terms of Service are approved
+
+## 4. Legal pages
+
+- [ ] Review `legal/terms.v1.txt` (Terms of Service) and `legal/privacy.v1.txt`; when approved,
+      change `status: proposed` to `approved` and set `effective_date` (a small PR)
+- [ ] Then set `HSF_LEGAL_PAGES_ENABLED=1` on hsf-api-v1. This publishes /terms and /privacy,
+      links them from the sign-up box and upgrade buttons, and records each acceptance
+      (sign-up and every new monthly/yearly checkout) in `user_policy_acceptances`
+- [ ] Founding 100 pages and checkout have their own switches (`FOUNDING_*`); see the founding thread / `docs/` notes
+
+## 5. Cost and safety backstops
+
+- [ ] Anthropic console: set a monthly spend limit and alert (AI is also capped per user by `AI_DAILY_LIMIT`)
+- [ ] Neon: the restore window is 1 day on the current plan. Before paid users grow, raise it
+      (paid plan) so a problem noticed after a weekend can still be undone
+- [ ] Neon: mark branch `live` as protected
+- [ ] Run the **Database restore drill** workflow once (Actions → Database restore drill → Run) and
+      note the timings in `docs/PROVIDER_FAILOVER_AND_RESTORE.md`; repeat monthly
+
+## 6. After each promote
+
+The Live acceptance workflow does most of this. By hand, when it matters:
+
+- [ ] `https://hsf-api-v1.onrender.com/readyz?strict=true` is `ok` (cron-job.org pings it every 15 minutes)
+- [ ] `https://hsf-api-v1.onrender.com/billing/health` is `ok`
+- [ ] Sign up with a real address → the verification email arrives; a password reset works
+- [ ] Sentry shows no new issues for the release
+
+## 7. Emergency levers
+
+| Situation | Lever (hsf-api-v1 env, then redeploy unless noted) |
 |---|---|
-| AI cost spike / key leak | Set `AI_ENABLED = "0"` in Streamlit secrets → all AI off, no redeploy |
-| Per-user AI abuse | Lower `AI_DAILY_LIMIT` |
-| Roll back the app | Redeploy a previous commit from the Streamlit Cloud dashboard |
-| Billing broken | Render dashboard → check `/health` and webhook delivery logs |
-| Disable digests | `WATCHLIST_ALERTS_ENABLED = "0"` (or leave unset) |
+| AI cost spike or key leak | `AI_ENABLED=0` turns all AI off; lower `AI_DAILY_LIMIT` for abuse |
+| Rule alerts misfiring | `HSF_ALERT_RULES_ENABLED=0` |
+| Real-time alert worker | `REALTIME_ALERTS_ENABLED=0` |
+| Day Trader warmers / live enrich using too much memory | `HSF_WARM_DAY_TRADER=0`, `PREBREAKOUT_LIVE_ENRICH=0` |
+| Lifecycle emails | `HSF_LIFECYCLE_EMAILS_ENABLED=0` |
+| Scan watchdog | `HSF_SCAN_WATCHDOG_ENABLED=0` |
+| Roll back a release | Render → service → Deploys → redeploy the previous `main` commit (both services) |
+| Database damaged | `docs/PROVIDER_FAILOVER_AND_RESTORE.md` → "Neon: restoring the live database" |
+| Billing broken | `/billing/health`, Stripe → Developers → Webhooks delivery log, Admin → Health → Billing diagnostics |
 
----
-
-## Post-launch (first 2 weeks)
-
-- [ ] Watch **Admin → Diagnostics → AI feature usage** to see what users actually use
-- [ ] Watch scan-error Slack alerts
-- [ ] Configure and verify the existing Sentry integration; see [integration setup](docs/INTEGRATIONS_2026-10-21.md)
-- [ ] Once stable, `pip freeze` from the deploy env → exact-version lockfile
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Other provider outages (Alpaca, email, cron-job.org, GitHub, Stripe, Anthropic):
+`docs/PROVIDER_FAILOVER_AND_RESTORE.md`.

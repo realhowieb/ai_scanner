@@ -147,6 +147,25 @@ class FoundingPostgresTest(unittest.TestCase):
         self.assertEqual(total, distinct)
         self.assertEqual(total, 30 + outs.count("activated"))  # an upgrade never adds a member
 
+    def test_old_policy_type_check_is_widened_for_terms(self):
+        """A table made before the Terms of Service existed only allowed the founding types."""
+        from db import legal as ldb
+        from domain import legal
+
+        conn = _connect(self.schema)
+        conn.autocommit = True
+        try:
+            cur = conn.cursor()
+            ldb.sync({t: [] for t in legal.POLICY_TYPES})  # create the tables
+            cur.execute("ALTER TABLE legal_policy_versions DROP CONSTRAINT legal_policy_versions_policy_type_check")
+            cur.execute("ALTER TABLE legal_policy_versions ADD CONSTRAINT legal_policy_versions_policy_type_check "
+                        "CHECK (policy_type IN ('founding_terms', 'founding_refunds', 'privacy'))")
+        finally:
+            conn.close()
+        out = ldb.sync(legal.load(env={}))
+        self.assertIn(legal.SITE_TERMS, out)
+        self.assertEqual(ldb.version(legal.SITE_TERMS, 1)["policy_type"], "terms")
+
     def test_policy_versions_and_acceptances(self):
         from db import legal as ldb
         from domain import legal
@@ -156,8 +175,8 @@ class FoundingPostgresTest(unittest.TestCase):
         ids = [r["id"] for r in rows[0].values()]
         added = self._rush(6, lambda _: ldb.record_acceptance("a@example.com", ids, checkout_session_id="cs_pg",
                                                               tier=PRO, kind="purchase", reservation_id=1))
-        self.assertEqual(sum(added), 3)
-        self.assertEqual(len(ldb.acceptances(checkout_session_id="cs_pg")), 3)
+        self.assertEqual(sum(added), len(legal.POLICY_TYPES))
+        self.assertEqual(len(ldb.acceptances(checkout_session_id="cs_pg")), len(legal.POLICY_TYPES))
         conn = _connect(self.schema)
         try:
             cur = conn.cursor()

@@ -141,6 +141,11 @@ export function SessionProvider({ children, initialMe = null }: { children: Reac
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
+/** The signed-in account, or null outside a SessionProvider (shared widgets). */
+export function useOptionalMe(): Me | null {
+  return useContext(SessionContext)?.me ?? null;
+}
+
 export function useSession(): Ctx {
   const ctx = useContext(SessionContext);
   if (!ctx) throw new Error("useSession outside SessionProvider");

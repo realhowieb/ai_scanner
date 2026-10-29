@@ -28,7 +28,7 @@ class SignupBody(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=256)
     username: str = Field(min_length=1, max_length=40, description="Shown in the app; can also be used to sign in on the web")
-    accept_terms: bool = Field(description="The usage agreement checkbox on the web sign-up form")
+    accept_terms: bool = Field(description="The sign-up agreement checkbox (Terms of Service and research-only use)")
     client: Optional[str] = Field(default=None, max_length=80)
     attribution: Optional[Dict[str, str]] = Field(
         default=None, description="Web sign-ups: first-visit utm_* tags and referrer, for the acquisition funnel")
@@ -107,6 +107,9 @@ def register(app: FastAPI) -> None:
 
         turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="signup")
         res = acct.signup(body.email, body.password, body.username, body.accept_terms)
+        from api import legal
+
+        legal.record_signup(res["email"])
         if body.attribution is not None:
             _track(body.attribution, "signup_completed", username=res["email"], plan="basic")
             from api import referrals
@@ -206,8 +209,15 @@ def register(app: FastAPI) -> None:
                          503: {"description": "Email verification can't be confirmed right now; try again"}})
     def billing_checkout(body: CheckoutBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Stripe checkout for Pro or Premium (monthly or yearly when enabled). Existing
-        subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser."""
-        return acct.checkout_url(_user(account), body.plan, body.interval)
+        subscribers get Stripe's plan-change screen instead (mode=portal). Open the URL in a browser.
+        Once the Terms of Service are published, starting a checkout records that the account
+        accepted them (see GET /v1/legal/status)."""
+        from api import legal
+
+        out = acct.checkout_url(_user(account), body.plan, body.interval)
+        if out.get("mode") != "portal":
+            legal.record_checkout(_user(account), out.get("url") or "", body.plan)
+        return out
 
     @app.post("/v1/billing/portal", response_model=models.BillingLink,
               responses={**_AUTH, 404: {"description": "No subscription yet"}, 502: {"description": "Billing service unavailable"}})
