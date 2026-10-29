@@ -82,6 +82,8 @@ def recorded() -> Dict[str, Dict[str, Any]]:
 def clear_cache() -> None:
     with _state_lock:
         _state.clear()
+    with _public_lock:
+        _public_cache.clear()
 
 
 def _membership_out(m: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -129,6 +131,39 @@ def offer(account: Dict[str, Any]) -> Dict[str, Any]:
         "acknowledgment": policies.ACKNOWLEDGMENT,
         "missing_details": policies.missing_details() if is_admin else [],
     }
+
+
+_public_lock = threading.Lock()
+_public_cache: Dict[str, Any] = {}
+PUBLIC_TTL_S = 30
+
+
+def public_status() -> Dict[str, Any]:
+    """Whether the Founding 100 is open, and seats left per tier, for the signed-out landing
+    and pricing pages. Says nothing beyond "closed" while FOUNDING_100_ENABLED is off.
+    Cached for PUBLIC_TTL_S so page views don't each hit the database."""
+    if not program_open():
+        return {"open": False, "checkout_open": False, "tiers": [], "remaining": 0}
+    now = time.monotonic()
+    with _public_lock:
+        hit = _public_cache.get("v")
+        if hit and now - hit[0] < PUBLIC_TTL_S:
+            return hit[1]
+    from db import founding as db
+
+    avail = db.availability()
+    checkout_on = _flag("FOUNDING_CHECKOUT_ENABLED") and pages_open()
+    tiers = []
+    for tier in rules.TIERS:
+        left = int(avail["tiers"][tier]["remaining"])
+        tiers.append({"tier": tier, "label": rules.TIER_LABEL[tier], "price_cents": rules.PRICE_CENTS[tier],
+                      "capacity": rules.CAPACITY[tier], "remaining": left,
+                      "on_sale": checkout_on and rules.tier_available(tier) and left > 0})
+    out = {"open": True, "checkout_open": checkout_on, "tiers": tiers,
+           "remaining": sum(t["remaining"] for t in tiers)}
+    with _public_lock:
+        _public_cache["v"] = (now, out)
+    return out
 
 
 def _checkout_refusal(tier: str, upgrade: bool) -> Optional[str]:

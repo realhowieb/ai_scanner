@@ -14,6 +14,7 @@ import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
+import { FoundingBanner } from "@/features/FoundingBanner";
 import { LiveSetupsPreview } from "@/features/LiveSetupsPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
@@ -231,6 +232,8 @@ export function Landing() {
           <LiveSetupsPreview />
         </section>
 
+        <FoundingBanner surface="landing" />
+
         <section aria-labelledby="features" className="stack-sm">
           <h2 id="features" className="h2">What you can do with HSF</h2>
           <p className="body-sm">{POSITIONING}</p>
@@ -277,6 +280,7 @@ export function PricingPage() {
           <h1 className="h1">Plans and pricing</h1>
           <p className="body-sm">Start free. Upgrade when you want your own scans, alerts by email, Day Trader, AI research or paper trading.</p>
         </section>
+        <FoundingBanner surface="pricing" />
         <PlansSection table />
       </main>
       <PublicFooter />

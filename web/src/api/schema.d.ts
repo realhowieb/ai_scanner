@@ -2328,6 +2328,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/founding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the Founding 100 is open, and seats left (public) */
+        get: operations["public_founding_v1_public_founding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/stocks/{ticker}": {
         parameters: {
             query?: never;
@@ -7624,6 +7641,32 @@ export interface components {
         PublicFounderBadge: {
             /** Badge */
             badge: string;
+        };
+        /** PublicFounding */
+        PublicFounding: {
+            /** Checkout Open */
+            checkout_open: boolean;
+            /** Open */
+            open: boolean;
+            /** Remaining */
+            remaining: number;
+            /** Tiers */
+            tiers: components["schemas"]["PublicFoundingTier"][];
+        };
+        /** PublicFoundingTier */
+        PublicFoundingTier: {
+            /** Capacity */
+            capacity: number;
+            /** Label */
+            label: string;
+            /** On Sale */
+            on_sale: boolean;
+            /** Price Cents */
+            price_cents: number;
+            /** Remaining */
+            remaining: number;
+            /** Tier */
+            tier: string;
         };
         /** PublicStock */
         PublicStock: {
@@ -16094,6 +16137,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    public_founding_v1_public_founding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicFounding"];
+                };
             };
             /** @description Invalid request fields */
             422: {
