@@ -67,6 +67,12 @@ def gather(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
         out["sources"] = Counter(v or "direct" for v in (f.get("sources") or {}).values()).most_common(5)
     except Exception as e:
         out["errors"].append(f"funnel: {type(e).__name__}")
+    try:
+        from db import founding_refunds
+
+        out["founders"] = founding_refunds.weekly_summary(since)
+    except Exception as e:
+        out["errors"].append(f"founders: {type(e).__name__}")
     conn = get_neon_conn()
     if conn is None:
         out["errors"].append("database unavailable")
@@ -105,6 +111,20 @@ def gather(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     return out
 
 
+def _founder_lines(f: Optional[Dict[str, Any]]) -> list:
+    """Founding 100 lines, only once someone has paid (one-time payments, not MRR)."""
+    if not f or not (f.get("active") or f.get("payments") or f.get("open_refund_requests")):
+        return []
+    active = f.get("active") or {}
+    line = (f"Founders: {active.get('founder_pro', 0)} Founder Pro, {active.get('founder_elite', 0)} Founder Elite"
+            f" · {f.get('payments', 0)} payments this week ${f.get('paid_cents', 0) / 100:,.2f}")
+    if f.get("refunds"):
+        line += f" · refunded ${f.get('refunded_cents', 0) / 100:,.2f}"
+    if f.get("open_refund_requests"):
+        line += f" · {f['open_refund_requests']} refund request(s) waiting"
+    return [line]
+
+
 def compose(d: Dict[str, Any], now: dt.datetime) -> tuple:
     """(subject, text, html inner). Pure."""
     rev = d.get("revenue") or {}
@@ -119,6 +139,7 @@ def compose(d: Dict[str, Any], now: dt.datetime) -> tuple:
         f"Paying now: {rev.get('paying', '?')} · new this week {d.get('new_paid', '?')} · "
         f"cancellation scheduled {d.get('cancel_scheduled', '?')} · payment overdue {d.get('past_due', '?')}",
         f"Monthly revenue now: {mrr}{test}",
+        *_founder_lines(d.get("founders")),
         "Account emails sent: " + (", ".join(f"{k} {n}" for k, n in sorted(emails.items())) or "none"),
     ]
     if d.get("errors"):
