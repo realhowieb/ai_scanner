@@ -771,12 +771,22 @@ def unsubscribe_link(email: str, kind: str) -> Optional[str]:
         return None
 
 
+def _with_founder(email: str, key: str) -> str:
+    """Founding 100 members get their founder plan (never stored in users.tier)."""
+    try:
+        from api.plan_access import with_founder
+    except Exception:
+        return key
+    return with_founder(email, key)
+
+
 def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[str, Any], get_user_tier) -> str:
     """Plan used for email delivery. Admin accounts (stored tier 'admin' or the DB
     is_admin flag) count as 'admin', whatever plan is stored, so they get the digest."""
     if str((record or {}).get("tier") or "").strip().lower() == "admin":
         return "admin"
     key = str(getattr(get_user_tier(email, users), "key", "basic") or "basic").strip().lower()
+    key = _with_founder(email, key)
     if key in ("pro", "premium"):
         return key
     try:

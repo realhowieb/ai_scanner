@@ -303,3 +303,20 @@ def accepted_policies(payment_reference: str) -> List[Dict[str, Any]]:
 def audit_for(request_id: int) -> List[Dict[str, Any]]:
     with db._transaction(write=False) as tx:
         return tx.rows("SELECT * FROM founding_audit_log WHERE refund_request_id = %s ORDER BY id", (int(request_id),))
+
+
+def weekly_summary(since: dt.datetime) -> Dict[str, Any]:
+    """For the weekly business report: active founders by tier, and founding money in
+    and refunded since `since` (one-time payments, so not part of monthly revenue)."""
+    with db._transaction(write=False) as tx:
+        active = {r["tier"]: int(r["n"]) for r in tx.rows(
+            "SELECT tier, COUNT(*) AS n FROM founding_memberships WHERE status = 'active' GROUP BY tier")}
+        paid = tx.one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS cents FROM founding_payments "
+                      "WHERE paid_at >= %s", (db._iso(since),)) or {}
+        refunds = tx.one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS cents FROM founding_refund_requests "
+                         "WHERE status = 'completed' AND completed_at >= %s", (db._iso(since),)) or {}
+        open_requests = tx.one("SELECT COUNT(*) AS n FROM founding_refund_requests WHERE status IN "
+                               "('requested', 'approved', 'initiated')") or {}
+    return {"active": active, "payments": int(paid.get("n") or 0), "paid_cents": int(paid.get("cents") or 0),
+            "refunds": int(refunds.get("n") or 0), "refunded_cents": int(refunds.get("cents") or 0),
+            "open_refund_requests": int(open_requests.get("n") or 0)}

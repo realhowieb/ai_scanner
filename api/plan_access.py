@@ -102,6 +102,26 @@ def effective_tier(user: str, tier: Optional[str], is_admin: bool = False) -> Di
     return out
 
 
+def with_founder(user: str, plan: Optional[str]) -> str:
+    """The higher of a stored plan and the account's founder plan, for background jobs
+    (emails, alerts) that read users.tier directly. 'admin' stays 'admin'; any lookup
+    error keeps the stored plan."""
+    stored = str(plan or "basic").strip().lower() or "basic"
+    if stored == "admin":
+        return stored
+    try:
+        from domain import founding as rules
+
+        f_tier, _ = founder_access(user)
+        if f_tier:
+            founder_plan = rules.PLAN_FOR_TIER[f_tier]
+            if _rank(founder_plan) > _rank(stored):
+                return founder_plan
+    except Exception as e:
+        log.debug("founder plan lookup failed: %s", type(e).__name__)
+    return stored
+
+
 def apply_to_account(account: Dict[str, Any]) -> Dict[str, Any]:
     """The signed-in account with invite trials and founder access applied."""
     eff = effective_tier(str(account.get("username") or ""), account.get("tier"), bool(account.get("is_admin")))

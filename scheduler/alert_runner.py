@@ -433,9 +433,15 @@ def _tier_key_for_user(user_id: str) -> str:
 
         res = resolve_user_tier(user_id)
         key = (res.get("tier_key") if isinstance(res, dict) else None) or "basic"
-        return str(key).strip().lower() or "basic"
+        key = str(key).strip().lower() or "basic"
     except Exception:
-        return "basic"
+        key = "basic"
+    try:  # Founding 100 members get their founder plan (never stored in users.tier)
+        from api.plan_access import with_founder
+
+        return with_founder(user_id, key)
+    except Exception:
+        return key
 
 
 def _alert_limit_for_user(user_id: str) -> int:

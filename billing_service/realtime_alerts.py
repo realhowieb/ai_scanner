@@ -160,10 +160,27 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
         }
         for r in rows
     ]
+    _apply_founder_plans(alerts)
     # Enforce the same newest-first plan cap as the scheduled runner. This is
     # essential after a downgrade: saved over-limit alerts remain visible but
     # cannot continue firing through the real-time worker.
     return _apply_plan_limits(alerts)
+
+
+def _apply_founder_plans(alerts: List[Dict[str, Any]]) -> None:
+    """Founding 100 members get their founder plan (Founder Pro -> pro, Elite ->
+    premium), which is never stored in users.tier. Skipped where the app's modules
+    aren't importable (a standalone billing deploy)."""
+    try:
+        from api.plan_access import with_founder
+    except Exception:
+        return
+    seen: Dict[Any, str] = {}
+    for alert in alerts:
+        key = (str(alert["user_id"]), str(alert.get("tier") or "basic"))
+        if key not in seen:
+            seen[key] = with_founder(*key)
+        alert["tier"] = seen[key]
 
 
 def _apply_plan_limits(alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
