@@ -766,6 +766,7 @@ def run_breakout_scan(
             research_sink["near_miss_rows"] = near_miss.to_dict("records")
             research_sink["evaluated_symbols"] = [k for k in price_data if k != "SPY"]
             from analytics.research_cohorts import dollar_vol20
+            from analytics.research_metadata import rsi14, spy_regime
             # Cheap last price/volume for the CONTROL cohort (compact records) —
             # already-computed values, no extra provider calls.
             snap = {}
@@ -785,7 +786,11 @@ def run_breakout_scan(
                 attrs = getattr(v, "attrs", None) or {}
                 snap[k]["source"] = attrs.get("source")
                 snap[k]["feed"] = attrs.get("feed")
+                # Run 60: point-in-time RSI-14 from these same bars (no calls).
+                snap[k]["rsi14"] = rsi14(v)
             research_sink["price_snapshot"] = snap
+            # Run 60: SPY vs its 20-bar mean, from the SPY frame already loaded.
+            research_sink["market_regime"] = spy_regime(spy_df)
             research_sink["control_floor"] = {"min_dollar_vol": float(min_dollar_vol or 0),
                                               "min_price": min_price, "max_price": max_price}
             df = df.head(top_n)  # production output unchanged

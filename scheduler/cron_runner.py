@@ -56,7 +56,7 @@ def _research_run_context(*, universe, scan_id, scan_params, research_sink):
         return build_run_context(
             universe=universe, session=_resolve_session(), scan_id=scan_id,
             scan_config=cfg, price_meta=(research_sink or {}).get("price_snapshot"),
-            scan_mode="scheduled")
+            scan_mode="scheduled", market_regime=(research_sink or {}).get("market_regime"))
     except Exception as e:
         print(f"[research_metadata] context unavailable for {universe}: {e}")
         return None

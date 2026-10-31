@@ -39,6 +39,13 @@ TIER_UNAVAILABLE = "TIER_NOT_EMITTED_BY_SCHEDULED_SCAN"
 # Market Brief UI, from SPY/QQQ closes, sector ETFs and snapshot breadth that the
 # scheduled scan does not load. Capturing it would need new inputs and new calls.
 REGIME_UNAVAILABLE = "REGIME_CAPTURE_UNAVAILABLE"
+# Run 60: a deliberately simple regime the scan CAN label from bars it already
+# holds — SPY's last close vs its 20-bar mean, from the SPY frame every scheduled
+# scan loads for relative strength. It is not classify_market_regime (which needs
+# breadth and sector inputs the scan never loads) and does not pretend to be.
+REGIME_SPY_SMA20 = "SPY_SMA20_AT_SCAN"
+REGIME_SPY_SMA20_VERSION = "spy-sma20-v1"
+RSI_PERIOD = 14
 
 # The scanner's own identifiers (tied to real behavior, not invented).
 SCORING_VERSION = "breakout-1"   # analytics.observation_capture breakout scanner version
@@ -82,6 +89,48 @@ def commit_sha() -> Optional[str]:
     return sha if re.fullmatch(r"[0-9a-f]{7,40}", sha) else None
 
 
+def _closes(df: Any, n: int):
+    try:
+        c = df["Close"].astype(float).dropna()
+        return c.iloc[-n:] if n else c
+    except Exception:
+        return None
+
+
+def rsi14(df: Any) -> Optional[float]:
+    """Wilder RSI-14 of the frame's last bar, from the bars the scan already
+    holds (no calls). None when there are too few bars."""
+    c = _closes(df, 120)
+    if c is None or len(c) < RSI_PERIOD + 1:
+        return None
+    try:
+        from scan.indicators import rsi
+        v = _clean(float(rsi(c, RSI_PERIOD).iloc[-1]))
+        return round(v, 2) if v is not None else None
+    except Exception:
+        return None
+
+
+def spy_regime(spy_df: Any) -> Optional[Dict[str, Any]]:
+    """SPY_ABOVE_SMA20 / SPY_BELOW_SMA20 from the scan's own SPY frame. None
+    when SPY is missing or has fewer than 21 bars (never guessed)."""
+    c = _closes(spy_df, 21)
+    if c is None or len(c) < 21:
+        return None
+    try:
+        last, prev = float(c.iloc[-1]), float(c.iloc[-2])
+        sma20 = float(c.iloc[-20:].mean())
+        if not (last > 0 and sma20 > 0 and prev > 0):
+            return None
+        return {
+            "label": "SPY_ABOVE_SMA20" if last >= sma20 else "SPY_BELOW_SMA20",
+            "spy_vs_sma20_pct": round((last / sma20 - 1.0) * 100.0, 3),
+            "spy_chg_pct": round((last / prev - 1.0) * 100.0, 3),
+        }
+    except Exception:
+        return None
+
+
 def provider_summary(price_meta: Optional[Mapping[str, Mapping[str, Any]]]) -> Dict[str, Any]:
     """Run-level provider mix from the price frames' own tags (no calls)."""
     sources, feeds = Counter(), Counter()
@@ -95,8 +144,12 @@ def provider_summary(price_meta: Optional[Mapping[str, Mapping[str, Any]]]) -> D
 def build_run_context(*, universe: str, session: Optional[str], scan_id: Optional[str],
                       scan_config: Optional[Mapping[str, Any]] = None,
                       price_meta: Optional[Mapping[str, Mapping[str, Any]]] = None,
-                      scan_mode: str = "scheduled") -> Dict[str, Any]:
-    """Run-level point-in-time metadata shared by every cohort in one scan."""
+                      scan_mode: str = "scheduled",
+                      market_regime: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    """Run-level point-in-time metadata shared by every cohort in one scan.
+
+    `market_regime` is the scan's own `spy_regime()` result (Run 60). Without it
+    the regime stays None with REGIME_UNAVAILABLE, as before."""
     ctx = {
         "schema_version": RESEARCH_METADATA_SCHEMA,
         "tier_at_observation": None,
@@ -117,6 +170,12 @@ def build_run_context(*, universe: str, session: Optional[str], scan_id: Optiona
         "scan_config": {k: _clean(v) for k, v in (scan_config or {}).items()},
         **provider_summary(price_meta),
     }
+    if market_regime and market_regime.get("label"):
+        ctx["market_regime_at_observation"] = str(market_regime["label"])
+        ctx["market_regime_source"] = REGIME_SPY_SMA20
+        ctx["market_regime_version"] = REGIME_SPY_SMA20_VERSION
+        ctx["market_regime_inputs"] = {k: _clean(market_regime.get(k))
+                                       for k in ("spy_vs_sma20_pct", "spy_chg_pct")}
     assert_point_in_time(ctx)
     return ctx
 
@@ -134,6 +193,7 @@ def observation_metadata(run_context: Mapping[str, Any], *, symbol: str,
     meta["rank_at_observation"] = int(rank) if rank is not None else None
     meta["price_provider"] = pm.get("source")
     meta["price_feed"] = pm.get("feed")
+    meta["rsi_14"] = _clean(pm.get("rsi14")) if pm.get("rsi14") is not None else None
     feats = {}
     for col, name in ROW_FEATURES.items():
         if row is not None and col in row:
@@ -197,7 +257,7 @@ def assert_point_in_time(meta: Mapping[str, Any]) -> None:
 
 def coverage(observations: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     """Share of observations carrying each metadata field (completeness only)."""
-    fields = ("tier_at_observation", "market_regime_at_observation", "scoring_version",
+    fields = ("tier_at_observation", "market_regime_at_observation", "rsi_14", "scoring_version",
               "scanner_commit_sha", "universe_name", "price_provider", "scan_mode",
               "rank_at_observation")
     obs = list(observations)

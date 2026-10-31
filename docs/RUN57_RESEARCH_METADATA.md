@@ -198,3 +198,24 @@ observations only):
 
 Until the Run 56 gates pass, none of these should change which symbols are
 selected.
+
+## Run 60 additions (feature set, no scoring change)
+
+Prompted by Run 56 recommendation E (IMPROVE_FEATURE_SET) from the 2026-10-31
+Signal Effectiveness Analysis.
+
+- **Analysis reads what was already saved.** `analytics/signal_evidence.py` now
+  tests `row_features.breakout_pos_20d`, `trend_10d_pct`, `trend_20d_pct`,
+  `dollar_vol_20` and `ema_cross` (as the `ema_golden` flag). `rs_vs_spy` stays
+  out: it is close / SPY close, a price ratio, not relative strength.
+- **`rsi_14`** (per observation): Wilder RSI-14 of the last bar of the frame the
+  scan already holds (`price_snapshot[sym]["rsi14"]`), so every cohort gets it,
+  CONTROL included. No extra provider calls.
+- **Market regime** (per run): `SPY_ABOVE_SMA20` / `SPY_BELOW_SMA20` from the SPY
+  frame the scan loads for relative strength, with `market_regime_source =
+  SPY_SMA20_AT_SCAN`, `market_regime_version = spy-sma20-v1` and the two inputs
+  in `market_regime_inputs`. Not `classify_market_regime`; when SPY is missing
+  or short the regime stays None with `REGIME_CAPTURE_UNAVAILABLE`.
+- Tier, conflicts and PreBreakout are still not captured (they would need new
+  fetches or model calls per scan). Scan output, ranking and observation ids are
+  unchanged; older rows are never backfilled.
