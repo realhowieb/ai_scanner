@@ -20,6 +20,9 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
             style={{ minHeight: 40, padding: "0 16px", borderRadius: 10, border: 0, background: "#4cc2ff", color: "#0b0f14", fontWeight: 600, cursor: "pointer" }}>
             Try again
           </button>
+          {/* A full page load on purpose: the app's own layout just failed. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <p><a href="/" style={{ color: "#4cc2ff" }}>Go to home</a></p>
           {error.digest && <p style={{ opacity: 0.6, fontFamily: "monospace", fontSize: 12 }}>Support code: {error.digest}</p>}
         </main>
       </body>

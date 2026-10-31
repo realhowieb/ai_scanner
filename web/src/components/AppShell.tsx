@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "@/components/Link";
+import { LegalLinks } from "@/components/LegalLinks";
 import { usePathname } from "next/navigation";
 import { DropdownMenu } from "radix-ui";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
@@ -179,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <FeedbackDialog open={feedback} onClose={() => setFeedback(false)} />
       <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
-        <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link> · <button type="button" className="link-btn cap" onClick={() => setFeedback(true)}>Send feedback</button></p>
+        <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link> · <button type="button" className="link-btn cap" onClick={() => setFeedback(true)}>Send feedback</button> · <LegalLinks refunds={!!founding} /></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
       </footer>
       </div>

@@ -85,6 +85,7 @@ export function FounderView() {
   const live = m && (m.status === "active" || m.status === "pending");
   return (
     <main id="main" className="page stack">
+      <Link href="/account" className="back">← Back to Account</Link>
       <header className="stack-xs">
         <h1 className="h1">Founding 100</h1>
         <p className="body-sm">100 memberships, ever: 75 Founder Pro and 25 Founder Elite. One payment covers five calendar years. Nothing renews or charges again.</p>

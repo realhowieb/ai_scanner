@@ -38,7 +38,7 @@ export function UnsubscribeView() {
   const invalid = !valid || state.error?.status === 400;
   return (
     <div className="card narrow login">
-      <p className="brand brand-lg">HSFinest<span>.AI</span></p>
+      <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
       <h1 className="h1">Email preferences</h1>
       {invalid ? (
         <p className="form-error" role="alert">This unsubscribe link isn&apos;t valid. Sign in and open Account to change your emails.</p>
