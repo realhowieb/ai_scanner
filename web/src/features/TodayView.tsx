@@ -206,9 +206,8 @@ function FirstRunGuide({ top }: { top: Today["top_setups"] }) {
   );
 }
 
-/** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page.
- * `earnings` sits in the main column when the personal cards fill the side column, else at the side's foot. */
-export function TodayView({ data, mine, mineFailed = false, earnings, lead, onMineChanged }: { data: Today; mine?: Mine | null; mineFailed?: boolean; earnings?: ReactNode; lead?: ReactNode; onMineChanged?: () => void }) {
+/** `mine` is the signed-in sections (GET /v1/today/me); they load separately and never hold up the page. */
+export function TodayView({ data, mine, mineFailed = false, side, lead, onMineChanged }: { data: Today; mine?: Mine | null; mineFailed?: boolean; side?: ReactNode; lead?: ReactNode; onMineChanged?: () => void }) {
   const failed = new Set(data.errors.map((e) => e.section));
   const mineErr = new Set(mine?.errors.map((e) => e.section) ?? (mineFailed ? ["new_since", "watchlist"] : []));
   const phase = PHASES[data.market.phase] ?? PHASES.closed!;
@@ -311,8 +310,6 @@ export function TodayView({ data, mine, mineFailed = false, earnings, lead, onMi
 
           {failed.has("setup_mix") ? <SectionFailed name="Setup mix" /> : <SetupMixCard mix={data.setup_mix} stale={data.market.stale} />}
 
-          {personalFirst && earnings}
-
           {showFirstRun && <FirstRunGuide top={top} />}
 
           {!personalFirst && personal}
@@ -347,7 +344,7 @@ export function TodayView({ data, mine, mineFailed = false, earnings, lead, onMi
               {data.recap.entered.length === 0 && data.recap.left.length === 0 && <p className="cap">No names entered or left the ranked list.</p>}
             </Card>
           )}
-          {!personalFirst && earnings}
+          {side}
         </aside>
       </div>
     </div>
