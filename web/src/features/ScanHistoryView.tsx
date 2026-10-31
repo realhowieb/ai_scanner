@@ -45,6 +45,7 @@ export function ScanHistoryView() {
   });
   return (
     <div className="stack">
+      <Link href="/scanner" className="back">← Back to Scanner</Link>
       <Head title="Scan history" sub="Your saved custom scans, newest first." />
       {allowed && <div className="filters history-filters">
         <label className="field">Search scans<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} /></label>

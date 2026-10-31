@@ -9,7 +9,7 @@ import type { FormEvent } from "react";
 
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
-import { safeNext } from "@/lib/nextPath";
+import { safeNext, withNext } from "@/lib/nextPath";
 import { writeCachedMe } from "@/session/meCache";
 import { parseRetryAfter } from "@/lib/retryAfter";
 
@@ -88,7 +88,7 @@ export function LoginForm() {
       </button>
       {slow && <p className="cap" role="status">{WAKING_UP}</p>}
       <p className="cap login-links">
-        <Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot password?</Link>
+        <Link href={withNext("/signup", params.get("next"))}>Create an account</Link> · <Link href="/forgot-password">Forgot password?</Link>
       </p>
       </AuthShell>
     </form>

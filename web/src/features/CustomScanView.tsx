@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "@/components/Link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps, FormEvent } from "react";
@@ -232,6 +233,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
 
   return (
     <div className="stack">
+      <Link href="/scanner" className="back">← Back to Scanner</Link>
       <section className="page-head">
         <div>
           <h1 className="h1">Custom scan</h1>

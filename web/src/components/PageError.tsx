@@ -21,7 +21,7 @@ export function PageError({ error, retry, kind = "boundary", home = "/today" }: 
       <p className="cap">We&apos;ve been told about it. Trying again usually fixes it.</p>
       <div className="row-actions">
         <button type="button" className="btn btn-primary" onClick={() => retry()}>Try again</button>
-        <Link className="btn" href={home}>Go to Today</Link>
+        <Link className="btn" href={home}>{home === "/today" ? "Go to Today" : "Go to home"}</Link>
       </div>
       {error.digest && <p className="cap mono">Support code: {error.digest}</p>}
     </div>

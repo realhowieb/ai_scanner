@@ -6,7 +6,7 @@ export const metadata = { title: "Return from billing" };
 
 export default function BillingReturn() {
   return <main className="center"><div className="card narrow login stack">
-    <p className="brand brand-lg">HSFinest<span>.AI</span></p>
+    <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
     <h1 className="h1">Return to HSF</h1>
     <p>Your billing session has finished. HSF will check your subscription with Stripe before updating your plan.</p>
     <p>If you use HSF as a Mac web app, switch back to its window. Your plan refreshes automatically when you return.</p>

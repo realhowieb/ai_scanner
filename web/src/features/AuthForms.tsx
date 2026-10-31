@@ -16,7 +16,7 @@ import { TURNSTILE_SITE_KEY, Turnstile } from "@/components/Turnstile";
 import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { captureAttribution, track } from "@/lib/funnel";
-import { safeNext } from "@/lib/nextPath";
+import { safeNext, withNext } from "@/lib/nextPath";
 
 type Outcome = { ok: boolean; status: number; body: Record<string, unknown> | null; requestId: string | null };
 
@@ -70,6 +70,7 @@ export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [agree, setAgree] = useState(false);
+  const nextParam = useSearchParams().get("next");
   const invited = useSyncExternalStore(noSubscribe, () => !!captureAttribution().ref, () => false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +134,7 @@ export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
         </button>
         {slow && <p className="cap" role="status">{WAKING_UP}</p>}
         <p className="cap">Next, you&apos;ll open Today. We&apos;ll email a verification link so you can upgrade and receive email alerts.</p>
-        <p className="cap login-links">Already have an account? <Link href="/login">Sign in</Link></p>
+        <p className="cap login-links">Already have an account? <Link href={withNext("/login", nextParam)}>Sign in</Link></p>
       </AuthShell>
     </form>
   );

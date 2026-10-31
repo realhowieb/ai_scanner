@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "@/components/Link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Schemas } from "@/api/client";
@@ -55,6 +56,7 @@ export function CompareStocksView() {
   const complete = symbols.every((ticker) => loaded[ticker]);
   const differences = complete ? (Object.keys(METRICS) as Metric[]).filter((key) => new Set(symbols.map((ticker) => loaded[ticker]?.[key] ?? null)).size > 1) : [];
   return <div className="stack">
+    <Link href="/stocks" className="back">← Back to Stocks</Link>
     <section className="page-head"><div><h1 className="h1">Compare stocks</h1><p className="cap">Review 2–4 names together. Each column shows its own scan time.</p></div></section>
     <form className="row-actions" onSubmit={(e) => {
       e.preventDefault(); const list = compareSymbols(input);
