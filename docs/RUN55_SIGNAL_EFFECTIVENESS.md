@@ -129,3 +129,25 @@ The Run 56 code is not implemented here. Concretely:
    current records. Persisting point-in-time DT tier, conflicts, EMA 9/21,
    breakout distance, PreBreakout and market regime at capture is the only way to
    evaluate them later.
+
+## Run 61 — pre-registered midday confirmation (registered 2026-10-31)
+
+Run 55 run 41224887346 (2026-10-31) found, by time of day at +60m, CANDIDATE
+beat CONTROL in the 12:00-14:00 ET bucket (+0.118%, cluster CI [+0.018%,
++0.221%], 32 scan runs) and lost in 09:30-10:30 (-0.265%). Because that came
+from slicing 7 buckets, it is treated as a lead, not a finding.
+
+`MIDDAY_TEST` / `midday_confirmation()` in `analytics/signal_evidence.py`
+re-ask the single midday question on observations captured from
+2026-11-02 00:00 UTC only, with the rule fixed before any of that data exists:
+
+- **CONFIRMED**: +60m CANDIDATE − CONTROL cluster-bootstrap 95% CI entirely > 0,
+  point estimate >= +0.05%, positive at >= 3 of 4 horizons.
+- **REVERSED**: +60m CI entirely < 0.
+- **NOT_CONFIRMED**: anything else once enough data exists.
+- **PENDING**: fewer than 20 scan runs or 300 per arm in the bucket.
+- 09:30-10:30 is reported alongside and decides nothing.
+
+No scoring, ranking, scheduling or capture change. A CONFIRMED result is a
+reason to design a separately validated change (for example, how morning
+picks are shown), not a change in itself.
