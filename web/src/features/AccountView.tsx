@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { account } from "@/api/account";
+import { ApiError } from "@/api/client";
 import type { EmailPrefs } from "@/api/account";
 import { Dialog } from "@/components/Dialog";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
@@ -302,6 +303,40 @@ function DownloadData() {
   );
 }
 
+/** Ends every session (other browsers, the iPhone app, push devices), then this one. */
+function SignOutEverywhere() {
+  const [open, setOpen] = useState(false);
+  const act = useAction();
+  const close = () => { setOpen(false); act.clear(); };
+  const go = async () => {
+    const ok = await act.run(async () => {
+      const res = await fetch("/api/auth/logout-everywhere", { method: "POST", credentials: "same-origin" });
+      if (!res.ok && res.status !== 401) {
+        const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+        throw new ApiError(res.status, body?.detail || "Couldn't sign out everywhere. Try again.", null, null, null);
+      }
+      return true;
+    });
+    if (ok) await signOut();
+  };
+  return (
+    <Card title="Signed-in devices" id="sessions">
+      <p className="body-sm">Lost a phone or used a shared computer? Sign out of HSF on every browser and device at once, including this one.</p>
+      <div className="row-actions"><button type="button" className="btn" onClick={() => setOpen(true)}>Sign out everywhere…</button></div>
+      <Dialog open={open} title="Sign out everywhere?" onClose={close}>
+        <div className="stack-sm">
+          <p className="body-sm">Every browser and the iPhone app will need to sign in again. Phones stop getting push alerts until then. Your data stays as it is.</p>
+          <ErrorLine error={act.error} />
+          <div className="row-actions end">
+            <button type="button" className="btn" onClick={close}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={() => void go()} disabled={act.busy} data-autofocus>{act.busy ? "Signing out…" : "Sign out everywhere"}</button>
+          </div>
+        </div>
+      </Dialog>
+    </Card>
+  );
+}
+
 function DeleteAccount() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
@@ -312,7 +347,7 @@ function DeleteAccount() {
     e.preventDefault();
     if (!password || typed !== "DELETE") return;
     const ok = await act.run(async () => { await account.remove(password); return true; });
-    if (ok) await signOut();
+    if (ok) await signOut("/login");
   };
   return (
     <Card title="Delete account" id="delete">
@@ -350,7 +385,7 @@ export function AccountView() {
         </div>
         <button type="button" className="btn" onClick={() => void signOut()}>Sign out</button>
       </section>
-      <nav className="chips account-nav" aria-label="Account sections"><a className="chip" href="#plan">Plan and billing</a><a className="chip" href="#profile">Profile</a><a className="chip" href="#email">Email preferences</a><a className="chip" href="#password">Password</a><a className="chip" href="#data">Your data</a></nav>
+      <nav className="chips account-nav" aria-label="Account sections"><a className="chip" href="#plan">Plan and billing</a><a className="chip" href="#profile">Profile</a><a className="chip" href="#email">Email preferences</a><a className="chip" href="#password">Password</a><a className="chip" href="#sessions">Devices</a><a className="chip" href="#data">Your data</a></nav>
       <div className="split">
         <div className="col-main">
           <PlanCard me={me} />
@@ -361,6 +396,7 @@ export function AccountView() {
         <div className="col-side">
           <ProfileCard me={me} />
           <PasswordCard />
+          <SignOutEverywhere />
           <DownloadData />
           <UsageAnalyticsPreference />
           <details className="danger-zone"><summary>Danger zone</summary><DeleteAccount /></details>

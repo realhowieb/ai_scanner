@@ -16,3 +16,12 @@ a3af3cdbf82c993b338eeb6362ebadf5d717184a:tests/test_api_paid_features.py:generic
 # receiver key and a throwaway public point. Not secrets; renamed since.
 6a997e63fd1d64ec9a2768cab0f610c5ffc85e30:web/tests/web-push.test.tsx:generic-api-key:9
 6a997e63fd1d64ec9a2768cab0f610c5ffc85e30:tests/test_webpush.py:generic-api-key:24
+# Fake one-time link tokens in the sign-in link tests (PR #282 first commit; renamed in the next). Not secrets.
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-bff.test.ts:generic-api-key:43
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-bff.test.ts:generic-api-key:47
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-bff.test.ts:generic-api-key:52
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-bff.test.ts:generic-api-key:56
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-bff.test.ts:generic-api-key:59
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-pages.test.tsx:generic-api-key:96
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-pages.test.tsx:generic-api-key:103
+fcbe70b713fd3d6226a41e56e5524f745e19d470:web/tests/sign-in-pages.test.tsx:generic-api-key:108

@@ -26,7 +26,7 @@ def _dummy_hash() -> bytes:
 # response or two concurrent refreshes (flaky phone network), not theft.
 REUSE_GRACE_S = 30
 # Tokens revoked for these reasons answer "invalid" when replayed (no theft sweep).
-SIGNED_OUT_REASONS = ("password_change", "password_reset")
+SIGNED_OUT_REASONS = ("password_change", "password_reset", "sign_out_all")
 
 
 class DatabaseUnavailable(RuntimeError):

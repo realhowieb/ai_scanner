@@ -49,18 +49,21 @@ type Ctx = {
 
 const SessionContext = createContext<Ctx | null>(null);
 
-export async function signOut(): Promise<void> {
+export const SIGNED_OUT_PATH = "/signed-out";
+
+/** Signs this browser out and leaves with a full page load (it drops every piece of client
+ * state from the old session). Lands on the "You're signed out" page unless `to` says
+ * otherwise (account deletion goes to the sign-in page). */
+export async function signOut(to: string = SIGNED_OUT_PATH): Promise<void> {
   resetUsageIdentity();
   finishBilling();
   clearCachedMe();
   // A signed-out browser must stop getting this account's alerts; never hold sign-out up for it.
-  await Promise.race([disablePush().catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
+  const hadPush = await Promise.race([disablePush().catch(() => false), new Promise<boolean>((r) => setTimeout(() => r(false), 1500))]);
   try {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
   } finally {
-    // A full page load on purpose: it drops every piece of client state from the old session.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/login");
+    window.location.assign(to === SIGNED_OUT_PATH && hadPush ? `${to}?push=off` : to);
   }
 }
 

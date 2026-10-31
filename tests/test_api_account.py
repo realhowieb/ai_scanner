@@ -23,6 +23,7 @@ class AccountApiTestCase(ApiTestCase):
         self.created, self.sent, self.verified = [], [], set()
         self.verification_down = False
         self.reset_tokens = {}       # token -> username
+        self.link_tokens = {}        # sign-in link token -> username
         self.password_updates, self.web_signouts, self.app_signouts = [], [], []
         self.prefs = {}
         p = mock.patch
@@ -38,6 +39,9 @@ class AccountApiTestCase(ApiTestCase):
             ("ui.email_utils.send_verification_email", lambda to_address, verify_url: self.sent.append(("verify", to_address, verify_url)) or True),
             ("ui.email_utils.send_password_reset_email", lambda to, url: self.sent.append(("reset", to, url)) or True),
             ("db.password_reset.create_reset_token", self._new_reset),
+            ("db.sign_in_links.create_token", self._new_link),
+            ("db.sign_in_links.consume_token", lambda t: self.link_tokens.pop(t, None)),
+            ("ui.email_utils.send_sign_in_link_email", lambda to, url, ttl=15: self.sent.append(("link", to, url)) or True),
             ("db.password_reset.peek_reset_token", lambda t: self.reset_tokens.get(t)),
             ("db.password_reset.consume_reset_token", lambda t: self.reset_tokens.pop(t, None)),
             ("ui.auth_sessions.revoke_user_sessions", lambda u: self.web_signouts.append(u) or 1),
@@ -77,6 +81,11 @@ class AccountApiTestCase(ApiTestCase):
         self.reset_tokens[token] = username
         return token
 
+    def _new_link(self, username, ttl_minutes=15):
+        token = f"link{len(self.link_tokens)}abcdefghij"
+        self.link_tokens[token] = username
+        return token
+
     def _revoke_all(self, username, reason):
         self.app_signouts.append((username, reason))
         for r in self.refresh.values():
@@ -87,7 +96,7 @@ class AccountApiTestCase(ApiTestCase):
     def _use(self, token_hash):
         """Mirrors api.store.use_refresh_token: password sign-outs answer invalid, no sweep."""
         row = self.refresh.get(token_hash)
-        if row and row["revoked"] and row.get("reason") in ("password_change", "password_reset"):
+        if row and row["revoked"] and row.get("reason") in ("password_change", "password_reset", "sign_out_all"):
             return "invalid", None
         return super()._use(token_hash)
 
@@ -222,6 +231,55 @@ class PasswordResetTests(AccountApiTestCase):
     def test_reset_request_limited_per_address(self):
         codes = [self.client.post("/v1/auth/password-reset", json={"email": "x@example.com"}).status_code for _ in range(6)]
         self.assertEqual(codes[-1], 429)
+
+
+class SignInLinkTests(AccountApiTestCase):
+    def test_same_answer_whether_or_not_the_account_exists(self):
+        a = self.client.post("/v1/auth/email-link", json={"email": "Pro@Example.com"})
+        b = self.client.post("/v1/auth/email-link", json={"email": "nobody@example.com"})
+        c = self.client.post("/v1/auth/email-link", json={"email": "off@example.com"})  # deactivated
+        self.assertEqual((a.status_code, b.status_code, c.status_code), (202, 202, 202))
+        self.assertEqual(a.json(), b.json())
+        self.assertEqual([s[1] for s in self.sent], ["pro@example.com"])
+        self.assertIn("/login/link?token=", self.sent[0][2])
+
+    def test_bad_email_is_refused(self):
+        self.assertEqual(self.client.post("/v1/auth/email-link", json={"email": "not-an-email"}).status_code, 400)
+
+    def test_link_signs_in_once(self):
+        self.client.post("/v1/auth/email-link", json={"email": "pro@example.com"})
+        token = next(iter(self.link_tokens))
+        ok = self.client.post("/v1/auth/email-link/confirm", json={"token": token, "client": "web"})
+        self.assertEqual(ok.status_code, 200, ok.text)
+        me = self.client.get("/v1/me", headers=self.auth(ok.json()["access_token"]))
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["email"], "pro@example.com")
+        again = self.client.post("/v1/auth/email-link/confirm", json={"token": token})
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("already used", again.json()["detail"])
+
+    def test_bogus_token_is_refused(self):
+        self.assertEqual(self.client.post("/v1/auth/email-link/confirm", json={"token": "bogus-token-123"}).status_code, 400)
+        self.assertEqual(self.client.post("/v1/auth/email-link/confirm", json={"token": "bad token with spaces"}).status_code, 400)
+
+    def test_request_limited_per_address(self):
+        codes = [self.client.post("/v1/auth/email-link", json={"email": "x@example.com"}).status_code for _ in range(11)]
+        self.assertEqual(codes[-1], 429)
+
+
+class SignOutEverywhereTests(AccountApiTestCase):
+    def test_ends_every_session(self):
+        pair = self.login().json()
+        other = self.login().json()
+        r = self.client.post("/v1/me/sign-out-everywhere", headers=self.auth(pair["access_token"]))
+        self.assertEqual(r.status_code, 204, r.text)
+        self.assertEqual(self.web_signouts, ["pro@example.com"])
+        self.assertEqual(self.app_signouts, [("pro@example.com", "sign_out_all")])
+        for p in (pair, other):
+            self.assertEqual(self.client.post("/v1/auth/refresh", json={"refresh_token": p["refresh_token"]}).status_code, 401)
+
+    def test_needs_sign_in(self):
+        self.assertEqual(self.client.post("/v1/me/sign-out-everywhere").status_code, 401)
 
 
 class PasswordChangeTests(AccountApiTestCase):
