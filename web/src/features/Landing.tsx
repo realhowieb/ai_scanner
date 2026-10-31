@@ -14,10 +14,12 @@ import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
-import { FoundingBanner } from "@/features/FoundingBanner";
+import { FoundingBanner, usePublicFounding } from "@/features/FoundingBanner";
 import { LiveSetupsPreview } from "@/features/LiveSetupsPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
+import { useSignedIn } from "@/lib/signedIn";
+import { LegalLinks } from "@/components/LegalLinks";
 
 type Plans = Schemas["Plans"];
 
@@ -63,6 +65,7 @@ function SignupLink({ surface, children, className = "btn btn-primary" }: { surf
 }
 
 export function PublicHeader() {
+  const signedIn = useSignedIn();
   return (
     <header className="pub-head">
       <Link href="/" className="brand">HSFinest<span>.AI</span></Link>
@@ -70,18 +73,23 @@ export function PublicHeader() {
         <Link href="/how-hsf-works">How it works</Link>
         <Link href="/demo">Demo</Link>
         <Link href="/pricing">Pricing</Link>
-        <Link href="/login">Sign in</Link>
-        <SignupLink surface="header" className="btn btn-primary btn-sm">Create free account</SignupLink>
+        {signedIn ? <Link href="/today" className="btn btn-primary btn-sm">Open HSF</Link> : <>
+          <Link href="/login">Sign in</Link>
+          <SignupLink surface="header" className="btn btn-primary btn-sm">Create free account</SignupLink>
+        </>}
       </nav>
     </header>
   );
 }
 
 export function PublicFooter() {
+  const signedIn = useSignedIn();
+  const founding = usePublicFounding();
   return (
     <footer className="pub-foot">
       <p className="cap">{DISCLAIMER}</p>
-      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/login">Sign in</Link></p>
+      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
+      <p className="cap"><LegalLinks refunds={!!founding} /></p>
     </footer>
   );
 }
@@ -153,6 +161,7 @@ function summaryHighlights(id: string, highlights: string[]): string[] {
 export function PlansSection({ table = false }: { table?: boolean }) {
   const [interval] = useBillingInterval();
   const [mobilePlan, setMobilePlan] = useState("pro");
+  const signedIn = useSignedIn();
   const plans = useApi<Plans>("plans", (signal) => unwrap(publicApi.GET("/v1/plans", { signal })));
   if (plans.error && !plans.data) return <ErrorState error={plans.error} onRetry={plans.reload} what="plans and prices" />;
   if (!plans.data) return <Skeleton rows={6} label="Loading plans" />;
@@ -179,13 +188,17 @@ export function PlansSection({ table = false }: { table?: boolean }) {
             </ul>
             {t.highlights.length > 5 && <details><summary>All plan features</summary><ul className="bullets">{t.highlights.filter((h) => !summaryHighlights(t.id, t.highlights).includes(h)).map((h) => <li key={h}>{h}</li>)}</ul></details>}
             {t.id === "pro" && <p className="cap">Highlighted for custom scans and intraday research.</p>}
-            <SignupLink surface={`plan_${t.id}`} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
-              {t.id === "basic" ? "Start free" : `Start free, upgrade to ${t.name}`}
-            </SignupLink>
+            {signedIn
+              ? <Link href={t.id === "basic" ? "/today" : "/account#plan"} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
+                {t.id === "basic" ? "Open HSF" : `Upgrade to ${t.name} in Account`}
+              </Link>
+              : <SignupLink surface={`plan_${t.id}`} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
+                {t.id === "basic" ? "Start free" : `Start free, upgrade to ${t.name}`}
+              </SignupLink>}
           </article>
         ))}
       </div>
-      <p className="cap">Every account starts on {tiers[0]!.name}. Upgrade from Account after you verify your email; payments run through Stripe and you can cancel any time.</p>
+      <p className="cap">{signedIn ? "You're signed in, so change your plan from Account." : `Every account starts on ${tiers[0]!.name}. Upgrade from Account after you verify your email.`} Payments run through Stripe and you can cancel any time.</p>
       {table && (
         <><div className="only-narrow card stack-sm"><label className="field">Compare a plan<select value={mobilePlan} onChange={(e) => setMobilePlan(e.target.value)}>{tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
           <dl className="kv">{rows.map((r) => <div key={r.label}><dt>{r.label}</dt><dd>{cell(r[mobilePlan as "basic" | "pro" | "premium"])}</dd></div>)}</dl>

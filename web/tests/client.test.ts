@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError, makeClient, setSessionExpiredHandler, unwrap } from "@/api/client";
-import { safeNext } from "@/lib/nextPath";
+import { safeNext, withNext } from "@/lib/nextPath";
 import { parseRetryAfter } from "@/lib/retryAfter";
 import { freshness } from "@/lib/format";
 
@@ -52,6 +52,12 @@ describe("helpers", () => {
   it("only allows same-site paths after sign-in", () => {
     expect(safeNext("/scanner?signal=breakout")).toBe("/scanner?signal=breakout");
     for (const bad of ["https://evil.example", "//evil.example", "/\\evil", "/api/hsf/v1/me", null, ""]) expect(safeNext(bad)).toBe("/today");
+  });
+
+  it("carries a safe destination between sign-in and sign-up", () => {
+    expect(withNext("/signup", "/account/founder")).toBe("/signup?next=%2Faccount%2Ffounder");
+    expect(withNext("/login", "//evil.example")).toBe("/login");
+    expect(withNext("/login", null)).toBe("/login");
   });
 
   it("marks scans older than 6 hours stale", () => {
