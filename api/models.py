@@ -287,6 +287,20 @@ class TodayPersonal(BaseModel):
     errors: List[SectionError] = []
 
 
+class SetupMixRow(BaseModel):
+    signal: str = Field(description="Scanner filter id (/scanner?signal=<id>)")
+    label: str
+    count: int = Field(description="Setups in the latest scan carrying this signal")
+    top_ticker: Optional[str] = Field(default=None, description="Highest HSF Score among them")
+    top_score: Optional[int] = None
+
+
+class SetupMix(BaseModel):
+    scan_at: Optional[str] = None
+    total: int = Field(description="Setups in the latest scan; a name can carry several signals")
+    rows: List[SetupMixRow] = []
+
+
 class Today(BaseModel):
     as_of: str
     market: Market
@@ -295,6 +309,7 @@ class Today(BaseModel):
     after_close: Optional[SessionCard] = None
     recap: Optional[Recap] = None
     snapshot: Optional[Snapshot] = None
+    setup_mix: Optional[SetupMix] = None
     errors: List[SectionError] = []
 
 

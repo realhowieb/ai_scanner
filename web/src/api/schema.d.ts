@@ -8634,6 +8634,43 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** SetupMix */
+        SetupMix: {
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["SetupMixRow"][];
+            /** Scan At */
+            scan_at?: string | null;
+            /**
+             * Total
+             * @description Setups in the latest scan; a name can carry several signals
+             */
+            total: number;
+        };
+        /** SetupMixRow */
+        SetupMixRow: {
+            /**
+             * Count
+             * @description Setups in the latest scan carrying this signal
+             */
+            count: number;
+            /** Label */
+            label: string;
+            /**
+             * Signal
+             * @description Scanner filter id (/scanner?signal=<id>)
+             */
+            signal: string;
+            /** Top Score */
+            top_score?: number | null;
+            /**
+             * Top Ticker
+             * @description Highest HSF Score among them
+             */
+            top_ticker?: string | null;
+        };
         /** SignupBody */
         SignupBody: {
             /**
@@ -9057,6 +9094,7 @@ export interface components {
             errors: components["schemas"]["SectionError"][];
             market: components["schemas"]["Market"];
             recap?: components["schemas"]["Recap"] | null;
+            setup_mix?: components["schemas"]["SetupMix"] | null;
             snapshot?: components["schemas"]["Snapshot"] | null;
             top_setups?: components["schemas"]["TopSetups"] | null;
         };

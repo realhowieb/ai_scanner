@@ -187,3 +187,40 @@ describe("Today signed-in sections", () => {
     expect(within(first as HTMLElement).getByRole("heading", { name: "Your watchlist" })).toBeInTheDocument();
   });
 });
+
+describe("Today setup mix and earnings placement", () => {
+  const mix: Schemas["SetupMix"] = { scan_at: now, total: 61, rows: [
+    { signal: "breakout", label: "Breakout", count: 14, top_ticker: "GLL", top_score: 75 },
+    { signal: "gapper", label: "Gapper", count: 4, top_ticker: "IRON", top_score: 48 },
+    { signal: "golden_cross", label: "Golden cross", count: 0, top_ticker: null, top_score: null },
+    { signal: "gainer", label: "Gainer", count: 9, top_ticker: "GEN", top_score: 56 },
+  ] };
+  const earnings = <section aria-label="Earnings stub">earnings</section>;
+
+  it("counts each Scanner signal and links to the filtered Scanner", () => {
+    render(<TodayView data={{ ...base, setup_mix: mix }} />);
+    const card = screen.getByRole("region", { name: "Setup mix" });
+    expect(within(card).getByRole("link", { name: "Breakout" })).toHaveAttribute("href", "/scanner?signal=breakout");
+    expect(within(card).getByRole("link", { name: "Golden cross" })).toHaveAttribute("href", "/scanner?signal=golden_cross");
+    expect(within(card).getByLabelText("14 setups")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "GLL" })).toHaveAttribute("href", "/stocks/GLL");
+    expect(within(card).getByText("None this scan")).toBeInTheDocument();
+  });
+
+  it("hides the card with no counts and notes a failed read", () => {
+    const { rerender } = render(<TodayView data={{ ...base, setup_mix: { scan_at: now, total: 0, rows: [] } }} />);
+    expect(screen.queryByRole("region", { name: "Setup mix" })).not.toBeInTheDocument();
+    rerender(<TodayView data={{ ...base, setup_mix: null, errors: [{ section: "setup_mix", error: "X" }] }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Setup mix couldn't load");
+  });
+
+  it("moves earnings into the main column when the personal cards fill the side", () => {
+    const mine: Schemas["TodayPersonal"] = { errors: [], new_since: { marker: "11:", tickers: [], total: 0 },
+      watchlist: { watchlist_id: 1, name: "Main", in_scan: [{ ticker: "BBB", score: 81 }], missing: [] } };
+    const { rerender } = render(<TodayView data={base} mine={mine} earnings={earnings} />);
+    expect(within(screen.getByRole("complementary")).queryByLabelText("Earnings stub")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Earnings stub")).toBeInTheDocument();
+    rerender(<TodayView data={base} earnings={earnings} />);
+    expect(within(screen.getByRole("complementary")).getByLabelText("Earnings stub")).toBeInTheDocument();
+  });
+});

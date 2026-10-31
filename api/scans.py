@@ -121,6 +121,31 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
 
 
+# ---- Setup mix (Today) -------------------------------------------------------------------------
+# The Scanner's own setup filters, so each count matches what /scanner?signal=<id> lists.
+# PreBreakout (a fixed top 10, Premium) and Earnings (a calendar, not a signal) aren't mix rows.
+SETUP_MIX_SIGNALS = (("breakout", "Breakout"), ("gapper", "Gapper"),
+                     ("golden_cross", "Golden cross"), ("gainer", "Gainer"))
+
+
+def setup_mix() -> Optional[Dict[str, Any]]:
+    """How many of the latest scan's setups carry each Scanner signal, with the
+    highest-scored name for each. None when there is no scan yet. A name can carry
+    more than one signal, so the counts can add up to more than `total`."""
+    runs = market_runs()
+    if not runs:
+        return None
+    opps = run_opportunities(int(runs[0]["id"]))
+    rows = []
+    for sig, label in SETUP_MIX_SIGNALS:
+        hits = [o for o in opps if sig in (o.get("signals") or [])]
+        lead = hits[0] if hits else None  # opportunities are in HSF order
+        rows.append({"signal": sig, "label": label, "count": len(hits),
+                     "top_ticker": str(lead["ticker"]) if lead else None,
+                     "top_score": int(round(_num(lead.get("score")) or 0)) if lead else None})
+    return {"scan_at": _iso(runs[0]["created_at"]), "total": len(opps), "rows": rows}
+
+
 # ---- Earnings scanner ---------------------------------------------------------------------------
 # Day offsets from today's ET date, inclusive. Today is free; the others need can_earnings (Pro).
 EARNINGS_WINDOWS = {"today": (0, 0), "tomorrow": (1, 1), "week": (0, 7)}

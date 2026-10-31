@@ -29,6 +29,18 @@ describe("Earnings this week", () => {
     expect(screen.getAllByText("Watchlist")).toHaveLength(1);
   });
 
+  it("shows the HSF Score the page already knows and tags top setups", async () => {
+    fetchMock.mockResolvedValue(jsonResponse([
+      { ticker: "MXL", earnings_date: "2026-10-08", days_until: 0, time: "amc" },
+      { ticker: "TER", earnings_date: "2026-10-13", days_until: 5, time: "bmo" },
+    ]));
+    render(<SessionProvider initialMe={me("pro")}><EarningsCard tickers={["MXL", "TER"]} watched={new Set(["MXL"])} scores={new Map([["MXL", 52], ["TER", 76]])} /></SessionProvider>);
+    expect(await screen.findByLabelText("HSF Score 76")).toBeInTheDocument();
+    expect(screen.getByLabelText("HSF Score 52")).toBeInTheDocument();
+    expect(screen.getByText("Watchlist")).toBeInTheDocument();
+    expect(screen.getByText("Top setup")).toBeInTheDocument();
+  });
+
   it("says when nobody reports, and waits for the names before asking", async () => {
     fetchMock.mockResolvedValue(jsonResponse([]));
     const { rerender } = render(<SessionProvider initialMe={me("pro")}><EarningsCard tickers={null} watched={new Set()} /></SessionProvider>);

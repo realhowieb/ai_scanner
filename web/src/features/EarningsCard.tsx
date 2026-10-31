@@ -1,7 +1,7 @@
 "use client";
 
 import { api, unwrap } from "@/api/client";
-import { Card, Empty, Locked, Pill, TickerLink } from "@/components/ui";
+import { Card, Empty, Locked, Pill, ScoreBadge, TickerLink } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/session/SessionProvider";
 
@@ -19,8 +19,9 @@ function when(date: string | null | undefined, days: number | null | undefined):
 }
 
 /** Earnings in the next 7 days for the user's watchlist and today's top setups (Pro).
- * `tickers` is null until the page knows which names to ask about. */
-export function EarningsCard({ tickers, watched }: { tickers: string[] | null; watched: Set<string> }) {
+ * `tickers` is null until the page knows which names to ask about. `scores` holds the
+ * latest scan's HSF Score for names the page already has (top setups, watchlist). */
+export function EarningsCard({ tickers, watched, scores }: { tickers: string[] | null; watched: Set<string>; scores?: Map<string, number> }) {
   const { can } = useSession();
   const allowed = can("can_earnings");
   const key = allowed && tickers && tickers.length > 0 ? `earnings:${tickers.join(",")}` : null;
@@ -50,7 +51,8 @@ export function EarningsCard({ tickers, watched }: { tickers: string[] | null; w
               <TickerLink ticker={r.ticker} />
               <span className="strong grow">{when(r.earnings_date, r.days_until)}</span>
               <span className="cap nowrap">{(r.time && TIMES[r.time]) || "Time TBA"}</span>
-              {watched.has(r.ticker) && <Pill>Watchlist</Pill>}
+              {scores?.has(r.ticker) && <><span className="cap">HSF</span><ScoreBadge score={scores.get(r.ticker)} /></>}
+              {watched.has(r.ticker) ? <Pill>Watchlist</Pill> : scores?.has(r.ticker) ? <Pill>Top setup</Pill> : null}
             </li>
           ))}
         </ul>

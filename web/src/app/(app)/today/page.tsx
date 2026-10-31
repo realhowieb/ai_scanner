@@ -22,7 +22,10 @@ export default function TodayPage() {
   // Earnings asks about the watchlist and today's top setups once both are known.
   const wl = mine.data?.watchlist;
   const watched = new Set([...(wl?.in_scan.map((r) => r.ticker) ?? []), ...(wl?.missing ?? [])]);
-  const top = [...(data?.top_setups?.setups ?? []), ...(data?.top_setups?.also_ranked ?? [])].map((s) => s.ticker);
+  const topRows = [...(data?.top_setups?.setups ?? []), ...(data?.top_setups?.also_ranked ?? [])];
+  const top = topRows.map((s) => s.ticker);
+  const scores = new Map<string, number>();
+  for (const r of [...(wl?.in_scan ?? []), ...topRows]) if (typeof r.score === "number") scores.set(r.ticker, r.score);
   const settled = !!data && (!!mine.data || !!mine.error);
   const tickers = settled ? [...new Set([...watched, ...top])].sort() : null;
   return (
@@ -31,7 +34,7 @@ export default function TodayPage() {
       {error && !data ? <ErrorState error={error} onRetry={reload} what="Today" />
         : loading && !data ? <Skeleton rows={8} label="Loading Today" />
         : data ? <TodayView data={data} mine={mine.data} mineFailed={!!mine.error && !mine.data}
-            side={<EarningsCard tickers={tickers} watched={watched} />}
+            earnings={<EarningsCard tickers={tickers} watched={watched} scores={scores} />}
             lead={data.market.phase === "premarket" ? <GappersCard /> : undefined} onMineChanged={mine.reload} /> : null}
     </div>
   );
