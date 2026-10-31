@@ -34,6 +34,9 @@ def _ensure_schema(conn, is_sqlite: bool) -> None:
     serial = "INTEGER PRIMARY KEY AUTOINCREMENT" if is_sqlite else "BIGSERIAL PRIMARY KEY"
     cur.execute(f"CREATE TABLE IF NOT EXISTS hsf_feedback (id {serial}, user_id TEXT NOT NULL, "
                 "kind TEXT NOT NULL, message TEXT NOT NULL, path TEXT, plan TEXT, build TEXT, created_at TEXT NOT NULL)")
+    # Which messages an admin has answered (founder priority support).
+    cur.execute("CREATE TABLE IF NOT EXISTS hsf_feedback_status (feedback_id BIGINT PRIMARY KEY, "
+                "answered_at TEXT NOT NULL, answered_by TEXT NOT NULL)")
     conn.commit()
     cur.close()
 
@@ -121,15 +124,65 @@ def add_feedback(user_id: str, kind: str, message: str, path: Optional[str], pla
         _close(conn, sq)
 
 
+FOUNDER_MARK = "Founder"  # api.web_state adds the founder tier label to `plan`
+
+
 def recent_feedback(limit: int = 50) -> List[Dict[str, Any]]:
-    """Newest first, for the admin page."""
+    """Newest first, for the admin page, with whether each one came from a founder and
+    whether an admin has answered it. Unanswered founder messages come first."""
     conn, sq = _connect()
     try:
         cur = conn.cursor()
-        cur.execute(_sql("SELECT id, user_id, kind, message, path, plan, build, created_at FROM hsf_feedback "
-                         "ORDER BY id DESC LIMIT %s", sq), (int(limit),))
+        cur.execute(_sql("SELECT f.id, f.user_id, f.kind, f.message, f.path, f.plan, f.build, f.created_at, "
+                         "s.answered_at, s.answered_by FROM hsf_feedback f "
+                         "LEFT JOIN hsf_feedback_status s ON s.feedback_id = f.id "
+                         "ORDER BY f.id DESC LIMIT %s", sq), (int(limit),))
         rows = cur.fetchall() or []
     finally:
         _close(conn, sq)
-    keys = ("id", "user_id", "kind", "message", "path", "plan", "build", "created_at")
-    return [{k: (r[k] if isinstance(r, dict) else r[i]) for i, k in enumerate(keys)} for r in rows]
+    keys = ("id", "user_id", "kind", "message", "path", "plan", "build", "created_at", "answered_at", "answered_by")
+    out = [{k: (r[k] if isinstance(r, dict) else r[i]) for i, k in enumerate(keys)} for r in rows]
+    for f in out:
+        f["founder"] = FOUNDER_MARK in str(f.get("plan") or "")
+    out.sort(key=lambda f: 0 if (f["founder"] and not f["answered_at"]) else 1)  # stable: newest first within
+    return out
+
+
+def mark_answered(feedback_id: int, admin: str, answered: bool = True, now: Optional[dt.datetime] = None) -> bool:
+    """Mark one message answered (or not). False when there is no such message."""
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT id FROM hsf_feedback WHERE id = %s", sq), (int(feedback_id),))
+        if not cur.fetchone():
+            return False
+        cur.execute(_sql("DELETE FROM hsf_feedback_status WHERE feedback_id = %s", sq), (int(feedback_id),))
+        if answered:
+            cur.execute(_sql("INSERT INTO hsf_feedback_status (feedback_id, answered_at, answered_by) "
+                             "VALUES (%s, %s, %s)", sq), (int(feedback_id), now_iso(now), admin))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _close(conn, sq)
+
+
+def unanswered_founder_feedback() -> Dict[str, Any]:
+    """How many founder messages still wait for an answer, and when the oldest arrived."""
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT COUNT(*) AS n, MIN(f.created_at) AS oldest FROM hsf_feedback f "
+                         "LEFT JOIN hsf_feedback_status s ON s.feedback_id = f.id "
+                         "WHERE s.feedback_id IS NULL AND f.plan LIKE %s", sq), (f"%{FOUNDER_MARK}%",))
+        r = cur.fetchone()
+    finally:
+        _close(conn, sq)
+    n = (r["n"] if isinstance(r, dict) else r[0]) if r else 0
+    oldest = (r["oldest"] if isinstance(r, dict) else r[1]) if r else None
+    return {"count": int(n or 0), "oldest": oldest}

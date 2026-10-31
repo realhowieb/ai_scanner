@@ -17,6 +17,8 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
     business email      Monday from 12:00 UTC: services.business_report to the admins.
     daily account mail  from 15:00 UTC: free Pro ended, first-week tips and the 14-day
                         come-back email (services.lifecycle_emails, services.onboarding_emails).
+    founder feedback    Mon-Fri from 14:00 UTC: when founders' feedback is waiting for an
+                        answer, the admins get the count and the oldest one's age.
 
 Env (all default on; set to 0 to stop one):
     HSF_OPS_JOBS_ENABLED          the whole thread
@@ -25,6 +27,7 @@ Env (all default on; set to 0 to stop one):
     HSF_WEEKLY_RECAP_ENABLED      weekly recap (services.weekly_recap)
     HSF_BUSINESS_EMAIL_ENABLED    business email (services.business_report)
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
+    HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
 
 Nothing here raises into the API.
 """
@@ -243,6 +246,25 @@ def daily_mail_due(now: dt.datetime) -> Optional[str]:
     return _et(now).date().isoformat() if now.hour >= 15 else None
 
 
+def founder_nudge_due(now: dt.datetime) -> Optional[str]:
+    return _et(now).date().isoformat() if now.weekday() < 5 and now.hour >= 14 else None
+
+
+def founder_feedback_nudge() -> Dict[str, Any]:
+    """Tell the admins how many founder messages are still unanswered (nothing when none)."""
+    from db import web_state
+    from services import ops_notify
+
+    out = web_state.unanswered_founder_feedback()
+    if out["count"] <= 0:
+        return {"sent": False, **out}
+    oldest = str(out["oldest"] or "")[:16].replace("T", " ")
+    text = (f"{out['count']} founder message{'s' if out['count'] != 1 else ''} waiting for an answer"
+            f"{f' (oldest {oldest} UTC)' if oldest else ''}. Admin > Feedback from users.")
+    ops_notify.notify_ops("HSF founder feedback waiting", text)
+    return {"sent": True, **out}
+
+
 def _run_once(job: str, key: Optional[str], fn) -> None:
     """Claim then run; release the claim if the job itself crashed so it retries next pass."""
     if not key:
@@ -287,6 +309,8 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
         return out
 
     _run_once("daily_account_mail", daily_mail_due(now), daily)
+    if _on("HSF_FOUNDER_FEEDBACK_NUDGE"):
+        _run_once("founder_feedback_nudge", founder_nudge_due(now), founder_feedback_nudge)
 
 
 def start() -> None:

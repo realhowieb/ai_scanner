@@ -12,6 +12,7 @@ Order of a checkout (each step refuses before anything is charged):
 """
 from __future__ import annotations
 
+import datetime as dt
 import importlib
 import logging
 import os
@@ -86,6 +87,12 @@ def clear_cache() -> None:
         _public_cache.clear()
 
 
+def five_year(tier: str) -> Dict[str, int]:
+    from services import founder_value
+
+    return founder_value.five_year(tier)
+
+
 def _membership_out(m: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not m:
         return None
@@ -115,7 +122,7 @@ def offer(account: Dict[str, Any]) -> Dict[str, Any]:
         tiers.append({"tier": tier, "label": rules.TIER_LABEL[tier], "plan": rules.PLAN_FOR_TIER[tier],
                       "price_cents": rules.PRICE_CENTS[tier], "capacity": rules.CAPACITY[tier], "remaining": left,
                       "on_sale": checkout_on and rules.tier_available(tier) and left > 0,
-                      "disclosure": rules.disclosure(tier)})
+                      "disclosure": rules.disclosure(tier), "five_year": five_year(tier)})
     live = member if member and member["status"] in ("pending", "active") else None
     can_upgrade = bool(live and live["status"] == "active" and live["tier"] == rules.FOUNDER_PRO)
     upgrade = {"price_cents": rules.UPGRADE_PRICE_CENTS, "disclosure": rules.disclosure(rules.FOUNDER_ELITE, "upgrade"),
@@ -158,7 +165,8 @@ def public_status() -> Dict[str, Any]:
         left = int(avail["tiers"][tier]["remaining"])
         tiers.append({"tier": tier, "label": rules.TIER_LABEL[tier], "price_cents": rules.PRICE_CENTS[tier],
                       "capacity": rules.CAPACITY[tier], "remaining": left,
-                      "on_sale": checkout_on and rules.tier_available(tier) and left > 0})
+                      "on_sale": checkout_on and rules.tier_available(tier) and left > 0,
+                      "five_year": five_year(tier)})
     out = {"open": True, "checkout_open": checkout_on, "tiers": tiers,
            "remaining": sum(t["remaining"] for t in tiers)}
     with _public_lock:
@@ -492,7 +500,89 @@ def benefits(account: Dict[str, Any]) -> Dict[str, Any]:
         if elite and active else None,
         "poll": {"open": active and bool(options), "choice": prefs["poll_choice"],
                  "options": [{"key": k, "label": v} for k, v in options.items()]},
+        "value": value_for_membership(m, user) if active else None,
+        "wall_name": extras.wall_name(user),
+        "card_path": _card_path(user),
+        "reply_target": reply_target(),
     }
+
+
+def value_for_membership(m: Dict[str, Any], user: Optional[str] = None,
+                         now: Optional[dt.datetime] = None) -> Optional[Dict[str, Any]]:
+    from services import founder_value
+
+    return founder_value.for_membership(m, user, now)
+
+
+def reply_target() -> Optional[str]:
+    """How soon founders hear back (HSF_FOUNDER_REPLY_TARGET, e.g. "one business day").
+    Unset = not promised anywhere."""
+    t = " ".join(os.environ.get("HSF_FOUNDER_REPLY_TARGET", "").split())
+    return t[:60] or None
+
+
+def _card_path(user: str) -> Optional[str]:
+    """The member's shareable founder card: /founders/card/<invite code>."""
+    try:
+        from db import referrals as store
+
+        return f"/founders/card/{store.get_or_create_code(user)}"
+    except Exception:
+        return None
+
+
+def set_wall_name(account: Dict[str, Any], show: bool, name: Optional[str]) -> Dict[str, Any]:
+    from db import founding_benefits as extras
+
+    benefits(account)  # members only
+    clean = None
+    if show:
+        clean = rules.clean_wall_name(name)
+        if not clean:
+            raise CodedError(400, "Use 2 to 30 letters, numbers, spaces, dots, dashes or apostrophes. "
+                                  "No email addresses or links.", "wall_name_invalid")
+    extras.set_wall_name(str(account["username"]), clean)
+    with _public_lock:
+        _public_cache.pop("wall", None)
+    return benefits(account)
+
+
+def public_wall() -> Dict[str, Any]:
+    """The Founders Wall: every seat by number, names only for members who opted in.
+    Cached like the public status."""
+    if not program_open():
+        return {"open": False, "seats": [], "taken": 0}
+    now = time.monotonic()
+    with _public_lock:
+        hit = _public_cache.get("wall")
+        if hit and now - hit[0] < PUBLIC_TTL_S:
+            return hit[1]
+    from db import founding_benefits as extras
+
+    seats = extras.wall()
+    out = {"open": True, "seats": seats, "taken": sum(1 for x in seats if x["taken"])}
+    with _public_lock:
+        _public_cache["wall"] = (now, out)
+    return out
+
+
+def public_card(code: str) -> Optional[Dict[str, Any]]:
+    """What a shared founder card shows: number, tier, member since and valid to. Only for a
+    member who shows the badge; never a name or email."""
+    from db import founding as db
+    from db import founding_benefits as extras
+    from db import referrals as store
+
+    owner = store.owner_of(code)
+    if not owner:
+        return None
+    m = db.membership(owner)
+    if not m or m["status"] not in ("active", "expired") or not extras.prefs(owner)["show_badge"]:
+        return None
+    number = m.get("membership_number") or m.get("former_number")
+    return {"badge": rules.badge_title(m["tier"], number), "number": rules.format_number(number),
+            "tier": m["tier"], "label": rules.TIER_LABEL[m["tier"]], "status": m["status"],
+            "since": m.get("activated_at"), "until": m.get("expires_at"), "code": code}
 
 
 def set_show_badge(account: Dict[str, Any], show: bool) -> Dict[str, Any]:
@@ -533,3 +623,52 @@ def public_badge(code: str) -> Optional[str]:
 
     owner = store.owner_of(code)
     return extras.public_badge(owner) if owner else None
+
+
+# ---- monthly Founder Briefing (services/founding_emails.py; admins preview, then send) ---------
+
+def _sample_member() -> Dict[str, Any]:
+    from db import founding_benefits as extras
+
+    members = extras.active_members()
+    if members:
+        return members[0]
+    return {"user_id": "", "tier": rules.FOUNDER_PRO, "membership_number": 1,
+            "activated_at": None, "expires_at": None}
+
+
+def briefing_preview(note: str, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    """The briefing as the first active founder would get it (a sample when there are none),
+    how many founders it goes to, and whether this month's has already been sent."""
+    from db import founding_benefits as extras
+    from services import founding_emails as mail
+
+    month = mail.briefing_month(now)
+    m = _sample_member()
+    user = str(m.get("user_id") or "")
+    value = value_for_membership(m, user or None, now) if m.get("activated_at") else None
+    msg = mail.briefing_message(m, mail.briefing_parts(note), month, value,
+                                extras.prefs(user)["poll_choice"] if user else None)
+    sent = extras.briefing(month)
+    return {"month": month, "subject": msg["subject"], "html": msg["html"], "text": msg["text"],
+            "recipients": len(extras.active_members()), "already_sent": bool(sent),
+            "sent_at": (sent or {}).get("started_at"),
+            "history": [{k: b.get(k) for k in ("month", "subject", "sent_by", "started_at", "sent", "failed")}
+                        for b in extras.briefings()]}
+
+
+def briefing_send(account: Dict[str, Any], note: str, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
+    """Send this month's briefing to every active founder, once per month."""
+    from db import founding_benefits as extras
+    from services import founding_emails as mail
+
+    if len(note.strip()) < 20:
+        raise CodedError(400, "Write at least a sentence about what shipped.", "briefing_note_short")
+    month = mail.briefing_month(now)
+    admin = str(account["username"]).strip().lower()
+    if not extras.claim_briefing(month, mail.briefing_subject(month), admin, now=now):
+        raise CodedError(409, "This month's Founder Briefing has already been sent.", "briefing_already_sent")
+    out = mail.send_briefing(note, month=month, now=now)
+    extras.finish_briefing(month, out["sent"], out["failed"], now=now)
+    log.info("founder briefing %s sent by %s: %s", month, admin, out)
+    return {"month": month, **out}

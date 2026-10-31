@@ -78,7 +78,14 @@ def register(app: FastAPI) -> None:
             web_state.send_feedback(account, body.kind, body.message, body.path, body.build)
         except Exception as e:
             raise _db_error(e) from None
-        return {"ok": True, "message": "Thanks, your message was sent."}
+        msg = "Thanks, your message was sent."
+        if account.get("founder_tier"):
+            from api.founding import reply_target
+
+            target = reply_target()
+            msg = (f"Thanks, founder. Your message goes to the top of our list. We aim to reply within {target}."
+                   if target else "Thanks, founder. Your message goes to the top of our list.")
+        return {"ok": True, "message": msg}
 
     @app.get("/v1/admin/feedback", response_model=List[models.FeedbackItem], tags=["admin (admins only)"],
              responses={**_AUTH, 403: {"description": "Admins only"}}, summary="Recent feedback from the app",
@@ -89,6 +96,30 @@ def register(app: FastAPI) -> None:
         if not account.get("is_admin"):
             raise HTTPException(403, "Admins only.")
         return store.recent_feedback(50)
+
+    @app.post("/v1/admin/feedback/{feedback_id}/answered", response_model=models.Message, tags=["admin (admins only)"],
+              responses={**_AUTH, 403: {"description": "Admins only"}, 404: {"description": "No such message"}},
+              summary="Mark a feedback message answered or not", openapi_extra={"x-internal": True})
+    def answer_feedback(feedback_id: int, body: models.FeedbackAnswered,
+                        account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        from db import web_state as store
+
+        if not account.get("is_admin"):
+            raise HTTPException(403, "Admins only.")
+        if not store.mark_answered(feedback_id, _user(account), body.answered):
+            raise HTTPException(404, "No such message.")
+        return {"ok": True, "message": "Marked answered." if body.answered else "Marked not answered."}
+
+    @app.get("/v1/admin/feedback/founders", response_model=models.FounderFeedbackStatus, tags=["admin (admins only)"],
+             responses={**_AUTH, 403: {"description": "Admins only"}},
+             summary="Founder feedback still waiting for an answer", openapi_extra={"x-internal": True})
+    def founder_feedback(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        from api.founding import reply_target
+        from db import web_state as store
+
+        if not account.get("is_admin"):
+            raise HTTPException(403, "Admins only.")
+        return {**store.unanswered_founder_feedback(), "reply_target": reply_target()}
 
     @app.get("/v1/public/top-setups", response_model=models.PublicTopSetups,
              responses={429: {"description": "Too many requests"}},

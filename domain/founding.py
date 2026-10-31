@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 from typing import Dict, Optional
 
 FOUNDER_PRO = "founder_pro"
@@ -188,3 +189,56 @@ def disclosure(tier: str, kind: str = "purchase") -> Dict[str, str]:
     return {"name": name, "payment": f"One-time payment: {price_label(amount)}",
             "duration": "Membership duration: Five years", "recurring": "Recurring payments: None",
             "refund": "Refund guarantee: 14 days"}
+
+
+# ---- founder value, the 5-year comparison and the Founders Wall ----------------------------------
+TERM_MONTHS = TERM_YEARS * 12
+
+
+def months_between(start: dt.datetime, end: dt.datetime) -> int:
+    """Whole calendar months from `start` to `end` (0 when end is before start)."""
+    if end <= start:
+        return 0
+    months = (end.year - start.year) * 12 + (end.month - start.month)
+    if (end.day, end.time()) < (start.day, start.time()):
+        months -= 1
+    return max(0, months)
+
+
+def five_year_math(tier: str, monthly_cents: int) -> Dict[str, int]:
+    """What five years of the tier's plan costs paying monthly, against the one-time price."""
+    paying_monthly = int(monthly_cents) * TERM_MONTHS
+    return {"monthly_cents": int(monthly_cents), "five_years_monthly_cents": paying_monthly,
+            "price_cents": PRICE_CENTS[tier], "saved_cents": max(0, paying_monthly - PRICE_CENTS[tier])}
+
+
+def value_meter(tier: str, activated_at: dt.datetime, monthly_cents: int,
+                now: Optional[dt.datetime] = None) -> Dict[str, int]:
+    """A member's value so far: months used of the 60, what those months would have cost on
+    the monthly plan, and the month the one-time payment is paid back."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if activated_at.tzinfo is None:
+        activated_at = activated_at.replace(tzinfo=dt.timezone.utc)
+    used = min(TERM_MONTHS, months_between(activated_at, now))
+    paid = PRICE_CENTS[tier]
+    monthly = max(1, int(monthly_cents))
+    would_have = used * monthly
+    return {"months_used": used, "months_left": TERM_MONTHS - used, "term_months": TERM_MONTHS,
+            "monthly_cents": monthly, "paid_cents": paid, "monthly_cost_so_far_cents": would_have,
+            "ahead_cents": max(0, would_have - paid), "break_even_month": -(-paid // monthly)}
+
+
+WALL_NAME_MAX = 30
+_WALL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._'-]*$")
+
+
+def clean_wall_name(raw: Optional[str]) -> Optional[str]:
+    """A display name for the Founders Wall: 2-30 letters, digits, spaces and . _ ' -,
+    no email addresses or links. None when it doesn't qualify."""
+    name = " ".join(str(raw or "").split())
+    if not (2 <= len(name) <= WALL_NAME_MAX) or not _WALL_NAME_RE.match(name):
+        return None
+    low = name.lower().replace(" ", "")
+    if "http" in low or "www." in low or re.search(r"\.(com|net|org|io|ai|co|xyz|app|me)\b", low):
+        return None
+    return name

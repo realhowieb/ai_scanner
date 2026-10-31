@@ -6,7 +6,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
-import { founding } from "@/api/founding";
+import { dollars, founding } from "@/api/founding";
 import type { FounderTier, FoundingOffer } from "@/api/founding";
 import Link from "@/components/Link";
 import { Card, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
@@ -88,7 +88,7 @@ export function FounderView() {
       <Link href="/account" className="back">← Back to Account</Link>
       <header className="stack-xs">
         <h1 className="h1">Founding 100</h1>
-        <p className="body-sm">100 memberships, ever: 75 Founder Pro and 25 Founder Elite. One payment covers five calendar years. Nothing renews or charges again.</p>
+        <p className="body-sm">100 memberships, ever: 75 Founder Pro and 25 Founder Elite. One payment covers five calendar years. Nothing renews or charges again. <Link href="/founders">See the Founders Wall</Link></p>
       </header>
       {offer.preview && <p className="banner" role="note">Admin preview: the Founding 100 is still switched off for members.{offer.missing_details.length ? ` Still to set: ${offer.missing_details.join(", ")}.` : ""}</p>}
       {back === "success" && !live && <p className="banner" role="status">Payment received. Your membership appears here as soon as Stripe confirms it.</p>}
@@ -125,6 +125,10 @@ export function FounderView() {
             <Card key={t.tier} title={t.label} aside={<span className="cap">{t.remaining} of {t.capacity} left</span>}>
               <div className="stack-sm">
                 <p className="body-sm">Includes everything in {t.plan === "premium" ? "Premium" : "Pro"} for five years.{t.tier === "founder_elite" ? " Personal API access is planned, not available yet." : ""}</p>
+                {(t.five_year?.monthly_cents ?? 0) > 0 && t.five_year && (
+                  <p className="five-year-line"><span className="cap">5 years paying monthly: <s>{dollars(t.five_year.five_years_monthly_cents)}</s></span>{" "}
+                    <span className="strong">{dollars(t.price_cents)} once.</span> <span className="cap gain">You keep {dollars(t.five_year.saved_cents)}.</span></p>
+                )}
                 <DisclosureList d={t.disclosure} />
                 <button type="button" className="btn btn-primary btn-block" disabled={!t.on_sale || !agreed || buy.busy}
                   onClick={() => start(t.tier)}>

@@ -290,6 +290,24 @@ def _ensure_schema(conn, sq: bool) -> None:
             poll_at TEXT,
             updated_at TEXT NOT NULL
         )""")
+    # Founders Wall names (opt-in; a row means the member chose to be listed) and the
+    # monthly Founder Briefing, one row per month an admin sent it.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS founding_wall (
+            user_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS founding_briefings (
+            month TEXT PRIMARY KEY,
+            subject TEXT NOT NULL,
+            sent_by TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            sent INTEGER NOT NULL DEFAULT 0,
+            failed INTEGER NOT NULL DEFAULT 0
+        )""")
     now = _iso(_utc())
     for tier, capacity in rules.CAPACITY.items():
         cur.execute(_sql("INSERT INTO founding_inventory (tier, capacity, held, sold, updated_at) "

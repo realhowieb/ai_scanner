@@ -3,11 +3,11 @@
 // Admin: Founding 100 refund requests, one decision at a time (no bulk actions). Approving
 // records the decision; the refund goes to Stripe only when FOUNDING_REFUNDS_ENABLED is on,
 // and access changes only when Stripe confirms it.
-import { useState } from "react";
+import { useId, useState } from "react";
 
-import { cents, founderBenefits, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
-import type { AdminRefundRequest, RefundBasis, RefundStatus } from "@/api/founding";
-import { Dialog } from "@/components/Dialog";
+import { cents, founderBenefits, founderBriefing, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
+import type { AdminRefundRequest, BriefingPreview, RefundBasis, RefundStatus } from "@/api/founding";
+import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -168,6 +168,60 @@ export function FounderPollCard() {
               ))}</ul>
             </div>
           )}
+    </Card>
+  );
+}
+
+/** The monthly Founder Briefing: write what shipped, preview it, then send it once. */
+export function FounderBriefingCard() {
+  const [note, setNote] = useState("");
+  const [preview, setPreview] = useState<BriefingPreview | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const look = useAction();
+  const send = useAction();
+  const id = useId();
+  const doPreview = () => void look.run(async () => { setPreview(await founderBriefing.preview(note)); return true; });
+  const doSend = () => void send.run(async () => {
+    const out = await founderBriefing.send(note);
+    setResult(`Sent to ${out.sent} founder${out.sent === 1 ? "" : "s"}${out.failed ? `, ${out.failed} failed` : ""}.`);
+    setConfirming(false);
+    setPreview(await founderBriefing.preview(note));
+    return true;
+  });
+  const ready = note.trim().length >= 20;
+  return (
+    <Card title="Founder Briefing" aside={preview ? `${preview.recipients} active founder${preview.recipients === 1 ? "" : "s"}` : undefined}>
+      <div className="stack-sm">
+        <p className="cap">Once a month. Each founder gets your note, the poll results, early access and their own founder value. Never sent automatically.</p>
+        <label className="field" htmlFor={id}>
+          <span className="cap">What shipped this month (blank line between paragraphs)</span>
+          <textarea id={id} className="input" rows={6} maxLength={4000} value={note} onChange={(e) => { setNote(e.target.value); setResult(null); }} />
+        </label>
+        <div className="row-actions">
+          <button type="button" className="btn btn-sm" onClick={doPreview} disabled={look.busy}>Preview</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirming(true)}
+            disabled={!ready || !preview || preview.already_sent || send.busy}>Send to founders</button>
+          {!ready && <span className="cap">Write at least a sentence, then preview.</span>}
+        </div>
+        {preview?.already_sent && <p className="cap" role="status">This month&apos;s briefing was sent{preview.sent_at ? ` ${etTime(preview.sent_at)}` : ""}.</p>}
+        {result && <p className="notice" role="status">{result}</p>}
+        <ErrorLine error={look.error ?? send.error} />
+        {preview && (
+          <div className="stack-xs">
+            <p className="cap">Subject: <span className="strong">{preview.subject}</span> (as the first founder would see it)</p>
+            <iframe title="Founder Briefing preview" className="briefing-frame" sandbox="" srcDoc={preview.html} />
+          </div>
+        )}
+        {preview && preview.history.length > 0 && (
+          <ul className="stack-xs" aria-label="Briefings sent">{preview.history.map((h) => (
+            <li key={h.month} className="cap">{h.month}: sent {h.sent ?? 0}{h.failed ? `, failed ${h.failed}` : ""} by {h.sent_by}</li>
+          ))}</ul>
+        )}
+      </div>
+      <ConfirmDialog open={confirming} title="Send the Founder Briefing?" confirmLabel="Send now" busy={send.busy}
+        error={<ErrorLine error={send.error} />} onConfirm={doSend} onClose={() => setConfirming(false)}
+        body={<p className="body-sm">This emails {preview?.recipients ?? 0} active founders now. It can only be sent once this month.</p>} />
     </Card>
   );
 }

@@ -15,7 +15,7 @@ import { InstallHint } from "@/components/InstallHint";
 import { MarketStatus } from "@/components/MarketStatus";
 import { NavIcon } from "@/components/NavIcon";
 import { WhatsNew } from "@/components/WhatsNew";
-import { FOUNDER_HREF, usePublicFounding } from "@/features/FoundingBanner";
+import { FOUNDER_HREF, FoundingNudge, usePublicFounding } from "@/features/FoundingBanner";
 import { useSession } from "@/session/SessionProvider";
 
 /** Desktop sidebar groups (every section, always visible). `tab`: in the phone tab bar
@@ -138,6 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="cap">{plan === "pro" ? "AI research tools, PreBreakout" : "Pro from $25/mo"}</span>
             </Link>
           )}
+          {plan && plan !== "premium" && plan !== "admin" && <FoundingNudge surface="sidebar" compact />}
           <Link href="/how-hsf-works" className="side-help cap">How HSF works</Link>
         </div>
       </aside>

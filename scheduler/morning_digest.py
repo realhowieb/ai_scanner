@@ -795,6 +795,34 @@ def _founder_badge(email: str) -> str:
         return ""
 
 
+def first_weekday_of_month(day) -> bool:
+    """True on the month's first Monday-to-Friday date (the founder value line goes out then)."""
+    import datetime as _dt
+
+    if day.weekday() >= 5:
+        return False
+    return all((day - _dt.timedelta(days=n)).weekday() >= 5 for n in range(1, day.day))
+
+
+def _founder_value_card(email: str, now=None) -> tuple:
+    """Once a month, the founder value meter as a card: (html, text), or ("", "")."""
+    try:
+        if not first_weekday_of_month(et_now(now).date()):
+            return "", ""
+        from services.founder_value import for_user
+        from services.founding_emails import value_lines
+        from ui import email_kit as k
+
+        lines = value_lines(for_user(email))
+        if not lines:
+            return "", ""
+        html = k.card("🏅 Your founder value", "".join(f"<p style='margin:0 0 6px'>{k.esc(x)}</p>" for x in lines),
+                      sub="Your monthly founder check-in")
+        return html, "\n".join(["Your founder value:", *lines, ""])
+    except Exception:
+        return "", ""
+
+
 def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[str, Any], get_user_tier) -> str:
     """Plan used for email delivery. Admin accounts (stored tier 'admin' or the DB
     is_admin flag) count as 'admin', whatever plan is stored, so they get the digest."""
@@ -952,6 +980,10 @@ def run_morning_digest(force: bool = False) -> None:
                 golden=golden, top_setups=top_setups, premarket=premarket,
                 preopen_gappers=preopen_gappers, earnings_section=section, ai_rundown=ai_rundown,
             )
+            fv_html, fv_text = _founder_value_card(email)
+            if fv_html:
+                html_inner += fv_html
+                text_inner += "\n" + fv_text
             # Count only sends the mail service accepted.
             glance = digest_glance(
                 watch_rows, gappers, preopen=preopen_gappers or _is_preopen(watch_rows),
