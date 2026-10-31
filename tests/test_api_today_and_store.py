@@ -89,6 +89,19 @@ class TodayBuilderTests(unittest.TestCase):
         # last night's after-hours card still shows before the open
         self.assertEqual(out["after_close"]["scan_at"], "2026-09-28T21:35:00+00:00")
 
+    def test_setup_mix_counts_scanner_signals(self):
+        out = self.build(SAT, FREE)
+        mix = out["setup_mix"]
+        self.assertEqual(mix["scan_at"], "2026-09-28T19:35:00+00:00")
+        rows = {r["signal"]: r for r in mix["rows"]}
+        self.assertEqual(list(rows), ["breakout", "gapper", "golden_cross", "gainer"])
+        self.assertEqual(rows["gapper"]["count"], mix["total"])  # every fixture name gapped
+        self.assertEqual((rows["gapper"]["top_ticker"], rows["gapper"]["top_score"]), ("TER", 76))
+        self.assertEqual(rows["golden_cross"], {"signal": "golden_cross", "label": "Golden cross", "count": 0,
+                                                "top_ticker": None, "top_score": None})
+        for r in mix["rows"]:
+            self.assertLessEqual(r["count"], mix["total"])
+
     def test_free_sees_locked_cards_without_movers(self):
         out = self.build(TUE_840_ET, FREE)
         self.assertEqual(out["before_open"], {"scan_at": "2026-09-29T12:35:00+00:00", "locked": True, "movers": []})

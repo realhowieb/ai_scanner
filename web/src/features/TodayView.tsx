@@ -11,6 +11,7 @@ import { etTime, greeting, localDate, pct, price, setupLabel } from "@/lib/forma
 import { GettingStarted } from "./GettingStarted";
 import { SnapshotTiles, StatusStrip } from "./MarketSnapshot";
 import { ScoreMoversCard } from "./ScoreMovers";
+import { SetupMixCard } from "./SetupMix";
 import { StarterWatchlistButton } from "./Starters";
 
 type Today = Schemas["Today"];
@@ -306,6 +307,8 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
           </Card>
 
           <ScoreMoversCard />
+
+          {failed.has("setup_mix") ? <SectionFailed name="Setup mix" /> : <SetupMixCard mix={data.setup_mix} stale={data.market.stale} />}
 
           {showFirstRun && <FirstRunGuide top={top} />}
 
