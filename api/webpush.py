@@ -94,10 +94,14 @@ def plan_allows(account: Optional[Dict[str, Any]]) -> bool:
 
 
 def config(allowed: bool = True) -> Dict[str, Any]:
-    """`enabled`: the server can push. `allowed`: this account's plan includes it. The key
-    is only handed out when both hold."""
+    """`enabled`: the server can push to browsers. `allowed`: this account's plan includes it.
+    The key is only handed out when both hold. `apns_enabled`: the server can push to the
+    iPhone app (api.apns)."""
     on = enabled()
-    return {"enabled": on, "allowed": allowed, "public_key": public_key() if on and allowed else None}
+    from api import apns
+
+    return {"enabled": on, "allowed": allowed, "public_key": public_key() if on and allowed else None,
+            "apns_enabled": apns.enabled()}
 
 
 # ---- subscriptions ----------------------------------------------------------------------------------
@@ -262,9 +266,15 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
 
 
 def alert_fired(user_id: str, message: str) -> None:
-    """Hook for both alert kinds (price alerts and alert rules): browser push, then any
-    linked Telegram / Discord chat (api.chat_delivery)."""
+    """Hook for both alert kinds (price alerts and alert rules): browser push, the iPhone
+    app (api.apns), then any linked Telegram / Discord chat (api.chat_delivery)."""
     notify_user(user_id, "HSF alert", message, "/alerts")
+    try:
+        from api import apns
+
+        apns.notify_user(user_id, "HSF alert", message, "/alerts")
+    except Exception as e:
+        log.warning(json.dumps({"event": "apns_notify_failed", "error": type(e).__name__}))
     try:
         from api import chat_delivery
 

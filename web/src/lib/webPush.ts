@@ -1,10 +1,12 @@
 // Browser notifications for fired alerts: registers /sw.js, subscribes with the API's
 // VAPID key and hands the subscription to the API (POST /v1/me/web-push).
 import { api, ApiError, unwrap } from "@/api/client";
+import { currentNativePushState, disableNativePush, enableNativePush, nativePushAvailable } from "@/lib/nativePush";
 
 export type PushState = "unsupported" | "denied" | "off" | "on";
 
 export function pushSupported(): boolean {
+  if (nativePushAvailable()) return true;
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
@@ -21,6 +23,7 @@ async function registration(): Promise<ServiceWorkerRegistration> {
 }
 
 export async function currentPushState(): Promise<PushState> {
+  if (nativePushAvailable()) return currentNativePushState();
   if (!pushSupported()) return "unsupported";
   if (Notification.permission === "denied") return "denied";
   const reg = await navigator.serviceWorker.getRegistration("/");
@@ -37,6 +40,7 @@ function browserName(): string {
 
 /** Asks permission, subscribes and registers with the API. Returns the resulting state. */
 export async function enablePush(publicKey: string): Promise<PushState> {
+  if (nativePushAvailable()) return enableNativePush();
   if (!pushSupported()) return "unsupported";
   const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (permission !== "granted") return permission === "denied" ? "denied" : "off";
@@ -61,6 +65,7 @@ export async function enablePush(publicKey: string): Promise<PushState> {
 
 /** Unsubscribes this browser and tells the API. Best effort on the API side. */
 export async function disablePush(): Promise<void> {
+  if (nativePushAvailable()) return disableNativePush();
   if (!pushSupported()) return;
   const reg = await navigator.serviceWorker.getRegistration("/");
   const sub = reg ? await reg.pushManager.getSubscription() : null;

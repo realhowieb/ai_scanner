@@ -775,6 +775,8 @@ class WebPushConfig(BaseModel):
                                                      "browser notifications (they're part of Pro)")
     public_key: Optional[str] = Field(default=None, description="VAPID application server key (base64url); "
                                                                  "only when enabled and allowed")
+    apns_enabled: bool = Field(default=False, description="The server can push to the iPhone app (APNs key set); "
+                                                          "the app registers with POST /v1/me/devices")
 
 
 # ---- custom scans (POST /v1/scans) --------------------------------------------------------------
