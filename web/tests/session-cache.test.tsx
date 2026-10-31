@@ -36,7 +36,7 @@ describe("cached session", () => {
     expect(fetchMock.mock.calls.some((c) => String(c[0]?.url ?? c[0]).includes("/v1/me"))).toBe(true);
     answer(jsonResponse(me("pro")));
     expect(await screen.findByText("plan pro")).toBeInTheDocument();
-    expect(readCachedMe()?.plan).toBe("pro");
+    await waitFor(() => expect(readCachedMe()?.plan).toBe("pro")); // written in an effect after the render
   });
 
   it("waits for /v1/me when nothing is cached, and drops the cache when the session has expired", async () => {

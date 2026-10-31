@@ -184,6 +184,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/feedback/founders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Founder feedback still waiting for an answer */
+        get: operations["founder_feedback_v1_admin_feedback_founders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/feedback/{feedback_id}/answered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a feedback message answered or not */
+        post: operations["answer_feedback_v1_admin_feedback__feedback_id__answered_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/briefing/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview this month's Founder Briefing (admin)
+         * @description The email as a founder would get it, how many it goes to and what was sent before.
+         *     Sends nothing.
+         */
+        post: operations["briefing_preview_v1_admin_founding_briefing_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/briefing/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send this month's Founder Briefing to every active founder (admin)
+         * @description Once per calendar month. Never sent automatically.
+         */
+        post: operations["briefing_send_v1_admin_founding_briefing_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/founding/policies/{policy_type}": {
         parameters: {
             query?: never;
@@ -1503,6 +1578,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/founding/wall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join or leave the Founders Wall
+         * @description Off by default. show=true lists you under `name` (2-30 characters, no emails or links)
+         *     on the public Founders Wall; show=false takes your name off (your seat shows as taken).
+         */
+        post: operations["set_wall_v1_founding_wall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/journal": {
         parameters: {
             query?: never;
@@ -2388,6 +2484,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/founder-card/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A shared founder card: number, tier and dates, never a name or email (public) */
+        get: operations["founder_card_v1_public_founder_card__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/founding": {
         parameters: {
             query?: never;
@@ -2397,6 +2510,23 @@ export interface paths {
         };
         /** Whether the Founding 100 is open, and seats left (public) */
         get: operations["public_founding_v1_public_founding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/founding/wall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Founders Wall: every founder seat, with names members chose to show (public) */
+        get: operations["founders_wall_v1_public_founding_wall_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4758,6 +4888,72 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** BriefingBody */
+        BriefingBody: {
+            /**
+             * Note
+             * @description What shipped this month, in your words
+             * @default
+             */
+            note: string;
+        };
+        /** BriefingHistory */
+        BriefingHistory: {
+            /** Failed */
+            failed?: number | null;
+            /** Month */
+            month: string;
+            /** Sent */
+            sent?: number | null;
+            /** Sent By */
+            sent_by?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Subject */
+            subject: string;
+        };
+        /** BriefingPreview */
+        BriefingPreview: {
+            /** Already Sent */
+            already_sent: boolean;
+            /** History */
+            history: components["schemas"]["BriefingHistory"][];
+            /** Html */
+            html: string;
+            /** Month */
+            month: string;
+            /** Recipients */
+            recipients: number;
+            /** Sent At */
+            sent_at?: string | null;
+            /** Subject */
+            subject: string;
+            /** Text */
+            text: string;
+        };
+        /** BriefingSendBody */
+        BriefingSendBody: {
+            /**
+             * Confirm
+             * @description Must be true: sends to every active founder
+             */
+            confirm: boolean;
+            /**
+             * Note
+             * @description What shipped this month, in your words
+             * @default
+             */
+            note: string;
+        };
+        /** BriefingSent */
+        BriefingSent: {
+            /** Failed */
+            failed: number;
+            /** Month */
+            month: string;
+            /** Sent */
+            sent: number;
+        };
         /** Capabilities */
         Capabilities: {
             /** Alert Rule Types */
@@ -5430,6 +5626,14 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** FeedbackAnswered */
+        FeedbackAnswered: {
+            /**
+             * Answered
+             * @default true
+             */
+            answered: boolean;
+        };
         /** FeedbackBody */
         FeedbackBody: {
             /**
@@ -5453,10 +5657,20 @@ export interface components {
         };
         /** FeedbackItem */
         FeedbackItem: {
+            /** Answered At */
+            answered_at?: string | null;
+            /** Answered By */
+            answered_by?: string | null;
             /** Build */
             build?: string | null;
             /** Created At */
             created_at: string;
+            /**
+             * Founder
+             * @description Sent by a founding member (listed first until answered)
+             * @default false
+             */
+            founder: boolean;
             /** Id */
             id: number;
             /** Kind */
@@ -5494,6 +5708,26 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** FiveYear */
+        FiveYear: {
+            /**
+             * Five Years Monthly Cents
+             * @description 60 months of that plan
+             */
+            five_years_monthly_cents: number;
+            /**
+             * Monthly Cents
+             * @description The tier's plan, paying monthly
+             */
+            monthly_cents: number;
+            /**
+             * Price Cents
+             * @description The one-time founder price
+             */
+            price_cents: number;
+            /** Saved Cents */
+            saved_cents: number;
+        };
         /** FounderBenefits */
         FounderBenefits: {
             /**
@@ -5505,11 +5739,21 @@ export interface components {
             alumni_rate_ready: boolean;
             /** Badge */
             badge?: string | null;
+            /**
+             * Card Path
+             * @description The shareable founder card page
+             */
+            card_path?: string | null;
             /** Early Access */
             early_access: components["schemas"]["FeatureRef"][];
             elite_limits?: components["schemas"]["EliteLimits"] | null;
             invites?: components["schemas"]["FounderInvites"] | null;
             poll: components["schemas"]["FounderPoll"];
+            /**
+             * Reply Target
+             * @description How soon founder feedback is answered, if set
+             */
+            reply_target?: string | null;
             /**
              * Show Badge
              * @description Shared stock links show the founder badge
@@ -5522,6 +5766,28 @@ export interface components {
              * @enum {string}
              */
             tier: "founder_pro" | "founder_elite";
+            /** @description Active members: the value meter */
+            value?: components["schemas"]["FounderValue"] | null;
+            /**
+             * Wall Name
+             * @description Name on the Founders Wall; null = not listed
+             */
+            wall_name?: string | null;
+        };
+        /** FounderFeedbackStatus */
+        FounderFeedbackStatus: {
+            /**
+             * Count
+             * @description Founder messages not yet marked answered
+             */
+            count: number;
+            /** Oldest */
+            oldest?: string | null;
+            /**
+             * Reply Target
+             * @description HSF_FOUNDER_REPLY_TARGET, shown to founders when set
+             */
+            reply_target?: string | null;
         };
         /** FounderInvites */
         FounderInvites: {
@@ -5595,6 +5861,42 @@ export interface components {
             open: boolean;
             /** Options */
             options: components["schemas"]["PollOption"][];
+        };
+        /** FounderValue */
+        FounderValue: {
+            /** Ahead Cents */
+            ahead_cents: number;
+            /**
+             * Alerts Used
+             * @description Founder Elite: active alerts
+             */
+            alerts_used?: number | null;
+            /** Break Even Month */
+            break_even_month: number;
+            /** Monthly Cents */
+            monthly_cents: number;
+            /**
+             * Monthly Cost So Far Cents
+             * @description What the months used would have cost monthly
+             */
+            monthly_cost_so_far_cents: number;
+            /** Months Left */
+            months_left: number;
+            /** Months Used */
+            months_used: number;
+            /** Paid Cents */
+            paid_cents: number;
+            /** Term Months */
+            term_months: number;
+        };
+        /** FoundersWall */
+        FoundersWall: {
+            /** Open */
+            open: boolean;
+            /** Seats */
+            seats: components["schemas"]["WallSeat"][];
+            /** Taken */
+            taken: number;
         };
         /** FoundingCancel */
         FoundingCancel: {
@@ -6185,6 +6487,11 @@ export interface components {
             entitlements: {
                 [key: string]: boolean;
             };
+            /**
+             * Founder Tier
+             * @description Set while a Founding 100 membership is active
+             */
+            founder_tier?: ("founder_pro" | "founder_elite") | null;
             /** Is Admin */
             is_admin: boolean;
             /** Name */
@@ -6371,6 +6678,7 @@ export interface components {
             /** Capacity */
             capacity: number;
             disclosure: components["schemas"]["Disclosure"];
+            five_year: components["schemas"]["FiveYear"];
             /** Label */
             label: string;
             /** On Sale */
@@ -7709,6 +8017,25 @@ export interface components {
             /** Badge */
             badge: string;
         };
+        /** PublicFounderCard */
+        PublicFounderCard: {
+            /** Badge */
+            badge?: string | null;
+            /** Code */
+            code: string;
+            /** Label */
+            label: string;
+            /** Number */
+            number?: string | null;
+            /** Since */
+            since?: string | null;
+            /** Status */
+            status: string;
+            /** Tier */
+            tier: string;
+            /** Until */
+            until?: string | null;
+        };
         /** PublicFounding */
         PublicFounding: {
             /** Checkout Open */
@@ -7724,6 +8051,7 @@ export interface components {
         PublicFoundingTier: {
             /** Capacity */
             capacity: number;
+            five_year?: components["schemas"]["FiveYear"] | null;
             /** Label */
             label: string;
             /** On Sale */
@@ -9259,6 +9587,34 @@ export interface components {
             /** Request Id */
             request_id?: string | null;
         };
+        /** WallBody */
+        WallBody: {
+            /** Name */
+            name?: string | null;
+            /** Show */
+            show: boolean;
+        };
+        /** WallSeat */
+        WallSeat: {
+            /** Label */
+            label?: string | null;
+            /**
+             * Name
+             * @description Only when the member opted in
+             */
+            name?: string | null;
+            /** Number */
+            number: string;
+            /**
+             * Since
+             * @description YYYY-MM the membership started
+             */
+            since?: string | null;
+            /** Taken */
+            taken: boolean;
+            /** Tier */
+            tier?: string | null;
+        };
         /** Watchlist */
         Watchlist: {
             /** Id */
@@ -10250,6 +10606,213 @@ export interface operations {
             };
             /** @description Admins only */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    founder_feedback_v1_admin_feedback_founders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderFeedbackStatus"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    answer_feedback_v1_admin_feedback__feedback_id__answered_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackAnswered"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such message */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    briefing_preview_v1_admin_founding_briefing_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefingBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingPreview"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    briefing_send_v1_admin_founding_briefing_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefingSendBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingSent"];
+                };
+            };
+            /** @description Note too short or not confirmed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already sent this month */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13817,6 +14380,60 @@ export interface operations {
             };
         };
     };
+    set_wall_v1_founding_wall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WallBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderBenefits"];
+                };
+            };
+            /** @description Name not allowed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a founding member */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     journal_v1_journal_get: {
         parameters: {
             query?: {
@@ -16337,6 +16954,44 @@ export interface operations {
             };
         };
     };
+    founder_card_v1_public_founder_card__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicFounderCard"];
+                };
+            };
+            /** @description No founder card for this invite code */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     public_founding_v1_public_founding_get: {
         parameters: {
             query?: never;
@@ -16353,6 +17008,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicFounding"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    founders_wall_v1_public_founding_wall_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundersWall"];
                 };
             };
             /** @description Invalid request fields */

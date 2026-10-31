@@ -11,6 +11,8 @@ import { Card, ErrorLine } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 
+import { ShareCard, ValueMeter, WallSetting } from "./FounderExtras";
+
 function Poll({ data, onChange }: { data: Benefits; onChange: (b: Benefits) => void }) {
   const act = useAction();
   const name = useId();
@@ -63,12 +65,19 @@ export function BenefitsBody({ data, onChange }: { data: Benefits; onChange: (b:
         {data.status === "active" && data.early_access.length === 0 && (
           <li><strong>Early access.</strong> New features open to founders first. We&apos;ll email you when one is ready.</li>
         )}
+        {data.status === "active" && (
+          <li><strong>Priority support.</strong> Your feedback goes to the top of our list{data.reply_target ? `, and we aim to reply within ${data.reply_target}` : ""}. Use Send feedback in the account menu.</li>
+        )}
+        {data.status === "active" && (
+          <li><strong>Monthly Founder Briefing.</strong> An email each month with what shipped, the poll results and your founder value.</li>
+        )}
       </ul>
       <label className="check">
         <input type="checkbox" checked={data.show_badge} disabled={act.busy} onChange={(e) => toggle(e.target.checked)} />
         <span>Show my founder badge on stock pages I share (never your name or email)</span>
       </label>
       <ErrorLine error={act.error} />
+      <WallSetting key={data.wall_name ?? ""} data={data} onChange={onChange} />
       <Poll data={data} onChange={onChange} />
     </div>
   );
@@ -79,5 +88,11 @@ export function FounderBenefits() {
   const [fresh, setFresh] = useState<Benefits | null>(null);
   const data = fresh ?? state.data;
   if (!data) return null;
-  return <Card title="Founder benefits"><BenefitsBody data={data} onChange={setFresh} /></Card>;
+  return (
+    <>
+      <ValueMeter data={data} />
+      <Card title="Founder benefits"><BenefitsBody data={data} onChange={setFresh} /></Card>
+      <ShareCard data={data} />
+    </>
+  );
 }

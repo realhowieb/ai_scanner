@@ -171,3 +171,105 @@ def discontinuation_notice(user: str, *, stops_on: dt.date, refund_cents: Option
         lines.append(f"Based on that date, your refund would be {_money(refund_cents)}. An administrator confirms "
                      "the final amount before it is sent.")
     return _send(user, "Important: HSF AI founding membership service is ending", "Service ending", lines)
+
+
+# ---- 10: the monthly Founder Briefing (an admin previews it, then sends it) ---------------------
+
+BRIEFING_NOTE_MAX = 4000
+
+
+def briefing_month(now: Optional[dt.datetime] = None) -> str:
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return f"{now:%Y-%m}"
+
+
+def briefing_subject(month: str) -> str:
+    t = dt.datetime.strptime(month + "-01", "%Y-%m-%d")
+    return f"Your Founder Briefing: {t:%B %Y}"
+
+
+def value_lines(v: Optional[Dict[str, Any]]) -> List[str]:
+    """The value meter in words (the founder page, the briefing and the morning digest)."""
+    if not v:
+        return []
+    out = [f"Month {v['months_used']} of {v['term_months']}: {v['months_left']} months of access left."]
+    if v["months_used"] > 0:
+        out.append(f"Paying monthly would have cost {_money(v['monthly_cost_so_far_cents'])} so far, "
+                   f"against your one-time {_money(v['paid_cents'])}.")
+    out.append(f"You're {_money(v['ahead_cents'])} ahead of paying monthly." if v["ahead_cents"] > 0 else
+               f"Your seat pays for itself in month {v['break_even_month']}.")
+    if v.get("alerts_used") is not None:
+        out.append(f"Alerts in use: {v['alerts_used']} of {rules.ELITE_ALERT_LIMIT}.")
+    return out
+
+
+def briefing_parts(note: str) -> Dict[str, Any]:
+    """What every founder's briefing shares: the admin's "what shipped" note, the poll
+    results and the features open early to founders."""
+    from db import founding_benefits as extras
+
+    options = rules.poll_options()
+    counts = extras.tally() if options else {}
+    total = sum(counts.values())
+    poll = [(options[k], counts.get(k, 0)) for k in sorted(options, key=lambda k: -counts.get(k, 0))]
+    early = [k.removeprefix("can_").replace("_", " ").capitalize() for k in rules.early_access_features()]
+    return {"note": note.strip()[:BRIEFING_NOTE_MAX], "poll": poll, "poll_total": total, "early": early,
+            "options": options}
+
+
+def briefing_message(member: Dict[str, Any], parts: Dict[str, Any], month: str,
+                     value: Optional[Dict[str, Any]] = None, choice: Optional[str] = None) -> Dict[str, str]:
+    """(subject, text, html) for one founder."""
+    from ui import email_kit as k
+
+    badge = rules.badge_title(member["tier"], member.get("membership_number")) or "Founder"
+    subject = briefing_subject(month)
+    paras = [p.strip() for p in parts["note"].split("\n\n") if p.strip()]
+    shipped_html = "".join(f"<p style='margin:0 0 8px;line-height:1.5'>{k.esc(p).replace(chr(10), '<br>')}</p>"
+                           for p in paras)
+    cards = [k.card("What shipped", shipped_html)]
+    text = [f"{subject}", f"Hi {badge},", "What shipped:", *paras]
+    if parts["poll"]:
+        rows = "".join(f"<li>{k.esc(label)}: {n} vote{'s' if n != 1 else ''}</li>" for label, n in parts["poll"])
+        mine = (f"Your vote: {parts['options'][choice]}." if choice in parts["options"]
+                else "You haven't voted yet. Vote on your founder page.")
+        cards.append(k.card("Founder poll", f"<ul style='margin:0 0 8px;padding-left:18px'>{rows}</ul>"
+                            + k.note(k.esc(mine)), sub=f"{parts['poll_total']} founder votes so far"))
+        text += ["", "Founder poll:", *[f"- {label}: {n}" for label, n in parts["poll"]], mine]
+    early = (", ".join(parts["early"]) + ".") if parts["early"] else "Nothing new in early access this month."
+    cards.append(k.card("Early access", f"<p style='margin:0'>{k.esc(early)}</p>"))
+    text += ["", "Early access:", early]
+    vl = value_lines(value)
+    if vl:
+        cards.append(k.card("Your founder value", "".join(f"<p style='margin:0 0 6px'>{k.esc(x)}</p>" for x in vl)))
+        text += ["", "Your founder value:", *vl]
+    url = f"{_base()}/account/founder"
+    cards.append(k.button(url, "Open your founder page"))
+    fine = f"You get this monthly briefing as a founding member. Questions or ideas? Reply in the app or email {_support()}."
+    html = k.shell("".join(cards) + k.note(k.esc(fine)), title_line=f"Founder Briefing · {badge}",
+                   footer_html="HSFinest.AI. Educational research, not financial advice.")
+    text += ["", f"Open your founder page: {url}", fine]
+    return {"subject": subject, "text": "\n".join(text), "html": html}
+
+
+def send_briefing(note: str, *, month: str, now: Optional[dt.datetime] = None) -> Dict[str, int]:
+    """Mail the briefing to every active founding member. Best effort per member."""
+    from db import founding_benefits as extras
+    from services import founder_value
+    from ui.email_utils import _send_smtp
+
+    parts = briefing_parts(note)
+    sent = failed = 0
+    for m in extras.active_members():
+        user = str(m["user_id"])
+        try:
+            msg = briefing_message(m, parts, month, founder_value.for_membership(m, user, now),
+                                   extras.prefs(user)["poll_choice"])
+            if _send_smtp(user, msg["subject"], msg["text"], msg["html"]):
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            failed += 1
+            log.warning("founder briefing not sent: %s", type(e).__name__)
+    return {"sent": sent, "failed": failed}
