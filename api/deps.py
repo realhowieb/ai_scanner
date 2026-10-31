@@ -179,7 +179,8 @@ def _me_out(account: Dict[str, Any]) -> Dict[str, Any]:
             "entitlements": ent["entitlements"],
             "pro_trial_until": account.get("pro_trial_until"),
             "billing_attention": acct.billing_attention(str(account["username"]), ent["tier"]),
-            "terms_published": _terms_published()}
+            "terms_published": _terms_published(),
+            "founder_tier": account.get("founder_tier") or None}
 
 
 def _terms_published() -> bool:

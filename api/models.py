@@ -116,6 +116,8 @@ class Me(BaseModel):
     billing_attention: Optional[BillingAttention] = Field(default=None, description=(
         "Set while the last charge for a paid plan failed (the app shows an 'update your card' banner)"))
     terms_published: bool = Field(default=False, description="The Terms of Service are live (upgrade buttons link them)")
+    founder_tier: Optional[Literal["founder_pro", "founder_elite"]] = Field(
+        default=None, description="Set while a Founding 100 membership is active")
 
 
 class Referrals(BaseModel):
@@ -1929,6 +1931,19 @@ class FeedbackItem(BaseModel):
     plan: Optional[str] = None
     build: Optional[str] = None
     created_at: str
+    founder: bool = Field(default=False, description="Sent by a founding member (listed first until answered)")
+    answered_at: Optional[str] = None
+    answered_by: Optional[str] = None
+
+
+class FeedbackAnswered(BaseModel):
+    answered: bool = True
+
+
+class FounderFeedbackStatus(BaseModel):
+    count: int = Field(description="Founder messages not yet marked answered")
+    oldest: Optional[str] = None
+    reply_target: Optional[str] = Field(default=None, description="HSF_FOUNDER_REPLY_TARGET, shown to founders when set")
 
 
 class PublicTopSetup(BaseModel):

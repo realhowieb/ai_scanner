@@ -1,10 +1,11 @@
 """Founding 100 extras kept per member: whether shared stock links show the founder
-badge, and the member's choice in the founder feature poll. Uses db/founding.py's
+badge, the member's choice in the founder feature poll, the opt-in Founders Wall name and the
+monthly Founder Briefing send log. Uses db/founding.py's
 connection and tables (founding_member_prefs)."""
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from db import founding as db
 from domain import founding as rules
@@ -70,3 +71,75 @@ def public_badge(user_id: str) -> Optional[str]:
     if not prefs(user_id)["show_badge"]:
         return None
     return rules.badge_title(m["tier"], m.get("membership_number") or m.get("former_number"))
+
+
+# ---- Founders Wall (founding_wall; opt-in, off by default) --------------------------------------
+
+def wall_name(user_id: str) -> Optional[str]:
+    with db._transaction(write=False) as tx:
+        r = tx.one("SELECT display_name FROM founding_wall WHERE user_id = %s", (user_id.strip().lower(),))
+    return str(r["display_name"]) if r else None
+
+
+def set_wall_name(user_id: str, name: Optional[str], *, now: Optional[dt.datetime] = None) -> Optional[str]:
+    """List the member on the wall under `name` (already cleaned), or take them off (None)."""
+    user = user_id.strip().lower()
+    with db._transaction() as tx:
+        tx.run("DELETE FROM founding_wall WHERE user_id = %s", (user,))
+        if name:
+            tx.run("INSERT INTO founding_wall (user_id, display_name, updated_at) VALUES (%s, %s, %s)",
+                   (user, name, db._iso(db._utc(now))))
+    return wall_name(user)
+
+
+def wall() -> List[Dict[str, Any]]:
+    """Every founder seat, #001 to #100: taken seats with their tier and, only when the member
+    opted in, their display name; the rest open. Never an email or account id."""
+    with db._transaction(write=False) as tx:
+        rows = tx.rows("SELECT m.membership_number, m.tier, m.status, m.activated_at, w.display_name "
+                       "FROM founding_memberships m LEFT JOIN founding_wall w ON w.user_id = m.user_id "
+                       "WHERE m.membership_number IS NOT NULL AND m.status IN ('active', 'expired')")
+    taken = {int(r["membership_number"]): r for r in rows}
+    out: List[Dict[str, Any]] = []
+    for n in range(1, rules.TOTAL_CAPACITY + 1):
+        r = taken.get(n)
+        out.append({"number": rules.format_number(n), "taken": bool(r),
+                    "tier": r["tier"] if r else None,
+                    "label": rules.TIER_LABEL.get(r["tier"]) if r else None,
+                    "name": (r.get("display_name") or None) if r else None,
+                    "since": str(r["activated_at"])[:7] if r and r.get("activated_at") else None})
+    return out
+
+
+# ---- members for the monthly Founder Briefing, and its send log (founding_briefings) -----------
+
+def active_members() -> List[Dict[str, Any]]:
+    with db._transaction(write=False) as tx:
+        return tx.rows("SELECT user_id, tier, membership_number, activated_at, expires_at FROM founding_memberships "
+                       "WHERE status = 'active' ORDER BY membership_number")
+
+
+def briefing(month: str) -> Optional[Dict[str, Any]]:
+    with db._transaction(write=False) as tx:
+        return tx.one("SELECT * FROM founding_briefings WHERE month = %s", (month,))
+
+
+def claim_briefing(month: str, subject: str, admin: str, *, now: Optional[dt.datetime] = None) -> bool:
+    """True for the first send of `month` only, so a double click never mails founders twice."""
+    with db._transaction() as tx:
+        if tx.one("SELECT 1 AS x FROM founding_briefings WHERE month = %s", (month,)):
+            return False
+        tx.run("INSERT INTO founding_briefings (month, subject, sent_by, started_at) VALUES (%s, %s, %s, %s)",
+               (month, subject, admin, db._iso(db._utc(now))))
+    return True
+
+
+def finish_briefing(month: str, sent: int, failed: int, *, now: Optional[dt.datetime] = None) -> None:
+    with db._transaction() as tx:
+        tx.run("UPDATE founding_briefings SET sent = %s, failed = %s, finished_at = %s WHERE month = %s",
+               (int(sent), int(failed), db._iso(db._utc(now)), month))
+
+
+def briefings(limit: int = 12) -> List[Dict[str, Any]]:
+    with db._transaction(write=False) as tx:
+        return tx.rows("SELECT * FROM founding_briefings ORDER BY month DESC LIMIT %s", (int(limit),))

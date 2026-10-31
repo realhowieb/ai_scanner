@@ -14,7 +14,7 @@ import type { Schemas } from "@/api/client";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { AnalyticsTab, ResearchTab } from "@/features/AdminAnalytics";
-import { FounderPollCard, FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
+import { FounderBriefingCard, FounderPollCard, FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
@@ -201,19 +201,38 @@ function UsersTab({ self }: { self: string }) {
   );
 }
 
-/** "Send feedback" messages from the app, newest first. */
+/** "Send feedback" messages from the app, newest first; founders' unanswered ones on top. */
 function FeedbackCard() {
   const fb = useApi("admin-feedback", (signal) => unwrap(api.GET("/v1/admin/feedback", { signal })));
+  const founders = useApi("admin-feedback-founders", (signal) => unwrap(api.GET("/v1/admin/feedback/founders", { signal })));
+  const act = useAction();
+  const mark = (id: number, answered: boolean) => void act.run(async () => {
+    await unwrap(api.POST("/v1/admin/feedback/{feedback_id}/answered", { params: { path: { feedback_id: id } }, body: { answered } }));
+    fb.reload();
+    founders.reload();
+    return true;
+  });
+  const waiting = founders.data?.count ?? 0;
   return (
-    <Card title="Feedback from users" id="feedback" aside={fb.data ? `${fb.data.length} recent` : undefined}>
+    <Card title="Feedback from users" id="feedback"
+      aside={fb.data ? <span className="cap">{waiting > 0 && <Pill tone="gold">{waiting} founder waiting</Pill>} {fb.data.length} recent</span> : undefined}>
+      {founders.data && (
+        <p className="cap">{founders.data.reply_target ? `Founders are told: reply within ${founders.data.reply_target}.` : "No founder reply target set (HSF_FOUNDER_REPLY_TARGET)."}
+          {waiting > 0 && founders.data.oldest ? ` Oldest waiting: ${etTime(founders.data.oldest)}.` : ""}</p>
+      )}
+      <ErrorLine error={act.error} />
       {fb.error && !fb.data ? <ErrorState error={fb.error} onRetry={fb.reload} what="feedback" />
         : !fb.data ? <Skeleton rows={2} label="Loading feedback" />
         : fb.data.length === 0 ? <Empty title="No feedback yet." />
         : (
           <ul className="feedback-list">{fb.data.map((f) => (
-            <li key={f.id}>
-              <p className="cap">{etTime(f.created_at)} · {f.user_id} ({f.plan ?? "?"}) · {f.kind}{f.path ? ` · ${f.path}` : ""}</p>
+            <li key={f.id} className={f.founder ? "feedback-founder" : undefined}>
+              <p className="cap">{f.founder && <><Pill tone="gold">Founder</Pill> </>}{etTime(f.created_at)} · {f.user_id} ({f.plan ?? "?"}) · {f.kind}{f.path ? ` · ${f.path}` : ""}</p>
               <p className="body-sm">{f.message}</p>
+              <p className="cap">
+                {f.answered_at ? <>Answered {etTime(f.answered_at)}{f.answered_by ? ` by ${f.answered_by}` : ""} · <button type="button" className="link-btn" disabled={act.busy} onClick={() => mark(f.id, false)}>Undo</button></>
+                  : <button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => mark(f.id, true)}>Mark answered</button>}
+              </p>
             </li>
           ))}</ul>
         )}
@@ -453,7 +472,7 @@ export function AdminView() {
         ))}
       </div>
       <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
-        : tab === "health" ? <HealthTab /> : tab === "founding" ? <div className="stack"><FoundingRefundsTab /><FounderPollCard /></div> : <ToolsTab />}</div>
+        : tab === "health" ? <HealthTab /> : tab === "founding" ? <div className="stack"><FoundingRefundsTab /><FounderBriefingCard /><FounderPollCard /></div> : <ToolsTab />}</div>
     </div>
   );
 }

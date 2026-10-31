@@ -63,6 +63,13 @@ class Disclosure(BaseModel):
     refund: str
 
 
+class FiveYear(BaseModel):
+    monthly_cents: int = Field(description="The tier's plan, paying monthly")
+    five_years_monthly_cents: int = Field(description="60 months of that plan")
+    price_cents: int = Field(description="The one-time founder price")
+    saved_cents: int
+
+
 class OfferTier(BaseModel):
     tier: FounderTier
     label: str
@@ -72,6 +79,7 @@ class OfferTier(BaseModel):
     remaining: int
     on_sale: bool
     disclosure: Disclosure
+    five_year: FiveYear
 
 
 class OfferUpgrade(BaseModel):
@@ -271,6 +279,18 @@ class EliteLimits(BaseModel):
     ai_multiplier: int
 
 
+class FounderValue(BaseModel):
+    months_used: int
+    months_left: int
+    term_months: int
+    monthly_cents: int
+    paid_cents: int
+    monthly_cost_so_far_cents: int = Field(description="What the months used would have cost monthly")
+    ahead_cents: int
+    break_even_month: int
+    alerts_used: Optional[int] = Field(default=None, description="Founder Elite: active alerts")
+
+
 class FounderBenefits(BaseModel):
     status: str
     tier: FounderTier
@@ -282,6 +302,75 @@ class FounderBenefits(BaseModel):
     invites: Optional[FounderInvites] = None
     elite_limits: Optional[EliteLimits] = None
     poll: FounderPoll
+    value: Optional[FounderValue] = Field(default=None, description="Active members: the value meter")
+    wall_name: Optional[str] = Field(default=None, description="Name on the Founders Wall; null = not listed")
+    card_path: Optional[str] = Field(default=None, description="The shareable founder card page")
+    reply_target: Optional[str] = Field(default=None, description="How soon founder feedback is answered, if set")
+
+
+class WallBody(BaseModel):
+    show: bool
+    name: Optional[str] = Field(default=None, max_length=60)
+
+
+class WallSeat(BaseModel):
+    number: str
+    taken: bool
+    tier: Optional[str] = None
+    label: Optional[str] = None
+    name: Optional[str] = Field(default=None, description="Only when the member opted in")
+    since: Optional[str] = Field(default=None, description="YYYY-MM the membership started")
+
+
+class FoundersWall(BaseModel):
+    open: bool
+    seats: List[WallSeat]
+    taken: int
+
+
+class PublicFounderCard(BaseModel):
+    badge: Optional[str] = None
+    number: Optional[str] = None
+    tier: str
+    label: str
+    status: str
+    since: Optional[str] = None
+    until: Optional[str] = None
+    code: str
+
+
+class BriefingBody(BaseModel):
+    note: str = Field(default="", max_length=4000, description="What shipped this month, in your words")
+
+
+class BriefingSendBody(BriefingBody):
+    confirm: bool = Field(description="Must be true: sends to every active founder")
+
+
+class BriefingHistory(BaseModel):
+    month: str
+    subject: str
+    sent_by: Optional[str] = None
+    started_at: Optional[str] = None
+    sent: Optional[int] = None
+    failed: Optional[int] = None
+
+
+class BriefingPreview(BaseModel):
+    month: str
+    subject: str
+    html: str
+    text: str
+    recipients: int
+    already_sent: bool
+    sent_at: Optional[str] = None
+    history: List[BriefingHistory]
+
+
+class BriefingSent(BaseModel):
+    month: str
+    sent: int
+    failed: int
 
 
 class BadgeBody(BaseModel):
@@ -324,6 +413,7 @@ class PublicFoundingTier(BaseModel):
     capacity: int
     remaining: int
     on_sale: bool
+    five_year: Optional[FiveYear] = None
 
 
 class PublicFounding(BaseModel):
@@ -480,6 +570,34 @@ def register(app: FastAPI) -> None:
         ratelimit.check("founding_refund", _user(account))
         return svc.poll_vote(account, body.option)
 
+    @app.post("/v1/founding/wall", response_model=FounderBenefits,
+              responses={**_AUTH, 400: {"description": "Name not allowed"}, 404: {"description": "Not a founding member"}},
+              summary="Join or leave the Founders Wall")
+    def set_wall(body: WallBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Off by default. show=true lists you under `name` (2-30 characters, no emails or links)
+        on the public Founders Wall; show=false takes your name off (your seat shows as taken)."""
+        ratelimit.check("founding_refund", _user(account))
+        return svc.set_wall_name(account, body.show, body.name)
+
+    @app.post("/v1/admin/founding/briefing/preview", response_model=BriefingPreview, responses=_ADMIN,
+              summary="Preview this month's Founder Briefing (admin)")
+    def briefing_preview(body: BriefingBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The email as a founder would get it, how many it goes to and what was sent before.
+        Sends nothing."""
+        require_admin(account)
+        return svc.briefing_preview(body.note)
+
+    @app.post("/v1/admin/founding/briefing/send", response_model=BriefingSent,
+              responses={**_ADMIN, 400: {"description": "Note too short or not confirmed"},
+                         409: {"description": "Already sent this month"}},
+              summary="Send this month's Founder Briefing to every active founder (admin)")
+    def briefing_send(body: BriefingSendBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Once per calendar month. Never sent automatically."""
+        require_admin(account)
+        if not body.confirm:
+            raise HTTPException(400, "Confirm the send first.")
+        return svc.briefing_send(account, body.note)
+
     @app.get("/v1/admin/founding/poll", response_model=AdminPoll, responses=_ADMIN,
              summary="Founder poll results (admin)")
     def admin_poll(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -494,6 +612,24 @@ def register(app: FastAPI) -> None:
         except Exception:
             # The landing page treats this as "not open"; never break it.
             return {"open": False, "checkout_open": False, "tiers": [], "remaining": 0}
+
+    @app.get("/v1/public/founding/wall", response_model=FoundersWall,
+             summary="The Founders Wall: every founder seat, with names members chose to show (public)")
+    def founders_wall() -> Dict[str, Any]:
+        try:
+            return svc.public_wall()
+        except Exception:
+            return {"open": False, "seats": [], "taken": 0}
+
+    @app.get("/v1/public/founder-card/{code}", response_model=PublicFounderCard,
+             responses={404: {"description": "No founder card for this invite code"}},
+             summary="A shared founder card: number, tier and dates, never a name or email (public)")
+    def founder_card(code: str = Path(pattern=r"^[a-z0-9]{4,32}$"),
+                     _l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        card = svc.public_card(code) if svc.program_open() else None
+        if not card:
+            raise HTTPException(404, "No founder card.")
+        return card
 
     @app.get("/v1/public/founder-badge/{code}", response_model=PublicFounderBadge,
              responses={404: {"description": "No founder badge for this invite code"}},

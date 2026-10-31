@@ -1187,3 +1187,28 @@ a.chip { display: inline-flex; align-items: center; }
 .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: middle; }
 .live-preview .btn { justify-content: center; }
 .gs-setup { padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--up-bg); }
+/* Founder pack 2: 5-year math, nudges, value meter, founder card and the Founders Wall. */
+.five-year { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: grid; gap: var(--sp-2); grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.five-year li { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-3); border: 1px solid var(--gold-line); border-radius: var(--radius-lg); background: var(--warn-deep); }
+.five-year-price { color: var(--gold); font-size: var(--fs-lg); }
+.five-year s, .five-year-line s { color: var(--muted); }
+.gain { color: var(--up); }
+.founding-nudge { display: inline-block; margin-top: var(--sp-2); color: var(--gold); font-size: var(--fs-sm); }
+.founding-nudge:hover { color: var(--warn-text); }
+.side-foot .founding-nudge { margin: 0; padding: 0 10px; font-size: var(--fs-xs); }
+.meter { height: 10px; border-radius: var(--radius-pill); background: var(--raise-2); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--amber)); border-radius: inherit; }
+.founder-card { max-width: 520px; padding: var(--sp-6); border-radius: var(--radius-xl); border: 1px solid var(--gold-line);
+  background: linear-gradient(135deg, var(--warn-deep), var(--card) 60%); display: flex; flex-direction: column; gap: var(--sp-3); }
+.founder-card-elite { border-color: var(--line-strong); background: linear-gradient(135deg, var(--raise-2), var(--card) 60%); }
+.founder-card-number { font-family: var(--font-display); font-size: 56px; line-height: 1; color: var(--gold); }
+.founder-card-elite .founder-card-number { color: var(--text); }
+.wall { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.wall li { padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md); border: 1px solid var(--line-soft); background: var(--card); display: flex; flex-direction: column; gap: 2px; min-height: 64px; }
+.wall li.wall-taken { border-color: var(--gold-line); background: var(--warn-deep); }
+.wall li.wall-elite { border-color: var(--line-strong); background: var(--raise); }
+.wall-num { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.wall-name { font-weight: 600; overflow-wrap: anywhere; }
+.wall li:not(.wall-taken) .wall-name { color: var(--muted); font-weight: 400; }
+.feedback-founder { border-left: 3px solid var(--gold); padding-left: var(--sp-2); }
+.briefing-frame { width: 100%; min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg); }

@@ -61,3 +61,18 @@ export const founderBenefits = {
   vote: (option: string) => unwrap(api.POST("/v1/founding/poll", { body: { option } })),
   pollResults: (signal?: AbortSignal) => unwrap(api.GET("/v1/admin/founding/poll", { signal })),
 };
+
+// Founders Wall (members choose to be listed), and the monthly Founder Briefing (admins).
+export type FounderValue = Schemas["FounderValue"];
+export type BriefingPreview = Schemas["BriefingPreview"];
+
+export const foundersWall = {
+  set: (show: boolean, name?: string) => unwrap(api.POST("/v1/founding/wall", { body: { show, name } })),
+};
+
+export const founderBriefing = {
+  preview: (note: string) => unwrap(api.POST("/v1/admin/founding/briefing/preview", { body: { note } })),
+  send: (note: string) => unwrap(api.POST("/v1/admin/founding/briefing/send", { body: { note, confirm: true } })),
+};
+
+export const dollars = (c: number) => `$${Math.round(c / 100).toLocaleString("en-US")}`;

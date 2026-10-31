@@ -4753,6 +4753,182 @@
     "title": "BriefPick",
     "type": "object"
    },
+   "BriefingBody": {
+    "properties": {
+     "note": {
+      "default": "",
+      "description": "What shipped this month, in your words",
+      "maxLength": 4000,
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "BriefingBody",
+    "type": "object"
+   },
+   "BriefingHistory": {
+    "properties": {
+     "failed": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Failed"
+     },
+     "month": {
+      "title": "Month",
+      "type": "string"
+     },
+     "sent": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sent"
+     },
+     "sent_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sent By"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "subject": {
+      "title": "Subject",
+      "type": "string"
+     }
+    },
+    "required": [
+     "month",
+     "subject"
+    ],
+    "title": "BriefingHistory",
+    "type": "object"
+   },
+   "BriefingPreview": {
+    "properties": {
+     "already_sent": {
+      "title": "Already Sent",
+      "type": "boolean"
+     },
+     "history": {
+      "items": {
+       "$ref": "#/components/schemas/BriefingHistory"
+      },
+      "title": "History",
+      "type": "array"
+     },
+     "html": {
+      "title": "Html",
+      "type": "string"
+     },
+     "month": {
+      "title": "Month",
+      "type": "string"
+     },
+     "recipients": {
+      "title": "Recipients",
+      "type": "integer"
+     },
+     "sent_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sent At"
+     },
+     "subject": {
+      "title": "Subject",
+      "type": "string"
+     },
+     "text": {
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "month",
+     "subject",
+     "html",
+     "text",
+     "recipients",
+     "already_sent",
+     "history"
+    ],
+    "title": "BriefingPreview",
+    "type": "object"
+   },
+   "BriefingSendBody": {
+    "properties": {
+     "confirm": {
+      "description": "Must be true: sends to every active founder",
+      "title": "Confirm",
+      "type": "boolean"
+     },
+     "note": {
+      "default": "",
+      "description": "What shipped this month, in your words",
+      "maxLength": 4000,
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "required": [
+     "confirm"
+    ],
+    "title": "BriefingSendBody",
+    "type": "object"
+   },
+   "BriefingSent": {
+    "properties": {
+     "failed": {
+      "title": "Failed",
+      "type": "integer"
+     },
+     "month": {
+      "title": "Month",
+      "type": "string"
+     },
+     "sent": {
+      "title": "Sent",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "month",
+     "sent",
+     "failed"
+    ],
+    "title": "BriefingSent",
+    "type": "object"
+   },
    "Capabilities": {
     "properties": {
      "alert_rule_types": {
@@ -6481,6 +6657,17 @@
     "title": "FeatureRef",
     "type": "object"
    },
+   "FeedbackAnswered": {
+    "properties": {
+     "answered": {
+      "default": true,
+      "title": "Answered",
+      "type": "boolean"
+     }
+    },
+    "title": "FeedbackAnswered",
+    "type": "object"
+   },
    "FeedbackBody": {
     "properties": {
      "build": {
@@ -6536,6 +6723,28 @@
    },
    "FeedbackItem": {
     "properties": {
+     "answered_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Answered At"
+     },
+     "answered_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Answered By"
+     },
      "build": {
       "anyOf": [
        {
@@ -6550,6 +6759,12 @@
      "created_at": {
       "title": "Created At",
       "type": "string"
+     },
+     "founder": {
+      "default": false,
+      "description": "Sent by a founding member (listed first until answered)",
+      "title": "Founder",
+      "type": "boolean"
      },
      "id": {
       "title": "Id",
@@ -6641,6 +6856,37 @@
     "title": "FilingEvent",
     "type": "object"
    },
+   "FiveYear": {
+    "properties": {
+     "five_years_monthly_cents": {
+      "description": "60 months of that plan",
+      "title": "Five Years Monthly Cents",
+      "type": "integer"
+     },
+     "monthly_cents": {
+      "description": "The tier's plan, paying monthly",
+      "title": "Monthly Cents",
+      "type": "integer"
+     },
+     "price_cents": {
+      "description": "The one-time founder price",
+      "title": "Price Cents",
+      "type": "integer"
+     },
+     "saved_cents": {
+      "title": "Saved Cents",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "monthly_cents",
+     "five_years_monthly_cents",
+     "price_cents",
+     "saved_cents"
+    ],
+    "title": "FiveYear",
+    "type": "object"
+   },
    "FounderBenefits": {
     "properties": {
      "alumni_discount_percent": {
@@ -6662,6 +6908,18 @@
        }
       ],
       "title": "Badge"
+     },
+     "card_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The shareable founder card page",
+      "title": "Card Path"
      },
      "early_access": {
       "items": {
@@ -6693,6 +6951,18 @@
      "poll": {
       "$ref": "#/components/schemas/FounderPoll"
      },
+     "reply_target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "How soon founder feedback is answered, if set",
+      "title": "Reply Target"
+     },
      "show_badge": {
       "description": "Shared stock links show the founder badge",
       "title": "Show Badge",
@@ -6709,6 +6979,29 @@
       ],
       "title": "Tier",
       "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/FounderValue"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Active members: the value meter"
+     },
+     "wall_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Name on the Founders Wall; null = not listed",
+      "title": "Wall Name"
      }
     },
     "required": [
@@ -6721,6 +7014,43 @@
      "poll"
     ],
     "title": "FounderBenefits",
+    "type": "object"
+   },
+   "FounderFeedbackStatus": {
+    "properties": {
+     "count": {
+      "description": "Founder messages not yet marked answered",
+      "title": "Count",
+      "type": "integer"
+     },
+     "oldest": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Oldest"
+     },
+     "reply_target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF_FOUNDER_REPLY_TARGET, shown to founders when set",
+      "title": "Reply Target"
+     }
+    },
+    "required": [
+     "count"
+    ],
+    "title": "FounderFeedbackStatus",
     "type": "object"
    },
    "FounderInvites": {
@@ -6927,6 +7257,93 @@
      "options"
     ],
     "title": "FounderPoll",
+    "type": "object"
+   },
+   "FounderValue": {
+    "properties": {
+     "ahead_cents": {
+      "title": "Ahead Cents",
+      "type": "integer"
+     },
+     "alerts_used": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Founder Elite: active alerts",
+      "title": "Alerts Used"
+     },
+     "break_even_month": {
+      "title": "Break Even Month",
+      "type": "integer"
+     },
+     "monthly_cents": {
+      "title": "Monthly Cents",
+      "type": "integer"
+     },
+     "monthly_cost_so_far_cents": {
+      "description": "What the months used would have cost monthly",
+      "title": "Monthly Cost So Far Cents",
+      "type": "integer"
+     },
+     "months_left": {
+      "title": "Months Left",
+      "type": "integer"
+     },
+     "months_used": {
+      "title": "Months Used",
+      "type": "integer"
+     },
+     "paid_cents": {
+      "title": "Paid Cents",
+      "type": "integer"
+     },
+     "term_months": {
+      "title": "Term Months",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "months_used",
+     "months_left",
+     "term_months",
+     "monthly_cents",
+     "paid_cents",
+     "monthly_cost_so_far_cents",
+     "ahead_cents",
+     "break_even_month"
+    ],
+    "title": "FounderValue",
+    "type": "object"
+   },
+   "FoundersWall": {
+    "properties": {
+     "open": {
+      "title": "Open",
+      "type": "boolean"
+     },
+     "seats": {
+      "items": {
+       "$ref": "#/components/schemas/WallSeat"
+      },
+      "title": "Seats",
+      "type": "array"
+     },
+     "taken": {
+      "title": "Taken",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "open",
+     "seats",
+     "taken"
+    ],
+    "title": "FoundersWall",
     "type": "object"
    },
    "FoundingCancel": {
@@ -8371,6 +8788,22 @@
       "title": "Entitlements",
       "type": "object"
      },
+     "founder_tier": {
+      "anyOf": [
+       {
+        "enum": [
+         "founder_pro",
+         "founder_elite"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Set while a Founding 100 membership is active",
+      "title": "Founder Tier"
+     },
      "is_admin": {
       "title": "Is Admin",
       "type": "boolean"
@@ -8781,6 +9214,9 @@
      "disclosure": {
       "$ref": "#/components/schemas/Disclosure"
      },
+     "five_year": {
+      "$ref": "#/components/schemas/FiveYear"
+     },
      "label": {
       "title": "Label",
       "type": "string"
@@ -8818,7 +9254,8 @@
      "capacity",
      "remaining",
      "on_sale",
-     "disclosure"
+     "disclosure",
+     "five_year"
     ],
     "title": "OfferTier",
     "type": "object"
@@ -12315,6 +12752,78 @@
     "title": "PublicFounderBadge",
     "type": "object"
    },
+   "PublicFounderCard": {
+    "properties": {
+     "badge": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Badge"
+     },
+     "code": {
+      "title": "Code",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "number": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Number"
+     },
+     "since": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Since"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "tier": {
+      "title": "Tier",
+      "type": "string"
+     },
+     "until": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Until"
+     }
+    },
+    "required": [
+     "tier",
+     "label",
+     "status",
+     "code"
+    ],
+    "title": "PublicFounderCard",
+    "type": "object"
+   },
    "PublicFounding": {
     "properties": {
      "checkout_open": {
@@ -12351,6 +12860,16 @@
      "capacity": {
       "title": "Capacity",
       "type": "integer"
+     },
+     "five_year": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/FiveYear"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "label": {
       "title": "Label",
@@ -16070,6 +16589,95 @@
     "title": "ValidationErrorResponse",
     "type": "object"
    },
+   "WallBody": {
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "maxLength": 60,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "show": {
+      "title": "Show",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "show"
+    ],
+    "title": "WallBody",
+    "type": "object"
+   },
+   "WallSeat": {
+    "properties": {
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Only when the member opted in",
+      "title": "Name"
+     },
+     "number": {
+      "title": "Number",
+      "type": "string"
+     },
+     "since": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "YYYY-MM the membership started",
+      "title": "Since"
+     },
+     "taken": {
+      "title": "Taken",
+      "type": "boolean"
+     },
+     "tier": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tier"
+     }
+    },
+    "required": [
+     "number",
+     "taken"
+    ],
+    "title": "WallSeat",
+    "type": "object"
+   },
    "Watchlist": {
     "properties": {
      "id": {
@@ -18080,6 +18688,222 @@
      "admin (admins only)"
     ],
     "x-internal": true
+   }
+  },
+  "/v1/admin/feedback/founders": {
+   "get": {
+    "operationId": "founder_feedback_v1_admin_feedback_founders_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FounderFeedbackStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Founder feedback still waiting for an answer",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/feedback/{feedback_id}/answered": {
+   "post": {
+    "operationId": "answer_feedback_v1_admin_feedback__feedback_id__answered_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "feedback_id",
+      "required": true,
+      "schema": {
+       "title": "Feedback Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FeedbackAnswered"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "404": {
+      "description": "No such message"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mark a feedback message answered or not",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/founding/briefing/preview": {
+   "post": {
+    "description": "The email as a founder would get it, how many it goes to and what was sent before.\nSends nothing.",
+    "operationId": "briefing_preview_v1_admin_founding_briefing_preview_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BriefingBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BriefingPreview"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Preview this month's Founder Briefing (admin)"
+   }
+  },
+  "/v1/admin/founding/briefing/send": {
+   "post": {
+    "description": "Once per calendar month. Never sent automatically.",
+    "operationId": "briefing_send_v1_admin_founding_briefing_send_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BriefingSendBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BriefingSent"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Note too short or not confirmed"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "409": {
+      "description": "Already sent this month"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send this month's Founder Briefing to every active founder (admin)"
    }
   },
   "/v1/admin/founding/policies/{policy_type}": {
@@ -22004,6 +22828,59 @@
     "summary": "Ask for a refund of one of your founding payments"
    }
   },
+  "/v1/founding/wall": {
+   "post": {
+    "description": "Off by default. show=true lists you under `name` (2-30 characters, no emails or links)\non the public Founders Wall; show=false takes your name off (your seat shows as taken).",
+    "operationId": "set_wall_v1_founding_wall_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WallBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FounderBenefits"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Name not allowed"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not a founding member"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Join or leave the Founders Wall"
+   }
+  },
   "/v1/journal": {
    "get": {
     "description": "Your logged trades (open first), open ones marked to live quotes, with closed-trade stats.",
@@ -25791,6 +26668,49 @@
     "summary": "The founder badge behind a shared link's invite code (public)"
    }
   },
+  "/v1/public/founder-card/{code}": {
+   "get": {
+    "operationId": "founder_card_v1_public_founder_card__code__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "code",
+      "required": true,
+      "schema": {
+       "pattern": "^[a-z0-9]{4,32}$",
+       "title": "Code",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicFounderCard"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No founder card for this invite code"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "A shared founder card: number, tier and dates, never a name or email (public)"
+   }
+  },
   "/v1/public/founding": {
    "get": {
     "operationId": "public_founding_v1_public_founding_get",
@@ -25817,6 +26737,34 @@
      }
     },
     "summary": "Whether the Founding 100 is open, and seats left (public)"
+   }
+  },
+  "/v1/public/founding/wall": {
+   "get": {
+    "operationId": "founders_wall_v1_public_founding_wall_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FoundersWall"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "The Founders Wall: every founder seat, with names members chose to show (public)"
    }
   },
   "/v1/public/stocks/{ticker}": {
