@@ -871,6 +871,46 @@ export interface paths {
         patch: operations["alert_update_v1_alerts__alert_id__patch"];
         trace?: never;
     };
+    "/v1/auth/email-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email Link
+         * @description Email a one-time sign-in link (valid 15 minutes). Same answer whether or not the account exists.
+         */
+        post: operations["email_link_v1_auth_email_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/email-link/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email Link Confirm
+         * @description Sign in with the token from an emailed sign-in link; answers a token pair like /v1/auth/login.
+         */
+        post: operations["email_link_confirm_v1_auth_email_link_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1960,6 +2000,26 @@ export interface paths {
         head?: never;
         /** Update Preferences */
         patch: operations["update_preferences_v1_me_research_preferences_patch"];
+        trace?: never;
+    };
+    "/v1/me/sign-out-everywhere": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign Out Everywhere
+         * @description Sign this account out on every device and browser, including this one.
+         */
+        post: operations["sign_out_everywhere_v1_me_sign_out_everywhere_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/me/verify-email": {
@@ -5314,6 +5374,13 @@ export interface components {
             ai_multiplier: number;
             /** Alert Limit */
             alert_limit: number;
+        };
+        /** EmailLinkConfirmBody */
+        EmailLinkConfirmBody: {
+            /** Client */
+            client?: string | null;
+            /** Token */
+            token: string;
         };
         /** EmailPrefs */
         EmailPrefs: {
@@ -12297,6 +12364,93 @@ export interface operations {
             };
         };
     };
+    email_link_v1_auth_email_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Security check failed (Turnstile) or invalid email */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests from this address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    email_link_confirm_v1_auth_email_link_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLinkConfirmBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenPair"];
+                };
+            };
+            /** @description Invalid, expired or used link */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     login_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -14935,6 +15089,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WorkspacePreferences"];
                 };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    sign_out_everywhere_v1_me_sign_out_everywhere_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not signed in */
             401: {

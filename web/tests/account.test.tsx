@@ -235,6 +235,20 @@ describe("Account", () => {
     clicked.mockRestore();
   });
 
+  it("signs out everywhere after confirming, then lands on the signed-out page", async () => {
+    routes.unshift(
+      on("POST", "/api/auth/logout-everywhere", () => new Response(null, { status: 204 })),
+      on("POST", "/api/auth/logout", () => new Response(null, { status: 204 })),
+    );
+    const u = user();
+    wrap(<AccountView />, me("pro"));
+    await u.click(screen.getByRole("button", { name: "Sign out everywhere…" }));
+    const dlg = screen.getByRole("dialog", { name: "Sign out everywhere?" });
+    await u.click(within(dlg).getByRole("button", { name: "Sign out everywhere" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/signed-out"));
+    expect(calls.some((c) => c.path === "/api/auth/logout-everywhere")).toBe(true);
+  });
+
   it("deletes the account only with the password and DELETE typed, and explains a refusal", async () => {
     let n = 0;
     routes.unshift(
