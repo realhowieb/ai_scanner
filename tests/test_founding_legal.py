@@ -27,8 +27,7 @@ class PolicyTextTests(unittest.TestCase):
             cur = legal.current(self.p)[ptype]
             self.assertEqual(cur["version"], 1)
             self.assertEqual(len(cur["content_hash"]), 64)
-            expected = "approved" if ptype in legal.GENERAL_POLICIES else "proposed"
-            self.assertEqual(cur["status"], expected)
+            self.assertEqual(cur["status"], "approved")
             self.assertTrue(cur["sections"])
             self.assertNotRegex(cur["text"], r"\{[a-z_]+\}", "every placeholder filled")
 
@@ -226,7 +225,7 @@ class ApiTests(DbBase):
         self.assertEqual(pre.json()["versions"], [1])
         self.flags()
         page = self.client.get("/v1/founding/policies/founding_refunds").json()
-        self.assertEqual((page["version"], page["status"]), (1, "proposed"))
+        self.assertEqual((page["version"], page["status"]), (1, "approved"))
         self.assertEqual(self.client.get("/v1/founding/policies/founding_refunds?version=9").status_code, 404)
         self.assertEqual(self.client.get("/v1/founding/policies/cookies").status_code, 422)
 
