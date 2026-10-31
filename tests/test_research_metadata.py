@@ -85,7 +85,7 @@ class FrozenScannerTests(unittest.TestCase):
         snap = self.sink["price_snapshot"]
         self.assertEqual(snap["T01"]["source"], "alpaca_multi")
         self.assertEqual((snap["T00"]["source"], snap["T00"]["feed"]), ("rescue_single", None))
-        self.assertEqual(set(snap["T01"]), {"price", "volume", "source", "feed", "dollar_vol20"})  # Run 59
+        self.assertEqual(set(snap["T01"]), {"price", "volume", "source", "feed", "dollar_vol20", "rsi14"})  # Run 59, 60
 
     def test_cohort_membership_unchanged_by_metadata(self):
         rows = self.with_sink.to_dict("records")
@@ -283,3 +283,53 @@ class CronWiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Run60CaptureTests(unittest.TestCase):
+    """Run 60: RSI-14 and an SPY regime label from bars the scan already holds."""
+
+    def test_rsi14_from_scan_bars(self):
+        v = rm.rsi14(_DATA["T01"])
+        self.assertIsNotNone(v)
+        self.assertTrue(0.0 <= v <= 100.0)
+        self.assertIsNone(rm.rsi14(_DATA["T01"].iloc[:10]))
+        self.assertIsNone(rm.rsi14(None))
+
+    def test_spy_regime_label(self):
+        reg = rm.spy_regime(_DATA["SPY"])
+        self.assertIn(reg["label"], ("SPY_ABOVE_SMA20", "SPY_BELOW_SMA20"))
+        c = _DATA["SPY"]["Close"].iloc[-20:]
+        self.assertEqual(reg["label"] == "SPY_ABOVE_SMA20", float(c.iloc[-1]) >= float(c.mean()))
+        self.assertIsNone(rm.spy_regime(_DATA["SPY"].iloc[:15]))
+        self.assertIsNone(rm.spy_regime(None))
+
+    def test_regime_in_run_context_only_when_given(self):
+        ctx = rm.build_run_context(universe="US_MARKET", session="regular", scan_id=TS,
+                                   market_regime={"label": "SPY_BELOW_SMA20",
+                                                  "spy_vs_sma20_pct": -1.2, "spy_chg_pct": -0.4})
+        self.assertEqual(ctx["market_regime_at_observation"], "SPY_BELOW_SMA20")
+        self.assertEqual(ctx["market_regime_source"], rm.REGIME_SPY_SMA20)
+        self.assertEqual(ctx["market_regime_version"], rm.REGIME_SPY_SMA20_VERSION)
+        self.assertEqual(ctx["market_regime_inputs"]["spy_vs_sma20_pct"], -1.2)
+        self.assertIsNone(rm.build_run_context(universe="US_MARKET", session=None, scan_id=TS,
+                                               market_regime=None)["market_regime_at_observation"])
+
+    def test_engine_sink_carries_rsi_and_regime_for_every_cohort(self):
+        sink = {"near_miss_n": 5}
+        res = _scan(research_sink=sink)
+        self.assertEqual(len(res), 10)  # production output unchanged
+        snap = sink["price_snapshot"]
+        self.assertTrue(all("rsi14" in v for v in snap.values()))
+        self.assertIsNotNone(sink["market_regime"])
+        ctx = rm.build_run_context(universe="US_MARKET", session="regular", scan_id=TS,
+                                   price_meta=snap, market_regime=sink["market_regime"])
+        ctrl = build_control_observations(["T00"], snap, universe="US_MARKET",
+                                          scan_timestamp=TS, research_run_context=ctx)
+        m = ctrl[0]["research_metadata"]
+        self.assertEqual(m["rsi_14"], snap["T00"]["rsi14"])
+        self.assertEqual(m["market_regime_at_observation"], sink["market_regime"]["label"])
+
+    def test_scan_results_identical_with_and_without_sink(self):
+        a = _scan()
+        b = _scan(research_sink={"near_miss_n": 5})
+        pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True))
