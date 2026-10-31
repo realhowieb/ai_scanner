@@ -15112,6 +15112,87 @@
     "title": "Setup",
     "type": "object"
    },
+   "SetupMix": {
+    "properties": {
+     "rows": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SetupMixRow"
+      },
+      "title": "Rows",
+      "type": "array"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "total": {
+      "description": "Setups in the latest scan; a name can carry several signals",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "total"
+    ],
+    "title": "SetupMix",
+    "type": "object"
+   },
+   "SetupMixRow": {
+    "properties": {
+     "count": {
+      "description": "Setups in the latest scan carrying this signal",
+      "title": "Count",
+      "type": "integer"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "signal": {
+      "description": "Scanner filter id (/scanner?signal=<id>)",
+      "title": "Signal",
+      "type": "string"
+     },
+     "top_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Top Score"
+     },
+     "top_ticker": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Highest HSF Score among them",
+      "title": "Top Ticker"
+     }
+    },
+    "required": [
+     "signal",
+     "label",
+     "count"
+    ],
+    "title": "SetupMixRow",
+    "type": "object"
+   },
    "SignupBody": {
     "properties": {
      "accept_terms": {
@@ -16048,6 +16129,16 @@
       "anyOf": [
        {
         "$ref": "#/components/schemas/Recap"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "setup_mix": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SetupMix"
        },
        {
         "type": "null"

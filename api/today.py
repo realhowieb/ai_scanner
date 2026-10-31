@@ -561,6 +561,12 @@ def build_personal(user: str, seen: Optional[int], baseline: Optional[int]) -> D
     return out
 
 
+def _setup_mix() -> Optional[Dict[str, Any]]:
+    from api import scans  # api.scans imports this module, so import it late
+
+    return scans.setup_mix()
+
+
 def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     """Each section fails on its own: one bad read never blanks the whole page."""
     pro = bool(entitlements.get("can_day_trader"))
@@ -570,6 +576,7 @@ def build_today(now: dt.datetime, entitlements: Dict[str, bool]) -> Dict[str, An
         "after_close": lambda: after_close(now, pro),
         "recap": lambda: recap(now),
         "snapshot": lambda: snapshot(now),
+        "setup_mix": lambda: _setup_mix(),
     }
     out: Dict[str, Any] = {"as_of": now.isoformat(), "market": market_status(now), "errors": []}
     for name, fn in sections.items():
