@@ -40,23 +40,23 @@ describe("emailed sign-in link", () => {
 
   it("using the link puts the token pair only in cookies", async () => {
     const { up, calls } = fakeUpstream(() => jsonResponse(pair(3)));
-    const res = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "tok-123456789" } }), up, null);
+    const res = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "emailed-link" } }), up, null);
     expect(res.status).toBe(200);
     expect(await res.text()).not.toContain("rt-3");
     expect(setCookies(res).some((c) => c.startsWith(`${REFRESH_COOKIE}=rt-3`))).toBe(true);
-    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ token: "tok-123456789", client: "web" });
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ token: "emailed-link", client: "web" });
   });
 
   it("passes an expired link's message, refuses cross-site posts and uninvited accounts", async () => {
     let { up } = fakeUpstream(() => jsonResponse({ detail: "This sign-in link is invalid, expired or already used. Ask for a new one." }, 400));
-    const bad = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "old-123456789" } }), up, null);
+    const bad = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "used-link" } }), up, null);
     expect(bad.status).toBe(400);
     expect((await bad.json()).detail).toContain("already used");
     expect(setCookies(bad)).toEqual([]);
-    expect((await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "x-123456789" }, origin: "https://evil.example" }), up, null)).status).toBe(403);
+    expect((await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "other-link" }, origin: "https://evil.example" }), up, null)).status).toBe(403);
     expect((await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: {} }), up, null)).status).toBe(400);
     ({ up } = fakeUpstream((c) => (c.path === "/v1/me" ? jsonResponse({ email: "other@x.co" }) : c.path === "/v1/auth/logout" ? new Response(null, { status: 204 }) : jsonResponse(pair(4)))));
-    const refused = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "tok-123456789" } }), up, new Set(["me@x.co"]));
+    const refused = await emailLinkSignIn(req("/api/auth/email-link-confirm", { body: { token: "emailed-link" } }), up, new Set(["me@x.co"]));
     expect(refused.status).toBe(403);
     expect((await refused.json()).detail).toBe(NOT_INVITED);
   });

@@ -93,19 +93,19 @@ describe("Caps Lock warning", () => {
 
 describe("emailed sign-in link page", () => {
   it("waits for a click, then signs in and opens Today", async () => {
-    search = new URLSearchParams("token=tok-123456789");
+    search = new URLSearchParams("token=emailed-link");
     fetchMock.mockImplementation(async (url: string) => (url === "/api/auth/email-link-confirm" ? jsonResponse({ ok: true }) : jsonResponse({ email: "ann@example.com" })));
     const u = userEvent.setup();
     render(<EmailLinkSignIn />);
     expect(fetchMock).not.toHaveBeenCalled();
     await u.click(screen.getByRole("button", { name: "Continue to HSF" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/today"));
-    expect(posts()[0]).toEqual(["/api/auth/email-link-confirm", { token: "tok-123456789" }]);
+    expect(posts()[0]).toEqual(["/api/auth/email-link-confirm", { token: "emailed-link" }]);
     expect(readLastEmail()).toBe("ann@example.com");
   });
 
   it("explains a used link and offers a new one", async () => {
-    search = new URLSearchParams("token=old-123456789");
+    search = new URLSearchParams("token=used-link");
     fetchMock.mockResolvedValue(jsonResponse({ detail: "This sign-in link is invalid, expired or already used. Ask for a new one." }, 400));
     const u = userEvent.setup();
     render(<EmailLinkSignIn />);
