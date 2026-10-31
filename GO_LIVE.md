@@ -58,7 +58,7 @@ A custom-domain change must update `APP_BASE_URL`, `API_CORS_ORIGINS` and
 - [ ] Then set `HSF_LEGAL_PAGES_ENABLED=1` on hsf-api-v1. This publishes /terms and /privacy,
       links them from the sign-up box and upgrade buttons, and records each acceptance
       (sign-up and every new monthly/yearly checkout) in `user_policy_acceptances`
-- [ ] Founding 100 pages and checkout have their own switches (`FOUNDING_*`); see the founding thread / `docs/` notes
+- [x] Founding terms and refund policy approved (effective October 31, 2026). Founding 100 pages and checkout have their own switches (`FOUNDING_*`); see the founding thread / `docs/` notes
 
 ## 5. Cost and safety backstops
 

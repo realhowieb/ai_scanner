@@ -1,7 +1,7 @@
 title: HSF AI Founding Membership Terms
 version: 1
-effective_date: Not yet in effect
-status: proposed
+effective_date: October 31, 2026
+status: approved
 ---
 These terms cover the HSF AI Founding 100 memberships (Founder Pro and Founder Elite) sold by {legal_entity} ("HSF AI", "we"). They add to the terms that apply to every HSF AI account. Where the two differ for a founding membership, these terms apply.
 
