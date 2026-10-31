@@ -54,6 +54,11 @@ class ResetConfirmBody(BaseModel):
     new_password: str = Field(min_length=1, max_length=256)
 
 
+class EmailLinkConfirmBody(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+    client: Optional[str] = Field(default=None, max_length=80)
+
+
 class PasswordChangeBody(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=1, max_length=256)
@@ -78,6 +83,8 @@ class PortalBody(BaseModel):
 
 _RESET_SENT = ("If that email is registered, a reset link has been sent. "
                "Check your inbox (and spam folder).")
+_LINK_SENT = ("If that email has an HSF account, a sign-in link is on its way. "
+              "It works once and expires in 15 minutes.")
 
 
 def register(app: FastAPI) -> None:
@@ -161,6 +168,40 @@ def register(app: FastAPI) -> None:
         turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="password_reset")
         acct.request_password_reset(body.email)
         return {"message": _RESET_SENT}
+
+    @app.post("/v1/auth/email-link", response_model=models.Message, status_code=202,
+              responses={400: {"description": "Security check failed (Turnstile) or invalid email"},
+                         429: {"description": "Too many requests from this address"}})
+    def email_link(body: ResetRequestBody, request: Request,
+                   _l: None = Depends(ratelimit.limit("email_link"))) -> Dict[str, Any]:
+        """Email a one-time sign-in link (valid 15 minutes). Same answer whether or not the account exists."""
+        from api import turnstile
+
+        turnstile.verify(body.turnstile_token, ratelimit.client_ip(request), action="email_link")
+        acct.request_sign_in_link(body.email)
+        return {"message": _LINK_SENT}
+
+    @app.post("/v1/auth/email-link/confirm", response_model=models.TokenPair,
+              responses={400: {"description": "Invalid, expired or used link"}})
+    def email_link_confirm(body: EmailLinkConfirmBody, request: Request,
+                           _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
+        """Sign in with the token from an emailed sign-in link; answers a token pair like /v1/auth/login."""
+        from db.users import record_login_attempt
+
+        username = acct.consume_sign_in_link(body.token)
+        pair = _token_pair(username, _settings(request), body.client)
+        try:
+            record_login_attempt(username, success=True, failure_reason=None)
+        except Exception:
+            pass
+        return pair
+
+    @app.post("/v1/me/sign-out-everywhere", status_code=204, responses=_AUTH)
+    def sign_out_everywhere(account: Dict[str, Any] = Depends(current_account)) -> None:
+        """Sign this account out on every device and browser, including this one."""
+        user = _user(account)
+        acct.sign_out_everywhere(user)
+        forget_account(user)
 
     @app.post("/v1/auth/password-reset/confirm", response_model=models.Message,
               responses={400: {"description": "Invalid link or password rule"}})

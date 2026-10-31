@@ -6337,6 +6337,33 @@
     "title": "EliteLimits",
     "type": "object"
    },
+   "EmailLinkConfirmBody": {
+    "properties": {
+     "client": {
+      "anyOf": [
+       {
+        "maxLength": 80,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Client"
+     },
+     "token": {
+      "maxLength": 128,
+      "minLength": 10,
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token"
+    ],
+    "title": "EmailLinkConfirmBody",
+    "type": "object"
+   },
    "EmailPrefs": {
     "properties": {
      "alerts": {
@@ -20378,6 +20405,93 @@
     "summary": "Alert Update"
    }
   },
+  "/v1/auth/email-link": {
+   "post": {
+    "description": "Email a one-time sign-in link (valid 15 minutes). Same answer whether or not the account exists.",
+    "operationId": "email_link_v1_auth_email_link_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ResetRequestBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Security check failed (Turnstile) or invalid email"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests from this address"
+     }
+    },
+    "summary": "Email Link"
+   }
+  },
+  "/v1/auth/email-link/confirm": {
+   "post": {
+    "description": "Sign in with the token from an emailed sign-in link; answers a token pair like /v1/auth/login.",
+    "operationId": "email_link_confirm_v1_auth_email_link_confirm_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EmailLinkConfirmBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenPair"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid, expired or used link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "Email Link Confirm"
+   }
+  },
   "/v1/auth/login": {
    "post": {
     "operationId": "login_v1_auth_login_post",
@@ -23187,6 +23301,36 @@
      }
     ],
     "summary": "Update Preferences"
+   }
+  },
+  "/v1/me/sign-out-everywhere": {
+   "post": {
+    "description": "Sign this account out on every device and browser, including this one.",
+    "operationId": "sign_out_everywhere_v1_me_sign_out_everywhere_post",
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Sign Out Everywhere"
    }
   },
   "/v1/me/verify-email": {

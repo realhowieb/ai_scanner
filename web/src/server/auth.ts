@@ -78,7 +78,11 @@ export async function login(req: Request, upstream: Upstream, allow: Set<string>
     const detail = res.status === 401 ? "Wrong email or password." : await detailOf(res);
     return json({ detail }, res.status, id, [], extra);
   }
-  const pair = (await res.json()) as TokenPair;
+  return admit((await res.json()) as TokenPair, upstream, allow, rid, id);
+}
+
+/** Hands a fresh token pair to the browser as cookies, after the invite-list check. */
+async function admit(pair: TokenPair, upstream: Upstream, allow: Set<string> | null, rid: string, id: string): Promise<Response> {
   if (allow) {
     // The account's email comes from the API, so signing in with a username works too.
     let invited = false;
@@ -100,6 +104,52 @@ export async function login(req: Request, upstream: Upstream, allow: Set<string>
     }
   }
   return json({ ok: true }, 200, id, sessionCookies(pair));
+}
+
+/** Sign in with the token from an emailed sign-in link (POST /v1/auth/email-link/confirm). */
+export async function emailLinkSignIn(req: Request, upstream: Upstream, allow: Set<string> | null = betaAllowlist()): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  const body = await readFields(req, { token: "string" });
+  const token = body ? String(body.token) : "";
+  if (!token || token.length > 128) return json({ detail: "This sign-in link is incomplete. Ask for a new one." }, 400, rid);
+  let res: Response;
+  try {
+    res = await forward("/v1/auth/email-link/confirm", { token, client: "web" }, rid, upstream);
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
+  }
+  if (!res.ok) return passError(res, rid);
+  return admit((await res.json()) as TokenPair, upstream, allow, rid, res.headers.get("x-request-id") || rid);
+}
+
+/** Ends every session of the account (POST /v1/me/sign-out-everywhere), then clears this
+ * browser's cookies too. */
+export async function logoutEverywhere(req: Request, upstream: Upstream): Promise<Response> {
+  const rid = requestIdFor(req);
+  if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
+  const jar = parseCookies(req.headers.get("cookie"));
+  let access = jar[ACCESS_COOKIE];
+  const refresh = jar[REFRESH_COOKIE];
+  try {
+    if (!accessTokenUsable(access)) {
+      const out = refresh ? await refreshOnce(refresh, upstreamRefresh(upstream, rid)) : null;
+      if (!out || !out.ok) return refreshFailure(out, rid);
+      access = out.pair.access_token;
+    }
+    const res = await upstream("/v1/me/sign-out-everywhere", {
+      method: "POST",
+      headers: { authorization: `Bearer ${access}`, accept: "application/json", "x-request-id": rid },
+    });
+    const id = res.headers.get("x-request-id") || rid;
+    if (res.status === 401) return json(SESSION_EXPIRED, 401, id, clearedCookies());
+    if (!res.ok) return passError(res, rid);
+    const headers = new Headers({ "cache-control": "no-store", "x-request-id": id });
+    for (const c of clearedCookies()) headers.append("set-cookie", c);
+    return new Response(null, { status: 204, headers });
+  } catch {
+    return json({ detail: "Couldn't reach the HSF service. Try again." }, 502, rid);
+  }
 }
 
 export async function logout(req: Request, upstream: Upstream): Promise<Response> {
@@ -205,10 +255,11 @@ async function passError(res: Response, rid: string): Promise<Response> {
   return json({ detail: detail === FAILED ? "Something went wrong. Try again." : detail }, res.status, res.headers.get("x-request-id") || rid, [], extra);
 }
 
-/** Public account flows that need no session: password reset (request and confirm) and
- * email verification. The API's answer passes through; nothing is stored. */
+/** Public account flows that need no session: password reset (request and confirm), the
+ * emailed sign-in link request, and email verification. The API's answer passes through; nothing is stored. */
 const PUBLIC: Record<string, { path: string; fields: Fields }> = {
   "password-reset": { path: "/v1/auth/password-reset", fields: { email: "string" } },
+  "email-link": { path: "/v1/auth/email-link", fields: { email: "string" } },
   "password-reset-confirm": { path: "/v1/auth/password-reset/confirm", fields: { token: "string", new_password: "string" } },
   "verify-email": { path: "/v1/auth/verify-email", fields: { token: "string" } },
 };
@@ -223,7 +274,7 @@ export async function publicAuth(req: Request, flow: keyof typeof PUBLIC, upstre
   const rid = requestIdFor(req);
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
   const spec = PUBLIC[flow]!;
-  const token = flow === "password-reset" ? await turnstileToken(req) : {};
+  const token = flow === "password-reset" || flow === "email-link" ? await turnstileToken(req) : {};
   const body = await readFields(req, spec.fields);
   if (!body) return json({ detail: "Fill in every field." }, 400, rid);
   let res: Response;

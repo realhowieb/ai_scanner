@@ -37,14 +37,18 @@ export async function postAuth(path: string, body: unknown): Promise<Outcome> {
 
 const errorOf = (o: Outcome) => (o.status === 0 ? String(o.body?.detail) : messageFrom(o.body, o.status)) + (o.status >= 500 && o.requestId ? ` Support code: ${o.requestId}` : "");
 
-export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
+export function AuthShell({ title, subtitle, mark, children }: { title: string; subtitle?: ReactNode; mark?: ReactNode; children: ReactNode }) {
   return (
     <div className="card narrow login">
       <div className="auth-head">
         <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
         <Link href="/" className="auth-home">&larr; Back to home</Link>
       </div>
-      <h1 className="h1">{title}</h1>
+      <div className="auth-title">
+        {mark}
+        <h1 className="h1">{title}</h1>
+        {subtitle && <p className="cap">{subtitle}</p>}
+      </div>
       {children}
     </div>
   );

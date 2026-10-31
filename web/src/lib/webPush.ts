@@ -59,12 +59,13 @@ export async function enablePush(publicKey: string): Promise<PushState> {
   return "on";
 }
 
-/** Unsubscribes this browser and tells the API. Best effort on the API side. */
-export async function disablePush(): Promise<void> {
-  if (!pushSupported()) return;
+/** Unsubscribes this browser and tells the API. Best effort on the API side. True when
+ * this browser had push alerts on. */
+export async function disablePush(): Promise<boolean> {
+  if (!pushSupported()) return false;
   const reg = await navigator.serviceWorker.getRegistration("/");
   const sub = reg ? await reg.pushManager.getSubscription() : null;
-  if (!sub) return;
+  if (!sub) return false;
   const endpoint = sub.endpoint;
   try {
     await sub.unsubscribe();
@@ -73,4 +74,5 @@ export async function disablePush(): Promise<void> {
     throw new ApiError(0, "Couldn’t turn off browser notifications. Try again or use your browser’s site settings.", null, null, null);
   }
   await unwrap(api.DELETE("/v1/me/web-push", { body: { endpoint } })).catch(() => undefined);
+  return true;
 }
