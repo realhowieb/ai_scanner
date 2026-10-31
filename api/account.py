@@ -152,6 +152,63 @@ def request_password_reset(email: str) -> None:
         pass  # never reveal a failure that depends on the account existing
 
 
+# ---- sign-in link (sign in without a password) ---------------------------------------------------
+def request_sign_in_link(email: str) -> None:
+    """Email a one-time sign-in link when the account exists and is active. Says nothing
+    either way (no account enumeration); db.sign_in_links limits 3 links per hour."""
+    email = (email or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        raise AccountError("Please enter a valid email address.")
+    from api.store import get_account
+
+    account = get_account(email)  # DatabaseUnavailable answers 503
+    if not account or account.get("is_active") is False:
+        return
+    try:
+        from db.sign_in_links import TTL_MINUTES, create_token
+        from ui.email_utils import send_sign_in_link_email
+
+        username = str(account["username"]).strip().lower()
+        token = create_token(username)
+        if token:
+            send_sign_in_link_email(username, _link("login/link", token), TTL_MINUTES)
+    except Exception:
+        pass  # never reveal a failure that depends on the account existing
+
+
+def consume_sign_in_link(token: str) -> str:
+    """The account a valid sign-in link belongs to (the link is used up)."""
+    from db.sign_in_links import consume_token
+
+    token = (token or "").strip()
+    bad = "This sign-in link is invalid, expired or already used. Ask for a new one."
+    if not token or len(token) > 128 or not token.replace("-", "").replace("_", "").isalnum():
+        raise AccountError(bad)
+    try:
+        username = consume_token(token)
+    except Exception as e:
+        raise DatabaseUnavailable("database unavailable") from e
+    if not username:
+        raise AccountError(bad)
+    return username.strip().lower()
+
+
+def sign_out_everywhere(username: str) -> None:
+    """End every session of the account: app refresh tokens, web sessions and push devices.
+    Access tokens already handed out stop working when they expire (15 minutes)."""
+    from api.devices import remove_all
+    from api.store import revoke_all_refresh_tokens
+
+    try:
+        from ui.auth_sessions import revoke_user_sessions
+
+        revoke_user_sessions(username)
+    except Exception:
+        pass
+    revoke_all_refresh_tokens(username, "sign_out_all")
+    remove_all(username)
+
+
 def _set_password_and_sign_out(username: str, new_password: str, reason: str) -> None:
     from api.store import revoke_all_refresh_tokens
     from db.users import update_neon_user_password

@@ -176,8 +176,9 @@ await step("alerts page: capacity, turn off", async () => {
 
 await step("return later: sign out, sign in, everything is still there", async () => {
   await page.getByRole("button", { name: /Account/ }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await page.waitForURL(/\/login/);
+  await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await page.waitForURL(/\/signed-out/);
+  await page.getByRole("heading", { name: "You're signed out" }).waitFor();
   await page.goto(`${BASE}/alerts`);
   await page.waitForURL(/\/login/);
   await page.close();

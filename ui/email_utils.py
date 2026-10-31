@@ -105,6 +105,23 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
         return False
 
 
+def send_sign_in_link_email(to_address: str, link_url: str, ttl_minutes: int = 15) -> bool:
+    """Email a one-time sign-in link (sign in without a password). True when sent."""
+    subject = "Your HSFinest.AI sign-in link"
+    body_text = (
+        "Use the link below to sign in to HSFinest.AI (valid for "
+        f"{ttl_minutes} minutes, works once):\n\n{link_url}\n\n"
+        "If you didn't ask for this, you can ignore this email. Nobody can sign in without the link.\n"
+    )
+    body_html = _branded_card(
+        "Sign in to HSFinest.AI",
+        "<p style='margin:0 0 4px'>Tap the button to sign in. No password needed.</p>",
+        link_url, "Sign me in",
+        f"This link works once and expires in {ttl_minutes} minutes. If you didn't ask for it, you can ignore this email.",
+    )
+    return _send_smtp(to_address, subject, body_text, body_html)
+
+
 def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
                headers: dict | None = None) -> bool:
     """Internal shared SMTP sender. Logs the failure reason instead of failing silently."""

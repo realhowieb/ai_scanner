@@ -23,6 +23,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "login": (30, 600),
     "signup": (5, 3600),
     "password_reset": (5, 3600),
+    "email_link": (10, 3600),    # per IP: "Email me a sign-in link" (3 per account per hour in the database)
     "verify": (30, 600),
     "verify_resend": (3, 3600),
     "scan": (30, 3600),          # per account (custom scans run on a small shared pool)
