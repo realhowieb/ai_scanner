@@ -92,14 +92,20 @@ TOD_BUCKETS: Tuple[Tuple[int, int, str], ...] = (
     (960, 1440, "POST (>=16:00)"),
 )
 NUMERIC_FEATURES = ("score", "rvol", "gap_pct", "chg_pct", "atr_pct", "price",
-                    "volume", "dollar_volume", "trigger_count")
-FLAG_FEATURES = ("is_breakout", "gap_up", "gap_down", "unusual_vol", "momentum")
+                    "volume", "dollar_volume", "trigger_count",
+                    # Run 57 research_metadata (saved at scan time, read since Run 60)
+                    "breakout_pos_20d", "trend_10d_pct", "trend_20d_pct", "dollar_vol_20",
+                    # Run 60 capture (point-in-time RSI-14 from the scan's own daily bars)
+                    "rsi_14")
+FLAG_FEATURES = ("is_breakout", "gap_up", "gap_down", "unusual_vol", "momentum",
+                 "ema_golden")
 # Requested diagnostics the scheduled capture does not persist (Run 53B contract).
+# Run 60: breakout distance, EMA 9/21 cross and RSI-14 moved into the feature set.
+# rs_vs_spy is saved but deliberately not tested: it is close / SPY close, a price
+# level ratio rather than relative strength.
 UNAVAILABLE_FEATURES = {
-    "rsi": "not captured by the scheduled scan observation",
-    "ema_alignment": "not captured",
-    "ema9_ema21": "ema_cross is computed by scan/breakout.py but not mapped into the observation",
-    "breakout_distance": "BreakoutPos20D is not mapped into the observation",
+    "ema_alignment": "only the 9/21 cross is saved (ema_golden); no 9/21/50 stack",
+    "rs_vs_spy": "saved value is close / SPY close (a price ratio), not relative strength",
     "confirmation_count / agreement": "Day Trader intel is computed at render time, never persisted",
     "conflict_count / conflict flags": "Day Trader conflicts are computed at render time, never persisted",
     "prebreakout": "scheduled observations carry no PreBreakout score",
@@ -194,6 +200,9 @@ def features(rec: Dict[str, Any]) -> Dict[str, Any]:
         score = next((_num(s.get("score")) for s in scanners if _num(s.get("score")) is not None), None)
     price, volume = _num(mkt.get("price")), _num(mkt.get("volume"))
     meta = (breakout or {}).get("meta") or {}
+    rmeta = rec.get("research_metadata") or {}
+    rowf = rmeta.get("row_features") or {}
+    ema = str(rowf.get("ema_cross") or "").strip().lower()
     return {
         "score": score,
         "rvol": _num(ind.get("rvol")),
@@ -209,7 +218,22 @@ def features(rec: Dict[str, Any]) -> Dict[str, Any]:
         "gap_down": ("gap_down" in names) if scanners else None,
         "unusual_vol": ("unusual_vol" in names) if scanners else None,
         "momentum": ("momentum" in names) if scanners else None,
+        "breakout_pos_20d": _num(rowf.get("breakout_pos_20d")),
+        "trend_10d_pct": _num(rowf.get("trend_10d_pct")),
+        "trend_20d_pct": _num(rowf.get("trend_20d_pct")),
+        "dollar_vol_20": _num(rowf.get("dollar_vol_20")),
+        "rsi_14": _num(rmeta.get("rsi_14")),
+        "ema_golden": {"golden": True, "death": False}.get(ema),
     }
+
+
+def market_regime(rec: Dict[str, Any]) -> Optional[str]:
+    """Point-in-time regime label: market_context first, then the Run 60
+    research_metadata label captured from SPY at scan time. Never reconstructed."""
+    v = (rec.get("market_context") or {}).get("market_regime")
+    if not v:
+        v = (rec.get("research_metadata") or {}).get("market_regime_at_observation")
+    return str(v) if v else None
 
 
 def tier(rec: Dict[str, Any]) -> Optional[str]:
@@ -282,7 +306,7 @@ def build_records(observations: Sequence[Dict[str, Any]],
                 "horizon": h, "raw": raw, "dr": dr, "dr_source": src,
                 "mfe": _num(oc.get("mfe")), "mae": _num(oc.get("mae")),
                 "features": feats, "tier": tier(rec),
-                "regime": (rec.get("market_context") or {}).get("market_regime"),
+                "regime": market_regime(rec),
             })
     return {"records": records, "dropped_overlap": dropped, "transform": transform}
 
@@ -822,9 +846,9 @@ def regime(primary: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     share = present / len(prim) if prim else 0.0
     if not prim or share < CRITERIA["regime_min_presence"]:
         return {"verdict": "REGIME ANALYSIS UNAVAILABLE", "present_share": round(share, 4),
-                "reason": ("market_context.market_regime is not populated at capture "
-                           "(scheduler passes no point-in-time regime); not reconstructed "
-                           "to avoid leakage")}
+                "reason": ("point-in-time regime is on too few observations (captured "
+                           "from SPY at scan time since Run 60); not reconstructed for "
+                           "older rows to avoid leakage")}
     by_h = {h: {g: summarize([r for r in _by(primary, horizon=h) if r["regime"] == g])
                 for g in sorted({r["regime"] for r in prim})} for h in HORIZONS}
     return {"verdict": "AVAILABLE", "present_share": round(share, 4), "by_horizon": by_h}
@@ -973,8 +997,10 @@ def run56_recommendation(ready: Dict[str, Any], verdict: Dict[str, Any], mono: D
     integrity = {"point_in_time", "conflicting_outcomes", "invalid_values"}
     useful = sorted([f for f, v in {**feats["numeric"], **feats["flags"]}.items()
                      if v["classification"] in ("USEFUL", "INVERSE")])
-    notes = ["Parts 4 and 8 (tiers, conflicts, EMA/RSI/PreBreakout) cannot be evaluated "
-             "until the scheduled capture persists those point-in-time fields."]
+    notes = ["Part 4 (Day Trader tiers, conflicts) and PreBreakout cannot be evaluated "
+             "until the scheduled capture persists those point-in-time fields. "
+             "RSI-14 and market regime are captured from Run 60 on and need ~20 "
+             "trading days of new scans before they resolve."]
     if integrity & set(ready["failed_gates"]):
         code, name = "G", "INVESTIGATE_DATA_QUALITY"
         why = "integrity gate failed: " + ", ".join(sorted(integrity & set(ready["failed_gates"])))

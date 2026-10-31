@@ -345,3 +345,49 @@ class ScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Run60FeatureTests(unittest.TestCase):
+    """Run 60: the analysis reads the Run 57 research_metadata it used to ignore."""
+
+    def _with_meta(self, rowf=None, **meta):
+        o = _obs("x1", "AAA", CANDIDATE, "run1", score=50.0)
+        o["research_metadata"] = {"row_features": rowf or {}, **meta}
+        return o
+
+    def test_saved_row_features_become_features(self):
+        f = se.features(self._with_meta(
+            {"breakout_pos_20d": 0.97, "trend_10d_pct": 4.2, "trend_20d_pct": 8.1,
+             "dollar_vol_20": 3e7, "ema_cross": "Golden"}, rsi_14=63.5))
+        self.assertEqual((f["breakout_pos_20d"], f["trend_10d_pct"], f["trend_20d_pct"]),
+                         (0.97, 4.2, 8.1))
+        self.assertEqual((f["dollar_vol_20"], f["rsi_14"]), (3e7, 63.5))
+        self.assertIs(f["ema_golden"], True)
+        self.assertIs(se.features(self._with_meta({"ema_cross": "Death"}))["ema_golden"], False)
+
+    def test_missing_metadata_is_none_not_zero(self):
+        f = se.features(_obs("x1", "AAA", CANDIDATE, "run1", score=50.0))
+        for k in ("breakout_pos_20d", "trend_10d_pct", "rsi_14", "ema_golden"):
+            self.assertIsNone(f[k])
+
+    def test_every_listed_feature_is_extracted(self):
+        f = se.features(self._with_meta())
+        for k in se.NUMERIC_FEATURES + se.FLAG_FEATURES:
+            self.assertIn(k, f)
+        self.assertNotIn("rs_vs_spy", se.NUMERIC_FEATURES)
+
+    def test_regime_falls_back_to_research_metadata(self):
+        o = self._with_meta(market_regime_at_observation="SPY_ABOVE_SMA20")
+        self.assertEqual(se.market_regime(o), "SPY_ABOVE_SMA20")
+        o["market_context"]["market_regime"] = "RISK-ON"
+        self.assertEqual(se.market_regime(o), "RISK-ON")
+        self.assertIsNone(se.market_regime(_obs("x2", "B", CANDIDATE, "run1", score=1.0)))
+
+    def test_saved_feature_is_diagnosed(self):
+        obs, outs = _dataset(runs=20, seed=7)
+        for o in obs:
+            o["research_metadata"] = {"row_features": {"breakout_pos_20d": 0.95}}
+        rep = se.analyze(obs, outs, now=NOW)
+        self.assertIn("breakout_pos_20d", rep["features"]["numeric"])
+        self.assertGreater(rep["features"]["numeric"]["breakout_pos_20d"]
+                           ["by_horizon"]["+60m"]["n"], 0)
