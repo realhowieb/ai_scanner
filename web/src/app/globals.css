@@ -313,6 +313,10 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .form-error .field-error { display: block; }
 .login { gap: 16px; }
 .login-links { text-align: center; }
+.auth-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.auth-home { font-size: 14px; color: var(--text-2); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.auth-home:hover, .auth-home:focus-visible { color: var(--text); text-decoration: underline; }
+.brand-lg:hover { opacity: 0.85; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .progress { display: flex; gap: 16px; align-items: center; }
 .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--raise); border-top-color: var(--accent); animation: spin 1s linear infinite; flex: 0 0 auto; }

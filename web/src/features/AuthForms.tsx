@@ -40,7 +40,10 @@ const errorOf = (o: Outcome) => (o.status === 0 ? String(o.body?.detail) : messa
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="card narrow login">
-      <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
+      <div className="auth-head">
+        <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
+        <Link href="/" className="auth-home">&larr; Back to home</Link>
+      </div>
       <h1 className="h1">{title}</h1>
       {children}
     </div>

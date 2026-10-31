@@ -22,6 +22,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sign-up and account recovery pages", () => {
+  it("every auth page has a way back to the home page", () => {
+    for (const page of [<SignupForm key="s" />, <ForgotPasswordForm key="f" />, <ResetPasswordForm key="r" />, <VerifyEmail key="v" />]) {
+      const { unmount } = render(page);
+      expect(screen.getByRole("link", { name: "HSFinest.AI home" })).toHaveAttribute("href", "/");
+      expect(screen.getByRole("link", { name: /Back to home/ })).toHaveAttribute("href", "/");
+      unmount();
+    }
+  });
+
   it("sign-up: needs matching passwords and the agreement, shows the API's rule, then opens Today", async () => {
     const answers = [jsonResponse({ detail: "Password must be at least 10 characters." }, 400),
       jsonResponse({ ok: true, email: "a@b.co", verification_sent: true }, 201)];
