@@ -840,6 +840,67 @@ def time_of_day(explicit_records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             "n_by_bucket_primary": populated, "by_horizon": by_h}
 
 
+# ---- Run 61 pre-registered confirmation (fixed 2026-10-31, before its data) ----
+# Run 55's time-of-day split (run 41224887346) found CANDIDATE beat CONTROL at
+# +60m in the 12:00-14:00 ET bucket (+0.118%, cluster CI [+0.018%, +0.221%]) and
+# lose in 09:30-10:30 (-0.265%). That came from slicing 7 buckets, so it is only
+# a lead. This test re-asks the one midday question on observations captured
+# AFTER registration only. Do not edit these values once the epoch has data.
+MIDDAY_TEST: Dict[str, Any] = {
+    "name": "run61_midday_confirmation",
+    "registered_at": "2026-10-31",
+    "epoch_start_utc": "2026-11-02T00:00:00+00:00",
+    "bucket": "12:00-14:00",
+    "secondary_bucket": "09:30-10:30",
+    "horizon": "+60m",
+    "comparison": "CANDIDATE - CONTROL directional return, winsorized as Run 55",
+    "min_scan_runs": 20,
+    "min_n_per_arm": 300,
+    "min_effect": 0.0005,  # +0.05% point estimate
+    "min_same_sign_horizons": 3,
+    "rule": ("CONFIRMED when, at +60m in the 12:00-14:00 ET bucket, the cluster-bootstrap "
+             "95% CI of CANDIDATE - CONTROL is entirely above 0, the point estimate is "
+             ">= +0.05%, and the estimate is positive at >= 3 of 4 horizons. REVERSED when "
+             "the +60m CI is entirely below 0. Otherwise NOT_CONFIRMED. PENDING until the "
+             "epoch has >= 20 scan runs and >= 300 per arm in the bucket. The 09:30-10:30 "
+             "comparison is reported only and decides nothing."),
+}
+
+
+def midday_confirmation(explicit_records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Run 61 confirmatory test on post-registration observations only."""
+    t = MIDDAY_TEST
+    start = _parse_dt(t["epoch_start_utc"])
+    epoch = [r for r in explicit_records if r.get("anchor") is not None and r["anchor"] >= start]
+    by_h = {}
+    for h in HORIZONS:
+        b = _by(epoch, horizon=h, tod=t["bucket"])
+        by_h[h] = compare(_by(b, cohort=CANDIDATE), _by(b, cohort=CONTROL))
+    sec = _by(epoch, horizon=t["horizon"], tod=t["secondary_bucket"])
+    secondary = compare(_by(sec, cohort=CANDIDATE), _by(sec, cohort=CONTROL))
+    p = by_h[t["horizon"]]
+    runs = len({r["scan_run"] for r in _by(epoch, horizon=t["horizon"], tod=t["bucket"])})
+    min_n = min(p["a_n"], p["b_n"])
+    lo, hi = p.get("diff_mean_ci") or (None, None)
+    pos = sum(1 for h in HORIZONS if (by_h[h].get("diff_mean") or 0) > 0)
+    if runs < t["min_scan_runs"] or min_n < t["min_n_per_arm"] or lo is None:
+        verdict = "PENDING"
+        why = (f"{runs}/{t['min_scan_runs']} scan runs, min arm n {min_n}/{t['min_n_per_arm']} "
+               f"in {t['bucket']} since {t['epoch_start_utc'][:10]}")
+    elif hi < 0:
+        verdict, why = "REVERSED", f"+60m CI entirely below 0 [{lo:+.4%}, {hi:+.4%}]"
+    elif lo > 0 and p["diff_mean"] >= t["min_effect"] and pos >= t["min_same_sign_horizons"]:
+        verdict = "CONFIRMED"
+        why = (f"+60m {p['diff_mean']:+.4%} CI [{lo:+.4%}, {hi:+.4%}], "
+               f"positive at {pos}/4 horizons, {runs} scan runs")
+    else:
+        verdict = "NOT_CONFIRMED"
+        why = (f"+60m {p['diff_mean']:+.4%} CI [{lo:+.4%}, {hi:+.4%}], "
+               f"positive at {pos}/4 horizons, {runs} scan runs")
+    return {"test": t, "verdict": verdict, "reason": why, "scan_runs": runs,
+            "by_horizon": by_h, "secondary": secondary}
+
+
 def regime(primary: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     prim = _by(primary, horizon=PRIMARY_HORIZON)
     present = sum(1 for r in prim if r["regime"])
@@ -1038,6 +1099,7 @@ def analyze(observations: Sequence[Dict[str, Any]],
     tiers = tier_effectiveness(primary)
     dirn = direction_analysis(primary, built["transform"])
     tod = time_of_day(records)
+    midday = midday_confirmation(records)
     reg = regime(primary)
     feats = feature_diagnostics(primary)
     spec = dict(mono["bucket_spec"])
@@ -1058,6 +1120,7 @@ def analyze(observations: Sequence[Dict[str, Any]],
         "tiers": tiers,
         "direction": dirn,
         "time_of_day": tod,
+        "midday_confirmation": midday,
         "regime": reg,
         "features": feats,
         "excursions": exc,
