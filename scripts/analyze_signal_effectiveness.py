@@ -201,6 +201,18 @@ def render_markdown(r: Dict[str, Any]) -> str:
         L.append(_cmp_row(f"{lab}: CAND − CTRL", prim[lab]["candidate_minus_control"]))
     L.append("")
 
+    md = r.get("midday_confirmation")
+    if md:
+        L += ["### Run 61 pre-registered midday confirmation", "",
+              f"**{md['verdict']}** — {md['reason']}", "",
+              f"Rule (fixed {md['test']['registered_at']}): {md['test']['rule']}", "",
+              _CMP_HDR[0], _CMP_HDR[1]]
+        for h in HORIZONS:
+            L.append(_cmp_row(f"{md['test']['bucket']} {h}: CAND − CTRL", md["by_horizon"][h]))
+        L.append(_cmp_row(f"{md['test']['secondary_bucket']} {md['test']['horizon']} (reported only)",
+                          md["secondary"]))
+        L.append("")
+
     reg = r["regime"]
     L += ["## 9. Market regime", "", f"**{reg['verdict']}** (point-in-time regime present on "
           f"{_rate(reg['present_share'])} of primary observations). {reg.get('reason', '')}", ""]
@@ -307,6 +319,14 @@ def main() -> int:
           f"matured={rd['matured_observations']} readiness={rd['verdict']}")
     print(f"VERDICT: {v['verdict']} ({v['evidence_quality']}) — {v['reason']}")
     print(f"RUN 56: {report['run56']['code']}. {report['run56']['action']}")
+    md = report.get("midday_confirmation") or {}
+    if md:
+        print(f"RUN 61 MIDDAY: {md['verdict']} — {md['reason']}")
+    feats = report.get("features") or {}
+    leads = [f"{k}={v['classification']}" for k, v in
+             {**feats.get("numeric", {}), **feats.get("flags", {})}.items()
+             if v.get("classification") in ("USEFUL", "INVERSE")]
+    print(f"FEATURE LEADS: {', '.join(leads) or 'none'}")
     return 0
 
 

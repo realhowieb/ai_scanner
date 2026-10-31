@@ -391,3 +391,65 @@ class Run60FeatureTests(unittest.TestCase):
         self.assertIn("breakout_pos_20d", rep["features"]["numeric"])
         self.assertGreater(rep["features"]["numeric"]["breakout_pos_20d"]
                            ["by_horizon"]["+60m"]["n"], 0)
+
+
+class Run61MiddayTests(unittest.TestCase):
+    """Run 61: pre-registered midday confirmation on post-registration data only."""
+
+    def _data(self, *, start, edge, runs=24, n=20, seed=3):
+        rng = np.random.default_rng(seed)
+        obs, outs = [], {}
+        day = 0
+        for r in range(runs):
+            d = start + dt.timedelta(days=day)
+            while d.weekday() >= 5:
+                day += 1
+                d = start + dt.timedelta(days=day)
+            day += 1
+            ts = d.isoformat()
+            run = f"m{r:03d}"
+            for cohort, mu in ((CANDIDATE, edge), (CONTROL, 0.0)):
+                for i in range(n):
+                    oid = f"{run}-{cohort}-{i}"
+                    obs.append(_obs(oid, f"{cohort[:2]}{i}", cohort, run, ts=ts,
+                                    score=50.0 if cohort == CANDIDATE else None))
+                    outs[oid] = [_oc(oid, h, float(mu + rng.normal(0, 0.002)), ts=ts)
+                                 for h in se.HORIZONS]
+        return obs, outs
+
+    # 17:05 UTC in November (EST) = 12:05 ET, inside the 12:00-14:00 bucket.
+    EPOCH = dt.datetime(2026, 11, 2, 17, 5, tzinfo=dt.timezone.utc)
+
+    def test_confirmed_on_post_registration_midday_edge(self):
+        obs, outs = self._data(start=self.EPOCH, edge=0.003)
+        md = se.analyze(obs, outs, now=dt.datetime(2026, 12, 15, tzinfo=dt.timezone.utc))["midday_confirmation"]
+        self.assertEqual(md["verdict"], "CONFIRMED", md["reason"])
+        self.assertGreaterEqual(md["scan_runs"], 20)
+
+    def test_not_confirmed_without_edge(self):
+        obs, outs = self._data(start=self.EPOCH, edge=0.0)
+        md = se.analyze(obs, outs, now=dt.datetime(2026, 12, 15, tzinfo=dt.timezone.utc))["midday_confirmation"]
+        self.assertIn(md["verdict"], ("NOT_CONFIRMED", "REVERSED"))
+
+    def test_reversed_on_negative_edge(self):
+        obs, outs = self._data(start=self.EPOCH, edge=-0.003)
+        md = se.analyze(obs, outs, now=dt.datetime(2026, 12, 15, tzinfo=dt.timezone.utc))["midday_confirmation"]
+        self.assertEqual(md["verdict"], "REVERSED")
+
+    def test_pre_registration_data_never_counts(self):
+        # Same strong edge, but captured in October (before the epoch): EDT, 16:05 UTC = 12:05 ET.
+        obs, outs = self._data(start=dt.datetime(2026, 9, 1, 16, 5, tzinfo=dt.timezone.utc), edge=0.003)
+        md = se.analyze(obs, outs, now=NOW)["midday_confirmation"]
+        self.assertEqual(md["verdict"], "PENDING")
+        self.assertEqual(md["scan_runs"], 0)
+
+    def test_pending_until_enough_runs(self):
+        obs, outs = self._data(start=self.EPOCH, edge=0.003, runs=8)
+        md = se.analyze(obs, outs, now=dt.datetime(2026, 12, 15, tzinfo=dt.timezone.utc))["midday_confirmation"]
+        self.assertEqual(md["verdict"], "PENDING")
+
+    def test_rule_is_frozen(self):
+        t = se.MIDDAY_TEST
+        self.assertEqual((t["registered_at"], t["epoch_start_utc"], t["bucket"], t["horizon"]),
+                         ("2026-10-31", "2026-11-02T00:00:00+00:00", "12:00-14:00", "+60m"))
+        self.assertEqual((t["min_scan_runs"], t["min_n_per_arm"], t["min_effect"]), (20, 300, 0.0005))
