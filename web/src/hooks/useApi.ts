@@ -44,7 +44,11 @@ function syncOwner(): void {
 }
 
 if (typeof window !== "undefined") {
-  syncOwner();
+  // The cache is empty at module load, so just note whose tab this is. Calling clearApiCache
+  // here would move `generation` off 0 before hydration: every useApi mounted during
+  // hydration would start with the server snapshot (0), then re-render with 1, cancelling
+  // and resending its first request (the doubled /v1/me, tape and founding on a hard load).
+  cacheOwner = readCachedMe()?.email ?? null;
   subscribeCachedMe(syncOwner);
 }
 

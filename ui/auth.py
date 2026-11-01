@@ -352,7 +352,7 @@ def auth_ui():
                 st.write("- ✔️ HSF Score and basic Stock Intelligence for current opportunities")
                 st.write("- ✔️ Market discovery, watchlists and one in-app alert on desktop or phone")
                 st.write("- ✔️ No credit card required")
-                st.caption("Pro adds monitoring, email alerts, interactive results, exports and history.")
+                st.caption("Pro adds monitoring, email alerts, CSV export and scan history.")
 
             st.caption("🔐 Passwords are securely encrypted. We never store plain-text passwords.")
 

@@ -183,6 +183,6 @@ def render_sidebar_upgrade_card(
         )
         _upgrade_button("Upgrade to Pro", "pro", "upgrade_to_pro")
         st.caption(
-            "Pro adds monitoring and investigation: 5 alerts, email delivery, interactive results, exports and history."
+            "Pro adds monitoring and investigation: 5 alerts, email delivery, CSV export and scan history."
         )
         st.page_link("pages/billing.py", label="Compare all plans")
