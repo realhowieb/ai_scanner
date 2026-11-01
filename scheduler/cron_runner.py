@@ -951,7 +951,8 @@ def _refresh_earnings() -> None:
 
     universe = _dedupe([*_load_universe("SP500"), *_load_universe("NASDAQ")])
     print(f"[earnings] refreshing {len(universe)} symbols (FMP -> Finnhub, bulk)")
-    result = populate_earnings_calendar(universe, use_yf_fallback=False, sleep_s=0)
+    result = populate_earnings_calendar(universe, use_yf_fallback=False, sleep_s=0,
+                                          include_all_bulk=True)
     found = sum(1 for info in result.values() if info.earnings_date is not None)
     print(f"[earnings] cron refresh complete: {found} dated of {len(universe)}")
     # Only mark as refreshed when we actually got dates. If all sources returned
