@@ -1,13 +1,13 @@
 """Research polish (2026-11-01): a quote's daily-bar fallback is labelled, saved Scanner views
 keep the price and relative-volume filters, and plan copy matches what the web app has."""
+import importlib.util
 import unittest
 from unittest import mock
 
-import pytest
-
-pytest.importorskip("fastapi")
+HAS_API = all(importlib.util.find_spec(m) for m in ("fastapi", "pydantic", "pandas"))
 
 
+@unittest.skipUnless(HAS_API, "needs fastapi, pydantic and pandas")
 class QuoteSourceTests(unittest.TestCase):
     def _quotes(self, snaps):
         from api import scans
@@ -35,6 +35,7 @@ class QuoteSourceTests(unittest.TestCase):
         self.assertEqual(LatestQuote(last=1.0, source="daily_bar").source, "daily_bar")
 
 
+@unittest.skipUnless(HAS_API, "needs fastapi, pydantic and pandas")
 class SavedViewTests(unittest.TestCase):
     def test_price_and_rvol_round_trip_and_default_for_old_views(self):
         from pydantic import ValidationError
