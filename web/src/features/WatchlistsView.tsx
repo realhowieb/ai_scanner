@@ -31,6 +31,22 @@ import { WatchlistAINote } from "./WatchlistAINote";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 
 const NOTE_MAX = 500;
+/** GET /v1/quotes answers at most this many tickers per request. */
+export const QUOTE_CHUNK = 50;
+type LatestQuotes = Schemas["LatestQuotes"];
+
+/** Latest trades for every ticker: one /v1/quotes request per 50 (sorted, so each piece is
+ * shared by the API's quote cache), merged. A piece that fails leaves its tickers on the scan
+ * price, labelled as such; only when every piece fails is the error shown. */
+export async function watchlistQuotes(tickers: string[], signal: AbortSignal): Promise<LatestQuotes> {
+  const pieces: string[][] = [];
+  for (let i = 0; i < tickers.length; i += QUOTE_CHUNK) pieces.push(tickers.slice(i, i + QUOTE_CHUNK));
+  const results = await Promise.allSettled(pieces.map((p) =>
+    unwrap(api.GET("/v1/quotes", { params: { query: { symbols: p.join(",") } }, signal }))));
+  const ok = results.filter((r): r is PromiseFulfilledResult<LatestQuotes> => r.status === "fulfilled");
+  if (!ok.length) throw (results[0] as PromiseRejectedResult).reason;
+  return { quotes: Object.assign({}, ...ok.map((r) => r.value.quotes ?? {})), feed: ok.find((r) => r.value.feed)?.value.feed ?? null };
+}
 const tone = (v: number | null | undefined) => ((v ?? 0) > 0 ? "up" : (v ?? 0) < 0 ? "down" : "");
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 
@@ -315,9 +331,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   }, [legacy, detail.data, scan.data]);
   const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
   const daily = bars.data;
-  const tickerKey = [...new Set((detail.data?.items ?? []).map((i) => i.ticker))].sort().slice(0, 50).join(",");
-  const quotes = useApi(tickerKey ? `wl-quotes:${tickerKey}` : null, (signal) =>
-    unwrap(api.GET("/v1/quotes", { params: { query: { symbols: tickerKey } }, signal })));
+  const tickerKey = [...new Set((detail.data?.items ?? []).map((i) => i.ticker))].sort().join(",");
+  const quotes = useApi(tickerKey ? `wl-quotes:${tickerKey}` : null, (signal) => watchlistQuotes(tickerKey.split(","), signal));
   const quoteBy = quotes.data?.quotes ?? {};
   // Refresh re-reads the list (with each ticker's latest scan row), its changes, the latest
   // trades and the daily bars in place. Prices are the provider's latest trade (shared by the

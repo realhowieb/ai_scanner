@@ -50,7 +50,7 @@ class PlanCardTests(unittest.TestCase):
         c = plan_card("basic")
         self.assertEqual(c["summary"], "Discover today's market opportunities with HSF Score and basic Stock Intelligence.")
         self.assertEqual(c["cta_note"], "Pro adds monitoring and investigation: 5 alerts, email delivery, "
-                                        "interactive results, the live Day Trader, exports and history.")
+                                        "the live Day Trader, CSV export and scan history.")
 
     def test_every_claim_is_backed_by_the_entitlements_of_that_tier(self):
         from ui.app_session import ALERT_LIMIT_BY_TIER
@@ -72,6 +72,11 @@ class PlanCardTests(unittest.TestCase):
             blob = " ".join(str(v) for v in plan_card(tier).values() if v)
             self.assertNotRegex(blob, r"\bBasic\b")
             self.assertNotIn("AI setup notes", blob)       # Run 85: notes are not AI
+            self.assertNotIn("interactive results", blob)  # Streamlit-era table, not in the web app
+
+    def test_legacy_streamlit_copy_retired(self):
+        for rel in ("ui/auth.py", "ui/account_card.py", "ui/app_runtime.py"):
+            self.assertNotIn("interactive results", (ROOT / rel).read_text(), rel)
 
     def test_account_name(self):
         self.assertEqual(account_name("", "realtest123@example.com"), "realtest123")
