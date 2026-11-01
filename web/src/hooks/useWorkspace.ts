@@ -11,9 +11,10 @@ const listeners = new Set<() => void>();
 const subscribe = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
 const snapshot = () => revision;
 
-export function useWorkspace() {
+/** `enabled: false` skips the request (a parent that already reads the preferences passes them down). */
+export function useWorkspace(enabled = true) {
   const version = useSyncExternalStore(subscribe, snapshot, () => 0);
-  return useApi("research-preferences", (signal) => unwrap(api.GET("/v1/me/research-preferences", { signal })), version);
+  return useApi(enabled ? "research-preferences" : null, (signal) => unwrap(api.GET("/v1/me/research-preferences", { signal })), version);
 }
 
 export async function saveWorkspace(body: Schemas["WorkspacePatch"]) {

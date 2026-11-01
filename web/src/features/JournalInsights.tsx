@@ -5,7 +5,7 @@
 // and source. Hidden on an API without the route; locked below Pro.
 import { insights } from "@/api/userData";
 import type { JournalInsights as Data } from "@/api/userData";
-import { Card, Locked } from "@/components/ui";
+import { Card, ErrorState, Locked } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { etTime, num, pct } from "@/lib/format";
 
@@ -79,7 +79,8 @@ export function JournalInsightsCard({ pro, version = 0 }: { pro: boolean; versio
     );
   }
   const d = res.data;
-  if (res.error || !d || typeof d.closed !== "number") return null;
+  if (res.error && !d) return <Card title="Insights" id="insights"><ErrorState error={res.error} onRetry={res.reload} what="your journal insights" /></Card>;
+  if (!d || typeof d.closed !== "number") return null;
   if (!d.summary) {
     return <Card title="Insights" id="insights"><p className="cap">Close a trade to see your win rate, average win and loss, and what works best for you.</p></Card>;
   }

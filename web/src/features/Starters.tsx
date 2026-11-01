@@ -11,6 +11,7 @@ import type { AlertRuleCreate } from "@/api/userData";
 import { Card, ErrorLine } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import type { ApiState } from "@/hooks/useApi";
 import { captureUsage } from "@/lib/usageAnalytics";
 import { useSession } from "@/session/SessionProvider";
 
@@ -59,10 +60,15 @@ export function StarterWatchlistButton({ tickers, listId, onDone, compact = fals
 type Starter = { key: string; label: string; detail: string; body: AlertRuleCreate };
 
 /** Ready-made smart alerts for an account with none. Watchlist ones need a list with tickers. */
-export function StarterAlerts({ onDone }: { onDone: (label: string) => void }) {
+export function StarterAlerts({ onDone, rules: given }: {
+  onDone: (label: string) => void;
+  /** The page's own alert-rules answer, so this card doesn't ask again when it appears. */
+  rules?: ApiState<Awaited<ReturnType<typeof alertRules.list>>>;
+}) {
   const { can } = useSession();
   const lists = useApi("watchlists", (signal) => watchlists.list(signal));
-  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
+  const own = useApi(given ? null : "alert-rules", (signal) => alertRules.list(signal));
+  const rules = given ?? own;
   const act = useAction();
   const [made, setMade] = useState<string[]>([]);
   if (!lists.data || !rules.data) return null;

@@ -220,6 +220,8 @@ button, input, select { font: inherit; color: inherit; }
 .scorebar .mono { min-width: 26px; text-align: right; }
 .tk { font-family: var(--font-mono); font-weight: 600; font-size: 15px; color: var(--text); min-width: 56px; display: inline-block; }
 a.tk:hover { color: var(--accent); }
+/* Ticker links are tap targets: at least 24px tall (WCAG 2.5.8), without changing row height. */
+a.tk { min-height: 24px; line-height: 24px; }
 .fresh { font-size: 13px; color: var(--muted); }
 .fresh.stale { color: var(--amber); }
 .rows { list-style: none; margin: 0; padding: 0; }
@@ -231,6 +233,11 @@ a.tk:hover { color: var(--accent); }
   .mix-row .mix-label { flex-basis: 96px; }
   .mix-row .mix-top { flex-basis: auto; }
   .mix-row .mix-top .cap { display: none; }
+}
+/* 320px (a small phone, or 400% zoom): the top name drops under its bar instead of overflowing. */
+@media (max-width: 360px) {
+  .mix-row { flex-wrap: wrap; row-gap: 4px; }
+  .mix-row .mix-top { flex-basis: 100%; justify-content: flex-start; }
 }
 .row:first-child { border-top: 0; }
 .move { min-width: 80px; }
@@ -379,7 +386,9 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .setup-card { gap: 8px; padding: 12px 14px; }
 .sc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sc-top .pill { flex-shrink: 0; white-space: nowrap; }
-.sc-top .tk { min-width: 0; }
+.sc-top .tk { min-width: 24px; }
+/* Phone cards: the compare box is a 24px tap target, not the browser's 13px default. */
+.sc-top input[type="checkbox"] { width: 24px; height: 24px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
 .sc-spark { margin-left: auto; }
 .sc-facts { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; }
 .sc-facts > div { display: flex; align-items: baseline; gap: 6px; }
@@ -1220,3 +1229,8 @@ a.chip { display: inline-flex; align-items: center; }
 .wall li:not(.wall-taken) .wall-name { color: var(--muted); font-weight: 400; }
 .feedback-founder { border-left: 3px solid var(--gold); padding-left: var(--sp-2); }
 .briefing-frame { width: 100%; min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg); }
+
+@media (max-width: 400px) {
+  /* Three Scanner header buttons don't fit one row at 320px (phone or 400% zoom); wrap instead of overflowing. */
+  .page-head .scanner-actions { flex-wrap: wrap; }
+}

@@ -611,8 +611,8 @@ def _check_price(price_id: str, mode: str, interval: Optional[str], amount: Opti
 
 
 def _check_webhooks() -> dict:
-    """Is a Stripe webhook endpoint pointed at this service with the
-    three events? Restricted keys may not list endpoints; that's reported, not fatal."""
+    """Is a Stripe webhook endpoint pointed at this service with every
+    event in _WEBHOOK_EVENTS? Restricted keys may not list endpoints; that's reported, not fatal."""
     try:
         endpoints = list(stripe.WebhookEndpoint.list(limit=100).auto_paging_iter())
     except Exception as e:
