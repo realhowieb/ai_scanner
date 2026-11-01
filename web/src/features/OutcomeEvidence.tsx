@@ -277,7 +277,9 @@ export function SimilarTable({ d, what }: { d: OutcomeHorizons; what: string }) 
 
 export function SymbolEvidence({ ticker }: { ticker: string }) {
   const r = useApi(`outcomes:symbol:${ticker}`, (signal) => outcomes.symbol(ticker, signal));
-  if (r.error && !r.data) return null;   // the older context above still renders
+  // An API without /v1/outcomes: the older context below still renders. Any other failure
+  // says so under the heading, with a retry, instead of leaving the section blank.
+  if (r.error && !r.data) return r.error.status === 404 ? null : <ErrorState error={r.error} onRetry={r.reload} what={`${ticker}'s signal history`} />;
   if (!r.data) return <p className="cap">Loading this ticker&apos;s HSF record…</p>;
   if (!Array.isArray(r.data.horizons)) return null;
   return <SymbolLine d={r.data} />;

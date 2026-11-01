@@ -303,15 +303,20 @@ class IntegrationApiTests(AccountApiTestCase):
             self.assertEqual(r.status_code, 400, r.text)
             self.assertIn("security check", r.json()["detail"])
             ok = mock.Mock(status_code=200, json=lambda: {"success": True})
-            with mock.patch("httpx.Client.post", return_value=ok) as post:
+            # Patch the client that api/turnstile.py builds, not httpx.Client.post: the test
+            # client is an httpx.Client too, and newer Starlette sends requests through post.
+            with mock.patch("httpx.Client") as client_cls:
+                client_cls.return_value.post.return_value = ok
                 r = self.signup(email="c@example.com", username="c", turnstile_token="tok")
             self.assertEqual(r.status_code, 201, r.text)
-            self.assertEqual(post.call_args.kwargs["data"]["response"], "tok")
+            self.assertEqual(client_cls.return_value.post.call_args.kwargs["data"]["response"], "tok")
             bad = mock.Mock(status_code=200, json=lambda: {"success": False, "error-codes": ["invalid-input-response"]})
-            with mock.patch("httpx.Client.post", return_value=bad):
+            with mock.patch("httpx.Client") as client_cls:
+                client_cls.return_value.post.return_value = bad
                 r = self.client.post("/v1/auth/password-reset", json={"email": "c@example.com", "turnstile_token": "x"})
             self.assertEqual(r.status_code, 400)
-            with mock.patch("httpx.Client.post", side_effect=ConnectionError("cloudflare down")):
+            with mock.patch("httpx.Client") as client_cls:
+                client_cls.return_value.post.side_effect = ConnectionError("cloudflare down")
                 r = self.client.post("/v1/auth/password-reset", json={"email": "c@example.com", "turnstile_token": "x"})
             self.assertEqual(r.status_code, 202)  # fail open when Cloudflare can't be reached
 

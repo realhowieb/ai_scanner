@@ -159,7 +159,7 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
       <td><ScoreBar score={s.score} /></td>
       <td className="num mono hide-narrow">{price(s.last)}</td>
       <td className={`num mono ${s.chg_pct && s.chg_pct > 0 ? "up" : s.chg_pct && s.chg_pct < 0 ? "down" : ""}`}>{pct(s.chg_pct)}</td>
-      <td className="num mono hide-narrow">{s.rvol == null ? "--" : `${s.rvol.toFixed(1)}x`}</td>
+      <td className="num mono hide-narrow">{s.rvol == null || !Number.isFinite(s.rvol) ? "—" : `${s.rvol.toFixed(1)}x`}</td>
     </tr>
   );
 }
@@ -170,7 +170,7 @@ function Leader({ top }: { top: Today["top_setups"] }) {
   if (!leader) return null;
   return (
     <div className="leader-line">
-      <p className="body-sm"><b className="mono">{leader.ticker}</b> leads the board at HSF {leader.score ?? "--"} with a {setupLabel(leader.primary_setup)} setup.</p>
+      <p className="body-sm"><b className="mono">{leader.ticker}</b> leads the board at HSF {leader.score ?? "—"} with a {setupLabel(leader.primary_setup)} setup.</p>
       <Link href={`/stocks/${encodeURIComponent(leader.ticker)}`} className="btn">Review {leader.ticker}</Link>
     </div>
   );

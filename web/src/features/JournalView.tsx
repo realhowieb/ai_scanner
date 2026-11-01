@@ -96,7 +96,10 @@ export function JournalView() {
   const j = useApi(`journal:${page}`, (signal) => unwrap(api.GET("/v1/journal", {
     params: { query: { limit: pageSize, offset: page * pageSize } }, signal,
   })));
-  const logged = () => { if (page) setPage(0); else j.reload(); };
+  // Insights re-read only after a change or an explicit refresh, not when the journal first loads.
+  const [changes, setChanges] = useState(0);
+  const refresh = () => { j.reload(); setChanges((c) => c + 1); };
+  const logged = () => { setChanges((c) => c + 1); if (page) setPage(0); else j.reload(); };
   const stats = j.data?.stats as { closed?: number; wins?: number; avg_return_pct?: number | null } | null | undefined;
   return (
     <div className="stack">
@@ -106,7 +109,7 @@ export function JournalView() {
           <p className="cap">Your logged trades and imported paper fills. Open trades are marked to available quotes. Last checked is the request time; quote times are not supplied by this response.</p>
         </div>
       </section>
-      <div className="row-actions">{j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={j.reload} />}<button type="button" className="btn" onClick={j.reload} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
+      <div className="row-actions">{j.data && <RefreshStatus updatedAt={j.updatedAt} refreshing={j.refreshing} error={j.error} onRetry={refresh} />}<button type="button" className="btn" onClick={refresh} disabled={j.loading || j.refreshing}>Refresh journal</button></div>
       <Card title="Log a trade" id="log">
         {pro ? <LogTrade onDone={logged} /> : <Locked title="Logging trades is part of Pro" plan="pro">Keep a record of your entries and exits with live marks and win rate.</Locked>}
       </Card>
@@ -114,7 +117,7 @@ export function JournalView() {
         : !j.data ? <Skeleton rows={5} label="Loading your journal" />
         : j.data.trades.length === 0 ? <Card><Empty title={page ? "No trades on this page." : "No trades logged yet."}>{page ? "Go back to an earlier page to see your trades." : "Log your first trade above, or paper trade from a stock page."}</Empty></Card>
         : (
-          <Card title="Trades" id="trades" aside={stats?.closed ? `${stats.closed} closed · ${stats.wins ?? 0} wins · avg ${pct(stats.avg_return_pct)}` : undefined}>
+          <Card title="Trades" id="trades" aside={stats?.closed ? `${stats.closed} closed · ${stats.wins ?? "—"} wins · avg ${pct(stats.avg_return_pct)}` : undefined}>
             <div className="metric-strip" aria-label="Journal summary">
               <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open on this page</span>
               <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed on this page</span>
@@ -126,13 +129,13 @@ export function JournalView() {
               <table className="table">
                 <thead><tr><th scope="col">Ticker</th><th scope="col" className="num">Shares</th><th scope="col" className="num">Entry</th>
                   <th scope="col" className="num">Mark / exit</th><th scope="col" className="num">P&amp;L</th><th scope="col" className="hide-narrow">When</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-                <tbody>{j.data.trades.map((t) => <Row key={t.id} t={t} pro={pro} onChanged={j.reload} />)}</tbody>
+                <tbody>{j.data.trades.map((t) => <Row key={t.id} t={t} pro={pro} onChanged={refresh} />)}</tbody>
               </table>
             </div>
             <p className="cap">Your own records, not HSF results. Not financial advice.</p>
           </Card>
         )}
-      <JournalInsightsCard pro={pro} version={j.updatedAt ?? 0} />
+      <JournalInsightsCard pro={pro} version={changes} />
       <JournalCoach />
       {(page > 0 || j.data?.has_more) && <nav className="pager" aria-label="Journal pages">
         <button type="button" className="btn" disabled={page === 0 || j.loading || j.refreshing} onClick={() => setPage((p) => p - 1)}>Previous page</button>
