@@ -10,8 +10,8 @@ TIER_NAMES = {k: PLAN_LABELS[k] for k in TIERS}
 
 UPGRADE_MESSAGES = {
     "can_export_csv": (
-        "Pro unlocks the interactive results grid and CSV export so you can select, "
-        "compare and investigate scan results efficiently."
+        "Pro adds CSV export of Scanner results, so you can take the filtered list into "
+        "your own spreadsheet."
     ),
     "can_email_alerts": ("Pro adds email delivery so HSF can notify you when an alert you created fires."),
     "can_scan_nasdaq": ("Pro adds your own Nasdaq and combined-market scans for broader discovery."),

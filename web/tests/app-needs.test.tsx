@@ -29,9 +29,9 @@ describe("landing live preview", () => {
         { ticker: "BBB", hsf_score: 84, setup: "gapper", change_pct: -0.4 }] });
     render(<LiveSetupsPreview />);
     expect(await screen.findByRole("link", { name: "AAA" })).toHaveAttribute("href", "/share/AAA");
-    expect(screen.getByText(/Live · today's top setups/)).toBeInTheDocument();
+    expect(screen.getByText("Top setups from the latest scan")).toBeInTheDocument();   // an Oct 29 scan is not "today"
     expect(screen.getByText(/\+23 more ranked setups/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "See all of today's setups free" })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: "See all ranked setups free" })).toHaveAttribute("href", "/signup");
   });
 
   it("falls back to the sample card when the API can't answer", async () => {

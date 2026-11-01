@@ -87,7 +87,7 @@ describe("Getting started", () => {
     routes["GET /v1/watchlists"] = () => [{ id: 7, name: "Today's top setups", is_default: true, symbol_count: 3 }];
     routes["POST /v1/alerts/rules"] = () => { state = checklist({ watchlist: true, alert: true }); return { id: 1 }; };
     render(<GettingStarted />);
-    const save = await screen.findByRole("button", { name: "Save today's top 3" });
+    const save = await screen.findByRole("button", { name: "Save the latest scan's top 3" });
     expect(screen.getByText("AAA, BBB, CCC")).toBeInTheDocument(); // before the click: the step then ticks and hides it
     await u.click(save);
     await screen.findByText("1 of 4 done");
