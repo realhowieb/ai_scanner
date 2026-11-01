@@ -256,7 +256,7 @@ describe("Stock Intelligence", () => {
     expect(screen.getByText("Last session")).toBeInTheDocument();
     expect(screen.getByText("vs 50-day average")).toBeInTheDocument();
     expect(screen.getByText("From 60-day high")).toBeInTheDocument();
-    expect(screen.getByText("In 3 days")).toBeInTheDocument();
+    expect(screen.getAllByText("In 3 days").length).toBeGreaterThan(0);
   });
 
   it("shows a plain state when HSF has no score at all", () => {

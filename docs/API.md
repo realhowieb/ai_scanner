@@ -178,10 +178,9 @@ Every response carries `X-Request-ID` (a client's own id is kept when it is
 JSON log line: request id, method, route template, status, milliseconds. Logs
 never include headers, bodies, query strings or tokens.
 
-Watchlists and alerts use the same tables and functions as the web app, so a
-change in one shows in the other. The web app caches watchlists for up to 2
-minutes, so a change made in the app can take that long to appear on an open
-web page.
+Watchlists and alerts use the same tables and functions as the web app
+(`web/`, which reads them through this API), so a change in one shows in the
+other the next time the page loads or refreshes.
 
 ## Security
 

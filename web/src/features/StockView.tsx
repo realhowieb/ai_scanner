@@ -122,7 +122,11 @@ function RankedAlertButton({ ticker, onAdded }: { ticker: string; onAdded: () =>
   const [done, setDone] = useState(false);
   const sym = ticker.toUpperCase();
   const has = done || (rules.data?.rules ?? []).some((r) => r.rule_type === "SETUP_APPEARED" && r.ticker === sym);
-  if (rules.error || !rules.data) return null;
+  if (rules.error && !rules.data) {
+    if (rules.error.status === 404) return null;
+    return <ErrorState error={rules.error} onRetry={rules.reload} what="your alerts" />;
+  }
+  if (!rules.data) return null;
   if (has) return <p className="cap" role="status">You&apos;ll get an alert when {sym} becomes a ranked setup. Manage it on <Link href="/alerts">Alerts</Link>.</p>;
   if (rules.data.used >= rules.data.limit) return <p className="cap">All your alerts are in use. Free one on <Link href="/alerts">Alerts</Link> to get told when {sym} gets ranked.</p>;
   const add = () => void act.run(async () => {
@@ -166,6 +170,22 @@ function UnrankedSnapshot({ s, onAlert }: { s: Stock; onAlert: () => void }) {
   );
 }
 
+/** "3 saved scan observations · none matured yet" rather than "0 reached +4%" before any outcome exists. */
+export function observationLine(ticker: string, sum: { observations?: number; matured?: number; positive?: number }): string {
+  const head = `${ticker}: ${sum.observations} saved scan observation${sum.observations === 1 ? "" : "s"}`;
+  if (sum.matured == null) return `${head} · outcome counts unavailable.`;
+  if (sum.matured === 0) return `${head} · none matured yet, so there is no outcome to report.`;
+  return `${head} · ${sum.matured} matured · ${sum.positive ?? "unavailable"} of ${sum.matured} reached +4% within 5 trading days.`;
+}
+
+/** Sample size in words, from the matured count (the same 10 / 30 / 100 cut-offs the API labels with).
+ * It describes how many observations there are, never how reliable the result is. */
+export function sampleCoverage(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "";
+  const size = n < 10 ? "too few to read" : n < 30 ? "small" : n < 100 ? "moderate" : "large (100+)";
+  return ` Sample size: ${size}; this describes how many observations there are, not how reliable the result is.`;
+}
+
 function Historical({ s, ranked }: { s: Stock; ranked: boolean }) {
   if (s.historical_locked) {
     return <Locked title="Historical research is part of Pro" plan="pro">How past HSF readings in this score range played out, how similar past setups moved over 1, 3 and 5 days, and this ticker&apos;s own record.</Locked>;
@@ -182,14 +202,14 @@ function Historical({ s, ranked }: { s: Stock; ranked: boolean }) {
       </section>
       {sum && sum.observations != null && <section aria-label="Saved ticker observations" className="stack-sm">
         <h3 className="strong">Saved ticker observations</h3>
-        <p className="body-sm">{s.ticker}: {sum.observations} saved scan observations · {sum.matured ?? "Unavailable"} matured · {sum.positive ?? "Unavailable"} reached +4% within 5 trading days.</p>
+        <p className="body-sm">{observationLine(s.ticker, sum)}</p>
         <p className="cap">Individual saved readings, including multiple readings on a day. Counts come from this ticker’s stored history, which can cover a different period from the grouped signal record. A pending reading is not a negative outcome.</p>
       </section>}
       {ctx && <section aria-label="Price outcomes by score range" className="stack-sm">
         <h3 className="strong">Price outcomes by score range</h3>
         {ctx.sufficient && ctx.positive_rate != null ? <p className="body-sm">HSF {ctx.bucket}: {Math.round(ctx.positive_rate * 100)}% reached +4% within 5 trading days · {ctx.n ?? "Unavailable"} matured observations across tickers.</p>
           : <p className="body-sm">HSF {ctx.bucket}: still building history · {ctx.n ?? "Unavailable"} matured observations.</p>}
-        <p className="cap">Measures the largest price rise over 5 trading days; a 5-day return is used when that rise is unavailable. This is not a realized trading win rate.{ctx.confidence ? ` Sample coverage: ${String(ctx.confidence).toLowerCase().replace(/\s*confidence$/, "")}.` : ""}</p>
+        <p className="cap">Measures the largest price rise over 5 trading days; a 5-day return is used when that rise is unavailable. This is not a realized trading win rate.{sampleCoverage(ctx.n)}</p>
       </section>}
       {coh && coh.follow_through_rate != null && <section aria-label="Setup persistence" className="stack-sm">
         <h3 className="strong">Setup persistence</h3>
@@ -349,7 +369,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
 
         <aside className="col-side">
           <Card title="HSF Score" id="score" source="ranking" className="score-card" aside={s.scan_at ? <SnapshotTime at={s.scan_at} archived={s.from_history} /> : undefined}>
-            {noScore ? <Empty title="No HSF Score">It needs to appear in a scan first.</Empty> : (
+            {noScore ? <Empty title="No HSF Score">{s.in_latest_scan || s.scan_at ? "Not ranked in the latest scan, so it has no current score." : "It needs to be ranked in a scan first."}</Empty> : (
               <>
                 <div className="score-ring" style={{ ["--p" as string]: `${s.hsf_score}%` }}>
                   <span className="mono">{s.hsf_score}</span>
@@ -382,7 +402,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
               <div><dt>PreBreakout <span className="cap">(model probability)</span></dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
-              <div><dt>Earnings</dt><dd className="mono">{s.earnings_days === null || s.earnings_days === undefined ? "—" : s.earnings_days === 0 ? "Today" : `in ${s.earnings_days}d`}</dd></div>
+              <div><dt>Next earnings</dt><dd>{earningsText(s.earnings_days)}</dd></div>
             </dl>
           </Card>}
 

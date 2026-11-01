@@ -162,7 +162,7 @@ describe("Watchlists", () => {
     expect(api.count("GET", /^\/v1\/watchlists\/\d+$/)).toBe(lists + 1);
     expect(api.count("GET", /^\/v1\/sparklines/)).toBe(bars + 1);
     expect(screen.getByRole("heading", { name: /Main/ })).toBeInTheDocument(); // no full reload
-    expect(screen.getByText(/Last checked .*Live prices aren't available right now/)).toBeInTheDocument();
+    expect(screen.getByText(/Last checked .*Latest trades aren't available right now, so prices are from the scan or the daily bar/)).toBeInTheDocument();
   });
 
   it("shows the latest trade for ranked and unranked tickers, and Refresh re-reads it", async () => {
@@ -175,7 +175,7 @@ describe("Watchlists", () => {
     expect(screen.queryByText("$201.50")).not.toBeInTheDocument();       // the scan price gives way to the trade
     expect(screen.getByText("$4.20")).toBeInTheDocument();
     expect(screen.getByText("last trade Oct 19, 3:59 PM ET")).toBeInTheDocument();
-    expect(screen.getByText(/Prices are the latest trade, up to a minute old\. Prices come from one exchange \(IEX\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Prices are each ticker's latest trade, with its time; HSF re-reads them about every minute\. Prices come from one exchange \(IEX\)/)).toBeInTheDocument();
     quotes.AAPL = { last: 206, chg_pct: 2.23, at: "2026-10-19T20:00:00Z" };
     const before = api.count("GET", /^\/v1\/quotes/);
     await u.click(screen.getByRole("button", { name: "Refresh prices and scores for Main" }));

@@ -6273,7 +6273,7 @@ export interface components {
         LatestQuote: {
             /**
              * At
-             * @description Time of that trade (ISO, UTC)
+             * @description Time of that trade (ISO, UTC); for source daily_bar, the bar's session start
              */
             at?: string | null;
             /**
@@ -6296,6 +6296,13 @@ export interface components {
              * @description The close the change is measured from
              */
             prev_close?: number | null;
+            /**
+             * Source
+             * @description trade: the latest trade. daily_bar: no trade was returned, so `last` is that session's daily-bar close
+             * @default trade
+             * @enum {string}
+             */
+            source: "trade" | "daily_bar";
         };
         /**
          * LatestQuotes
@@ -8778,6 +8785,20 @@ export interface components {
             min: 0 | 40 | 60 | 75;
             /** Name */
             name: string;
+            /**
+             * Price
+             * @description Scanner price band ('' = any)
+             * @default
+             * @enum {string}
+             */
+            price: "" | "u5" | "5-20" | "20-100" | "100";
+            /**
+             * Rvol
+             * @description Minimum relative volume (0 = any)
+             * @default 0
+             * @enum {unknown}
+             */
+            rvol: 0 | 1.5 | 2 | 3;
             /**
              * Signal
              * @default

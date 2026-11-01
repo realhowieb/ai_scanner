@@ -8281,7 +8281,7 @@
         "type": "null"
        }
       ],
-      "description": "Time of that trade (ISO, UTC)",
+      "description": "Time of that trade (ISO, UTC); for source daily_bar, the bar's session start",
       "title": "At"
      },
      "chg_pct": {
@@ -8324,6 +8324,16 @@
       ],
       "description": "The close the change is measured from",
       "title": "Prev Close"
+     },
+     "source": {
+      "default": "trade",
+      "description": "trade: the latest trade. daily_bar: no trade was returned, so `last` is that session's daily-bar close",
+      "enum": [
+       "trade",
+       "daily_bar"
+      ],
+      "title": "Source",
+      "type": "string"
      }
     },
     "required": [
@@ -14675,6 +14685,30 @@
       "minLength": 1,
       "title": "Name",
       "type": "string"
+     },
+     "price": {
+      "default": "",
+      "description": "Scanner price band ('' = any)",
+      "enum": [
+       "",
+       "u5",
+       "5-20",
+       "20-100",
+       "100"
+      ],
+      "title": "Price",
+      "type": "string"
+     },
+     "rvol": {
+      "default": 0,
+      "description": "Minimum relative volume (0 = any)",
+      "enum": [
+       0,
+       1.5,
+       2,
+       3
+      ],
+      "title": "Rvol"
      },
      "signal": {
       "default": "",

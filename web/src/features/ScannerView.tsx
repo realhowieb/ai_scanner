@@ -18,6 +18,7 @@ import { DEFAULT_COLUMNS, TablePreferences } from "./TablePreferences";
 import { SavedResearchViews } from "./SavedResearchViews";
 import { ScanAlertButton } from "./ScanAlert";
 import { SetupTable } from "./SetupTable";
+import { ScannerCsvButton } from "./ScannerCsv";
 
 export const SIGNALS = [
   { id: "", label: "All setups" },
@@ -93,12 +94,10 @@ export function ScannerView() {
   const band = PRICE_BANDS.find(([id]) => id === f.price)!;
   const [, , minPrice, maxPrice] = band;
   const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}:${f.price}:${f.rvol}`;
+  const filterQuery = { min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}),
+    ...(minPrice != null ? { min_price: minPrice } : {}), ...(maxPrice != null ? { max_price: maxPrice } : {}), ...(f.rvol ? { min_rvol: f.rvol } : {}) };
   const { data, error, loading, refreshing, updatedAt, reload } = useApi(key, (signal) =>
-    unwrap(api.GET("/v1/scans/latest", {
-      params: { query: { limit: f.size, offset, min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}),
-        ...(minPrice != null ? { min_price: minPrice } : {}), ...(maxPrice != null ? { max_price: maxPrice } : {}), ...(f.rvol ? { min_rvol: f.rvol } : {}) } },
-      signal,
-    })));
+    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: f.size, offset, ...filterQuery } }, signal })));
   useAutoRefresh(reload, { enabled: key !== null });
 
   const set = (patch: Record<string, string | number>) => {
@@ -192,11 +191,16 @@ export function ScannerView() {
       {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
       <div className="scanner-toolbar" role="group" aria-label="Scanner tools">
-      <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100 }}
-        onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25 }); }} />
+      <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100,
+          price: f.price, rvol: f.rvol as 0 | 1.5 | 2 | 3 }}
+        onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25,
+          price: v.price ?? "", rvol: v.rvol ?? 0 }); }} />
       <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !earningsLocked(ef, pro) ? ef.when : undefined}
         setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label}
         initial={{ min_price: minPrice, max_price: maxPrice, min_rvol: f.rvol || undefined }} />
+      {data && data.setups.length > 0 && !earnings && !lockedSignal && can("can_export_csv") && (
+        <ScannerCsvButton query={filterQuery} total={visibleTotal} scanAt={data.scan_at} premium={premium} />
+      )}
       {preferences.data && <TablePreferences key={JSON.stringify(preferences.data.table)} initial={preferences.data.table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
       </div>
 

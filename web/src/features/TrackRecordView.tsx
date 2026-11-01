@@ -11,15 +11,13 @@ import type { TrackRecordSummary } from "@/api/account";
 import type { Schemas } from "@/api/client";
 import { Card, Empty, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
-import { etDate, etTime, pct } from "@/lib/format";
+import { etDate, etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { OutcomeEvidence } from "./OutcomeEvidence";
 
 type Ranking = "breakout" | "prebreakout";
 type Day = Schemas["TrackRecordDay"];
-const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
-const numMetric = (v: unknown) => (typeof v === "number" ? v : null);
 
 const RANKINGS: { id: Ranking; label: string; note: string }[] = [
   { id: "breakout", label: "Breakout score", note: "Each saved scan's top names by Breakout score" },
@@ -140,17 +138,6 @@ function Research() {
   return (
     <>
       <p className="banner" role="note">{d.disclaimer}</p>
-      {d.summary && Object.keys(d.summary).length > 0 && (
-        <Card title="First read" id="first-read">
-          <div className="metric-strip" aria-label="Track record summary">
-            <span><strong>{metric(d.summary.best_ranking, "—")}</strong> highest observed average</span>
-            <span><strong>{numMetric(d.summary.best_horizon_days) ? `${numMetric(d.summary.best_horizon_days)}d` : "—"}</strong> horizon</span>
-            <span><strong>{pct(numMetric(d.summary.best_avg_excess_return) != null ? numMetric(d.summary.best_avg_excess_return)! * 100 : null)}</strong> excess</span>
-            <span><strong>{metric(d.summary.ready_horizons, 0)}</strong> ready</span>
-          </div>
-          <p className="cap">Selected from the available historical slices; this is not an independently validated result. Compare every horizon and its sample size below.</p>
-        </Card>
-      )}
       <section aria-label="Ranking" className="filters">
         <div className="chips" role="group" aria-label="Ranking">
           {RANKINGS.map((r) => (
@@ -205,6 +192,7 @@ function HowMeasured() {
         <div><dt>What counts as a signal</dt><dd>A ticker that appeared in an HSF scan, counted once per ticker per day, with the score and setup it had then. Records are saved at scan time and never revised.</dd></div>
         <div><dt>When an outcome is measured</dt><dd>Close-to-close return over the holding period (1, 3 or 5 trading days), compared with SPY over the same days. Signals whose period hasn&apos;t ended are pending: they are not wins or losses.</dd></div>
         <div><dt>What the HSF Score is</dt><dd>An opportunity ranking from 0 to 100. It is not a probability of profit, and these tables are not a model&apos;s training accuracy.</dd></div>
+        <div><dt>Historical description vs forward evidence</dt><dd>Everything on this page describes signals that have already happened. Sample coverage only says how many there are. Validated forward evidence would come from a test registered in advance and compared with a matched control group of stocks HSF did not pick; HSF runs that test separately and does not yet claim its signals beat that control.</dd></div>
         <div><dt>What this can&apos;t tell you</dt><dd>No costs, slippage or position sizing are included, and samples are small. Past results describe what happened; they don&apos;t predict future results.</dd></div>
       </dl>
     </details>
@@ -218,7 +206,7 @@ export function TrackRecordView() {
       <section className="page-head">
         <div>
           <h1 className="h1">Track record</h1>
-          <p className="cap">How every HSF signal did afterwards, against SPY over the same days, with sample sizes.</p>
+          <p className="cap">How every HSF signal did afterwards, against SPY over the same days, with sample sizes. A historical description, not validated forward evidence.</p>
         </div>
       </section>
       {can("can_track_record") ? (

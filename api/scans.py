@@ -670,8 +670,12 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
             prev = snap.get("prevDailyBar") or {}
             last = _num(trade.get("p"))
             at = trade.get("t") if isinstance(trade.get("t"), str) else None
+            source = "trade"
             if last is None:
+                # No trade in the snapshot: the daily bar's close, labelled as such (its `t` is
+                # the bar's session start, not a trade time).
                 last, at = _num(day.get("c")), day.get("t") if isinstance(day.get("t"), str) else None
+                source = "daily_bar"
             if last is None:
                 continue
             # Before the open, dailyBar is still the last finished session: that is the base.
@@ -682,7 +686,8 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
             opened = _num(day.get("o")) if base_bar is prev else None
             out[t] = {"last": round(last, 4), "prev_close": base,
                       "chg_pct": round((last - base) / base * 100.0, 2) if base else None,
-                      "gap_pct": round((opened - base) / base * 100.0, 2) if base and opened else None, "at": at}
+                      "gap_pct": round((opened - base) / base * 100.0, 2) if base and opened else None, "at": at,
+                      "source": source}
         feed = None
         try:
             feed = str(_get_alpaca_data_feed()).strip().lower() or None
