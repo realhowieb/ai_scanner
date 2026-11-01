@@ -220,7 +220,7 @@ export function ScannerView() {
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading || refreshing ? " dim" : ""}`} aria-busy={loading || refreshing}>
-          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks displayControls={false}
+          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks displayControls={false} prefs={preferences}
             sort={sort} onSort={(next) => set({ sort: next })} />
         </section>
       ) : null}

@@ -52,7 +52,7 @@ export const RANKED_MIN = 40;
 
 export function ScoreBadge({ score }: { score: number | null | undefined }) {
   const weak = score === null || score === undefined || score < RANKED_MIN;
-  return <span className={`score${weak ? " score-weak" : ""}`} aria-label={`HSF Score ${score ?? "unavailable"}`}>{score ?? "--"}</span>;
+  return <span className={`score${weak ? " score-weak" : ""}`} aria-label={`HSF Score ${score ?? "unavailable"}`}>{score ?? "—"}</span>;
 }
 
 export function ScoreBar({ score }: { score: number | null | undefined }) {
@@ -62,7 +62,7 @@ export function ScoreBar({ score }: { score: number | null | undefined }) {
   return (
     <div className="scorebar" data-tier={tier}>
       <div className="track" aria-hidden="true"><div className="fill" style={{ width: `${s}%` }} /></div>
-      <span className="mono strong">{score ?? "--"}</span>
+      <span className="mono strong">{score ?? "—"}</span>
     </div>
   );
 }

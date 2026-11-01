@@ -14,6 +14,7 @@ import type { AlertRule, AlertRuleType } from "@/api/userData";
 import { Card, ErrorLine, Pill, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import type { ApiState } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
 
 import { describeScanAlert } from "./ScanAlert";
@@ -75,8 +76,13 @@ function RuleRow({ r, types, scope, emailAllowed, onChanged }: {
 }
 
 /** `folded`: the form stays behind one "Add smart alert" button (stock pages, where the card sits in the side column). */
-export function SmartAlerts({ ticker, onChanged, folded = false }: { ticker?: string; onChanged?: () => void; folded?: boolean }) {
-  const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
+export function SmartAlerts({ ticker, onChanged, folded = false, rules: given }: {
+  ticker?: string; onChanged?: () => void; folded?: boolean;
+  /** The page's own alert-rules answer (Alerts), so this card doesn't ask again when it appears. */
+  rules?: ApiState<Awaited<ReturnType<typeof alertRules.list>>>;
+}) {
+  const own = useApi(given ? null : "alert-rules", (signal) => alertRules.list(signal));
+  const rules = given ?? own;
   const types = useApi("alert-rule-types", (signal) => alertRules.types(signal));
   const lists = useApi("watchlists", (signal) => watchlists.list(signal));
   const [type, setType] = useState("");

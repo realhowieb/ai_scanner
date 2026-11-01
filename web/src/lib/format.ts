@@ -1,11 +1,14 @@
+/** A number we can show. Missing, NaN and ±Infinity (a divide by zero upstream) all read "—", never as a value. */
+const shown = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+
 export function pct(v: number | null | undefined, digits = 2): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (!shown(v)) return "—";
   return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 }
 
 /** PreBreakout probability. The API sends it in percent (0–100), as PreBreakoutProb% is stored. */
 export function probPct(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (!shown(v)) return "—";
   return `${Math.round(v)}%`;
 }
 
@@ -18,17 +21,17 @@ export function probWithRank(v: number | null | undefined, rank: number | null |
 }
 
 export function price(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (!shown(v)) return "—";
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;
 }
 
 export function num(v: number | null | undefined, digits = 1): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (!shown(v)) return "—";
   return v.toFixed(digits);
 }
 
 export function compact(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (!shown(v)) return "—";
   return Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v);
 }
 
@@ -47,6 +50,7 @@ export function etTime(iso: string | null | undefined, withDate = true): string 
 export function etDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
+  if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" });
 }
 

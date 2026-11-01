@@ -181,6 +181,8 @@ export function AlertsView() {
   const data = list.data;
   const full = !!data && data.used >= data.limit;
   const smart = rules.data?.rules ?? [];
+  // The counts include HSF rules; until those load (or when they fail) they're unknown, not zero.
+  const rulesKnown = !!rules.data || (!!rules.error && typesUnavailable(rules.error.status));
   const active = (data?.alerts.filter((a) => a.enabled).length ?? 0) + smart.filter((a) => a.enabled).length;
   const paused = (data?.alerts.filter((a) => !a.enabled).length ?? 0) + smart.filter((a) => !a.enabled).length;
   const nextPlan = me?.plan === "basic" ? "pro" : me?.plan === "pro" ? "premium" : null;
@@ -191,8 +193,8 @@ export function AlertsView() {
     {created && <p className="notice" role="status">Created: {created}.</p>}
     {list.error && !data ? <ErrorState error={list.error} onRetry={list.reload} what="your alerts" /> : !data ? <Skeleton rows={6} label="Loading alerts" /> : <>
       <div className="metric-strip" aria-label="Alert summary">
-        <span><strong>{active}</strong> active</span>
-        <span><strong>{paused}</strong> paused</span>
+        <span><strong>{rulesKnown ? active : "—"}</strong> active</span>
+        <span><strong>{rulesKnown ? paused : "—"}</strong> paused</span>
         <span><strong>{data.used} / {data.limit}</strong> saved price/technical alerts (including paused)</span>
         {rules.data && <span><strong>{rules.data.used} / {rules.data.limit}</strong> active alert allowance</span>}
         <span><strong>{data.email_enabled ? "Available" : "Pro"}</strong> email delivery</span>
@@ -200,8 +202,8 @@ export function AlertsView() {
       <div className="chips" role="tablist" onKeyDown={tabKey} aria-label="Alert views">{(["activity", "rules", "delivery"] as const).map((v) =>
         <button type="button" role="tab" tabIndex={view === v ? 0 : -1} id={`alert-tab-${v}`} aria-controls={`alert-panel-${v}`} aria-selected={view === v} className="chip" key={v} onClick={() => setView(v)}>{v[0]!.toUpperCase() + v.slice(1)}</button>)}</div>
       <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"} className="stack">
-        {data.alerts.length === 0 && smart.length === 0 && rules.data && <StarterAlerts onDone={(label) => { setCreated(label); reload(); }} />}
-        <Card title="Recently fired" id="events">{events.error ? <ErrorLine error={events.error} /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="No recent triggers.">
+        {data.alerts.length === 0 && smart.length === 0 && rules.data && <StarterAlerts rules={rules} onDone={(label) => { setCreated(label); reload(); }} />}
+        <Card title="Recently fired" id="events">{events.error && !events.data ? <ErrorState error={events.error} onRetry={events.reload} what="recent alerts" /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="No recent triggers.">
           {active > 0 ? "Your alert is active; no trigger has been recorded yet."
             : paused > 0 ? "Your saved alerts are paused. View rules to manage them."
             : rules.error && !typesUnavailable(rules.error.status) ? "HSF rule status could not be loaded. View rules to retry."
@@ -216,7 +218,7 @@ export function AlertsView() {
           {rules.error && !typesUnavailable(rules.error.status) && <ErrorState error={rules.error} onRetry={rules.reload} what="HSF alert rules" />}
           {data.used > data.limit && <p className="cap">Only your newest {data.limit} alerts can fire on this plan. Delete some or upgrade.</p>}
         </Card>
-        <SmartAlerts onChanged={reload} folded />
+        <SmartAlerts onChanged={reload} folded rules={rules} />
       </section>
       <section id="alert-panel-delivery" role="tabpanel" aria-labelledby="alert-tab-delivery" hidden={view !== "delivery"} className="stack">
         <Card title="How you're notified" id="delivery"><p className="body-sm">Fired alerts appear in Activity.</p><PushToggle />

@@ -78,11 +78,14 @@ const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
 /** `sort` + `onSort` make the sortable headers buttons that ask the server for a new order. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, sort, onSort }: {
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, sort, onSort, prefs: given }: {
   rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean;
   sort?: ServerSort; onSort?: (sort: ServerSort) => void;
+  /** The page's own research preferences, so the table doesn't ask for them again once results arrive. */
+  prefs?: ReturnType<typeof useWorkspace>;
 }) {
-  const prefs = useWorkspace();
+  const own = useWorkspace(!given);
+  const prefs = given ?? own;
   const [selected, setSelected] = useState<string[]>([]);
   const table = prefs.data?.table;
   const shown = sparks ? (table?.columns ?? [...DEFAULT_COLUMNS]) : [...DEFAULT_COLUMNS];

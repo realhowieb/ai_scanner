@@ -26,7 +26,7 @@ ENV = {
 }
 GOOD_HOOK = {"url": "https://ai-scanner-h2c8.onrender.com/webhook", "status": "enabled",
              "enabled_events": ["checkout.session.completed", "customer.subscription.updated",
-                                "customer.subscription.deleted"]}
+                                "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"]}
 
 
 def _module(key="sk_test_fake", prices=None, hooks=(GOOD_HOOK,)):
@@ -99,10 +99,11 @@ class BillingPreflightTest(unittest.TestCase):
     def test_webhook_wrong_path_and_missing_events(self):
         wrong = dict(GOOD_HOOK, url="https://ai-scanner-h2c8.onrender.com/stripe/webhook")
         r = _preflight(_module(hooks=[wrong]))
-        self.assertIn("webhook: no enabled endpoint at path /webhook", r["problems"])
+        self.assertIn("webhook: no enabled endpoint at /webhook", r["problems"])
         partial = dict(GOOD_HOOK, enabled_events=["checkout.session.completed"])
         r = _preflight(_module(hooks=[partial]))
-        self.assertIn("webhook: missing events: customer.subscription.updated, customer.subscription.deleted",
+        self.assertIn("webhook: missing events: customer.subscription.updated, customer.subscription.deleted, "
+                      "invoice.paid, invoice.payment_failed",
                       r["problems"])
         self.assertTrue(_preflight(_module(hooks=[dict(GOOD_HOOK, enabled_events=["*"])]))["ok"])
 
