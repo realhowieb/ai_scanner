@@ -13,12 +13,17 @@ Notes:
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
 from db.engine import schema_once
+
+# Plain US tickers after normalization (AAPL, BRKB). Skips foreign listings the
+# bulk calendars include (e.g. 7203.T -> 7203T, which starts with a digit).
+_US_SYMBOL_RE = re.compile(r"^[A-Z]{1,6}$")
 
 
 def _norm_symbol(sym: str) -> str:
@@ -298,6 +303,7 @@ def populate_earnings_calendar(
     progress_cb=None,
     lookahead_days: int = 120,
     use_yf_fallback: bool = True,
+    include_all_bulk: bool = False,
 ) -> Dict[str, EarningsInfo]:
     """Populate / refresh earnings_calendar for given symbols.
 
@@ -310,6 +316,9 @@ def populate_earnings_calendar(
     - commit_every: commit every N rows
     - progress_cb: optional callback(progress:int, total:int, symbol:str)
     - lookahead_days: how far ahead to pull the bulk earnings window
+    - include_all_bulk: also store every US-style symbol the bulk window returns,
+      not just the ones in `symbols`. The bulk call is free, so this covers
+      NYSE names, ADRs and new listings missing from the static universe files.
 
     Returns a dict symbol -> EarningsInfo for what we attempted.
     """
@@ -334,6 +343,18 @@ def populate_earnings_calendar(
             print(f"[earnings] {source}: {len(bulk)} symbols; yfinance fills the rest")
     except Exception as exc:
         print(f"WARNING: bulk earnings window fetch failed: {exc}")
+
+    # Bulk sources key symbols as e.g. BRK-B; normalize to our DB keys (BRKB)
+    # so lookups match the universe list.
+    bulk = {_norm_symbol(k): v for k, v in bulk.items() if _norm_symbol(k)} if bulk else {}
+
+    if include_all_bulk and bulk:
+        known = set(syms)
+        extras = sorted(k for k in bulk if k not in known and _US_SYMBOL_RE.match(k))
+        if extras:
+            print(f"[earnings] adding {len(extras)} bulk-only symbols outside the universe")
+            syms = syms + extras
+            total = len(syms)
 
     with c.cursor() as cur:
         for i, sym in enumerate(syms, start=1):

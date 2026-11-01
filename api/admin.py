@@ -412,7 +412,7 @@ def _run_earnings_refresh(symbols: List[str]) -> None:
     try:
         from db.earnings import mark_earnings_refreshed_today, populate_earnings_calendar
 
-        result = populate_earnings_calendar(symbols, use_yf_fallback=False, sleep_s=0)
+        result = populate_earnings_calendar(symbols, use_yf_fallback=False, sleep_s=0, include_all_bulk=True)
         dated = sum(1 for info in (result or {}).values() if getattr(info, "earnings_date", None) is not None)
         if dated:
             mark_earnings_refreshed_today("cron_earnings")
