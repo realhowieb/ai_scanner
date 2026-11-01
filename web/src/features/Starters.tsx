@@ -38,7 +38,7 @@ export function StarterWatchlistButton({ tickers, listId, onDone, compact = fals
   if (compact) return (
     <div className="stack-xs gs-quick">
       <button type="button" className="btn btn-primary btn-sm" onClick={start} disabled={act.busy}>
-        {act.busy ? "Adding…" : `Save today's top ${picks.length}`}
+        {act.busy ? "Adding…" : `Save the latest scan's top ${picks.length}`}
       </button>
       <p className="cap">{picks.join(", ")}</p>
       <ErrorLine error={act.error} />
@@ -48,7 +48,7 @@ export function StarterWatchlistButton({ tickers, listId, onDone, compact = fals
     <div className="stack-sm">
       <div className="row-actions">
         <button type="button" className="btn btn-primary" onClick={start} disabled={act.busy}>
-          {act.busy ? "Adding…" : `Start with today's top ${picks.length}`}
+          {act.busy ? "Adding…" : `Start with the latest scan's top ${picks.length}`}
         </button>
       </div>
       <p className="cap">Adds {picks.join(", ")} from the latest scan. Remove any you don&apos;t want.</p>
@@ -166,7 +166,7 @@ export function StarterSetupButton({ onDone }: { onDone: () => void }) {
   return (
     <div className="gs-setup stack-xs">
       <p className="strong">Set me up in one tap</p>
-      <p className="cap">Saves today&apos;s top {picks.length} ({picks.join(", ")}) to a watchlist and alerts you when any of them reaches HSF 75. Change or remove either anytime.</p>
+      <p className="cap">Saves the latest scan&apos;s top {picks.length} ({picks.join(", ")}) to a watchlist and alerts you when any of them reaches HSF 75. Change or remove either anytime.</p>
       <div className="row-actions">
         <button type="button" className="btn btn-primary" onClick={start} disabled={act.busy}>
           {act.busy ? "Setting up…" : "Set me up"}

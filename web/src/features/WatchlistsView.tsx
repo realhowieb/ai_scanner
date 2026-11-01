@@ -168,7 +168,12 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
   const [threshold, setThreshold] = useState("");
   const add = useAction();
   const rm = useAction();
-  if (rules.error || types.error || !rules.data || !types.data) return null; // an API without rules: no card
+  const failed = rules.error ?? types.error;
+  if (failed && failed.status === 404) return null; // an API without rules: no card
+  if (failed && !(rules.data && types.data)) {
+    return <Card title="Alerts on this list" id="wl-rules"><ErrorState error={failed} onRetry={() => { rules.reload(); types.reload(); }} what="alerts on this list" /></Card>;
+  }
+  if (!rules.data || !types.data) return null;
   const available = types.data.filter((t) => t.available && t.scope !== "market");
   const spec = available.find((t) => t.type === type) ?? available[0];
   if (!spec) return null;
@@ -216,6 +221,14 @@ function WatchlistRules({ wl, onChanged }: { wl: number; onChanged: () => void }
       <p className="cap">{spec.description} Checked after each market scan; fired alerts show on <Link href="/alerts">Alerts</Link>.</p>
     </Card>
   );
+}
+
+/** What the price column is. A trade's own time is shown per row: on a weekend or holiday the
+ * latest trade can be days old even though the API re-reads it about every minute. */
+export function priceNote(hasQuotes: boolean, loading: boolean, feed = ""): string {
+  if (hasQuotes) return `Prices are each ticker's latest trade, with its time; HSF re-reads them about every minute.${feed} Scores change when a new scan runs.`;
+  if (loading) return "Loading the latest trades. Scores change when a new scan runs.";
+  return "Latest trades aren't available right now, so prices are from the scan or the daily bar, as labelled on each row. Scores change when a new scan runs.";
 }
 
 type Change = Schemas["WatchlistChange"];
@@ -369,8 +382,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
             )}
             <div className="wl-status">
               <RefreshStatus updatedAt={detail.updatedAt} refreshing={refreshing} error={detail.error} onRetry={refresh}
-                sourceNote={hasQuotes ? `Prices are the latest trade, up to a minute old.${feed} Scores change when a new scan runs.`
-                  : "Live prices aren't available right now; daily-bar prices can be up to 15 minutes old. Scores change when a new scan runs."} />
+                sourceNote={priceNote(hasQuotes, quotes.loading && !quotes.data, feed)} />
             </div>
             <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
               {refreshing ? "Refreshing…" : "Refresh"}
@@ -410,7 +422,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                       <>
                         <span className="mono">{price(q.last)}</span>
                         <span className={`mono ${tone(q.chg_pct)}`}>{pct(q.chg_pct)}</span>
-                        <span className="cap">{q.at ? `last trade ${etTime(q.at)}` : "latest trade"}</span>
+                        <span className="cap">{q.source === "daily_bar" ? `daily close${q.at ? ` ${shortDate(q.at)}` : ""} · no recent trade` : q.at ? `last trade ${etTime(q.at)}` : "latest trade"}</span>
                       </>
                     ) : s ? (
                       <>

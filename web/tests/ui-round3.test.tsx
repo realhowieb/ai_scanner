@@ -89,7 +89,7 @@ describe("Starters", () => {
     const done = vi.fn();
     const u = userEvent.setup();
     render(<StarterWatchlistButton tickers={["AAA", "BBB", "CCC"]} onDone={done} />);
-    await u.click(screen.getByRole("button", { name: "Start with today's top 3" }));
+    await u.click(screen.getByRole("button", { name: "Start with the latest scan's top 3" }));
     await waitFor(() => expect(done).toHaveBeenCalledWith(7));
     expect(posted("/v1/watchlists")).toEqual([{ name: "Today's top setups", make_default: true }]);
     expect(posted("/v1/watchlists/7/tickers")).toEqual([{ tickers: ["AAA", "BBB", "CCC"] }]);
@@ -99,7 +99,7 @@ describe("Starters", () => {
     routes["POST /v1/watchlists/4/tickers"] = () => ({ added: 1 });
     const u = userEvent.setup();
     render(<StarterWatchlistButton tickers={["AAA"]} listId={4} onDone={() => undefined} />);
-    await u.click(screen.getByRole("button", { name: "Start with today's top 1" }));
+    await u.click(screen.getByRole("button", { name: "Start with the latest scan's top 1" }));
     await waitFor(() => expect(posted("/v1/watchlists/4/tickers")).toHaveLength(1));
     expect(posted("/v1/watchlists")).toHaveLength(0);
   });

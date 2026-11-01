@@ -101,7 +101,7 @@ function SummaryCard({ s }: { s: OutcomeSummary }) {
 
 /** Median excess return vs SPY per score range on one zero line; bar height follows the
  * sample size, and thin samples are faded, so a lucky 2-signal bucket can't read as a result. */
-export function ScoreLadder({ buckets }: { buckets: OutcomeScores["buckets"] }) {
+export function ScoreLadder({ buckets, horizon = 5 }: { buckets: OutcomeScores["buckets"]; horizon?: number }) {
   const rows = buckets.filter((b) => b.median_excess_return !== null && b.median_excess_return !== undefined && Number.isFinite(b.median_excess_return));
   if (rows.length < 2) return null;
   const W = 1200, ROW = 32, TOP = 8, LABEL = 190, VAL = 80;
@@ -113,7 +113,7 @@ export function ScoreLadder({ buckets }: { buckets: OutcomeScores["buckets"] }) 
   return (
     <figure className="chart ladder">
       <svg viewBox={`0 0 ${W} ${H}`} role="img"
-        aria-label={`Median 5-day return vs SPY by HSF score range: ${rows.map((b) => `${b.bucket} ${signed(b.median_excess_return)} (n=${b.matured_count})`).join(", ")}`}>
+        aria-label={`Median ${horizon}-trading-day return vs SPY by HSF score range: ${rows.map((b) => `${b.bucket} ${signed(b.median_excess_return)} (n=${b.matured_count})`).join(", ")}`}>
         <line x1={zero} x2={zero} y1={2} y2={H - 2} className="grid-strong" />
         {rows.map((b, i) => {
           const v = b.median_excess_return as number;
@@ -141,7 +141,7 @@ function ScoresCard({ d }: { d: OutcomeScores }) {
   return (
     <Card title="By HSF score" id="scores">
       <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes.</p>
-      <ScoreLadder buckets={d.buckets} />
+      <ScoreLadder buckets={d.buckets} horizon={d.horizon ?? 5} />
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by HSF score table; scroll sideways for more columns">
         <table className="table">
           <MetricHead first="HSF score" />
@@ -240,7 +240,7 @@ export function SimilarSetups({ score, setup, setupName }: { score: number; setu
   const range = similarRange(score);
   const key = `outcomes:similar:${setup ?? ""}:${range.min_score}-${range.max_score}`;
   const r = useApi(key, (signal) => outcomes.similar({ setup, ...range }, signal));
-  if (r.error && !r.data) return null;
+  if (r.error && !r.data) return r.error.status === 404 ? null : <ErrorState error={r.error} onRetry={r.reload} what="similar past setups" />;
   if (!r.data) return <p className="cap">Loading similar past setups…</p>;
   return <SimilarTable d={r.data} what={`${setup ? `${setupName ?? setup} setups` : "HSF signals"} scoring ${range.min_score}–${range.max_score}`} />;
 }

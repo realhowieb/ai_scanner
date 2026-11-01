@@ -1031,7 +1031,8 @@ class LatestQuote(BaseModel):
     prev_close: Optional[float] = Field(default=None, description="The close the change is measured from")
     chg_pct: Optional[float] = Field(default=None, description="Percent vs prev_close")
     gap_pct: Optional[float] = Field(default=None, description="Today's open vs prev_close (null before the open)")
-    at: Optional[str] = Field(default=None, description="Time of that trade (ISO, UTC)")
+    at: Optional[str] = Field(default=None, description="Time of that trade (ISO, UTC); for source daily_bar, the bar's session start")
+    source: Literal["trade", "daily_bar"] = Field(default="trade", description="trade: the latest trade. daily_bar: no trade was returned, so `last` is that session's daily-bar close")
 
 
 class LatestQuotes(BaseModel):

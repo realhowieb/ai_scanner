@@ -57,7 +57,7 @@ def test_alert_limits_and_upgrade_copy_match_plans():
 def test_upgrade_prompts_name_correct_plan_and_user_value():
     assert required_tier("can_export_csv") == "pro"
     assert "Pro" in upgrade_message("can_export_csv")
-    assert "interactive results" in upgrade_message("can_export_csv")
+    assert "CSV export of Scanner results" in upgrade_message("can_export_csv")
     assert required_tier("can_ai_notes") == "premium"
     assert "Premium" in upgrade_message("can_ai_notes")
     assert "research workflow" in upgrade_message("can_ai_notes")

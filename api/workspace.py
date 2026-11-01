@@ -38,6 +38,8 @@ class ScannerView(StrictModel):
     min: Literal[0, 40, 60, 75] = 0
     sort: Literal["score", "chg_pct", "gap_pct", "rvol", "prob"] = "score"
     size: Literal[25, 50, 100] = 25
+    price: Literal["", "u5", "5-20", "20-100", "100"] = Field(default="", description="Scanner price band ('' = any)")
+    rvol: Literal[0, 1.5, 2, 3] = Field(default=0, description="Minimum relative volume (0 = any)")
 
 
 class CustomView(StrictModel):

@@ -291,7 +291,7 @@ export function PricingPage() {
       <main id="main" className="pub-main stack">
         <section className="stack-xs">
           <h1 className="h1">Plans and pricing</h1>
-          <p className="body-sm">Start free. Upgrade when you want your own scans, alerts by email, Day Trader, AI research or paper trading.</p>
+          <p className="body-sm">Start free with the ranked Scanner, stock pages, watchlists and your own S&amp;P 500 scans. Upgrade for Nasdaq and full-market scans, email alerts, Day Trader, the Track record, CSV export, AI research or paper trading.</p>
         </section>
         <FoundingBanner surface="pricing" />
         <PlansSection table />
