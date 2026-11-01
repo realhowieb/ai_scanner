@@ -13,14 +13,13 @@ Notes:
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
 from db.engine import schema_once
-
-import re
 
 # Plain US tickers after normalization (AAPL, BRKB). Skips foreign listings the
 # bulk calendars include (e.g. 7203.T -> 7203T, which starts with a digit).
