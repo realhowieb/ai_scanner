@@ -20,7 +20,8 @@ TTL_S = 7 * 24 * 3600
 MAX_BYTES = 2_000_000
 LIGHT_LUMA = 0.82          # mean luminance of the visible pixels above this = a light logo
 TRANSPARENT_SHARE = 0.05   # at least this share of see-through pixels = a cut-out logo
-PHOTO_COLORS = 700         # an opaque image with more distinct (4-bit) colors than this is a photo
+PHOTO_TOP_SHARE = 0.30     # an opaque image whose most common (4-bit) color covers less than this is a photo
+                           # (logos on a background: 62-95% one color; the TSEM photo: 5%)
 _PNG = b"\x89PNG\r\n\x1a\n"
 NONE: Dict[str, Any] = {"kind": "none"}
 
@@ -108,9 +109,12 @@ def classify(data: bytes) -> Dict[str, Any]:
         return NONE
     see_through = 1 - len(visible) / len(px)
     if see_through < TRANSPARENT_SHARE:
-        colors = {(r >> 4, g >> 4, b >> 4) for r, g, b, _a in px[::3]}
-        if len(colors) > PHOTO_COLORS:
-            return NONE                       # an opaque photo, not a logo
+        counts: Dict[tuple, int] = {}
+        for r, g, b, _a in px:
+            key = (r >> 4, g >> 4, b >> 4)
+            counts[key] = counts.get(key, 0) + 1
+        if max(counts.values()) / len(px) < PHOTO_TOP_SHARE:
+            return NONE                       # no background color: an opaque photo, not a logo
         return {"kind": "logo", "light": False}   # carries its own background
     luma = sum(0.2126 * r + 0.7152 * g + 0.0722 * b for r, g, b, _a in visible) / (255.0 * len(visible))
     return {"kind": "logo", "light": luma > LIGHT_LUMA}
@@ -138,7 +142,7 @@ def logo_info(ticker: str, *, fetch: Optional[Callable[[str], Optional[bytes]]] 
         return classify(data) if data else NONE
 
     try:
-        return shared_cache.cached(f"logo_info:v1:{str(ticker).upper()}", load, TTL_S,
+        return shared_cache.cached(f"logo_info:v2:{str(ticker).upper()}", load, TTL_S,
                                    empty_ttl_s=TTL_S, is_empty=lambda v: False) or NONE
     except Exception:
         return NONE
