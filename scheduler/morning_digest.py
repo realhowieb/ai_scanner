@@ -176,7 +176,7 @@ def _todays_setups(df, limit: int = 6) -> tuple:
 
 
 def _premarket_gappers(limit: int = 5, now=None) -> Optional[List[Dict[str, Any]]]:
-    """Before the open: today's pre-market gappers over S&P 500 + NASDAQ, the
+    """Before the open: today's pre-market gappers over every U.S. common stock, the
     same screen as Day Trader's pre-market gappers (traded today, >=2% vs
     yesterday's close, clears the pre-market dollar-volume floor). None outside
     pre-market so the caller uses its regular-session path; [] when nothing

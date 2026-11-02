@@ -36,7 +36,7 @@ export function StockSearchView() {
                   <li key={s.ticker} className="row">
                     <div className="stack-xs grow">
                       <div className="rc-top">
-                        <TickerLink ticker={s.ticker} />
+                        <TickerLink ticker={s.ticker} named />
                         <ScoreBadge score={s.score} />
                         {s.primary_setup && <Pill>{setupLabel(s.primary_setup)}</Pill>}
                         <span className="cap review-meta">{s.status || "Ranked setup"} · {s.n_signals} confirming signal{s.n_signals === 1 ? "" : "s"}</span>

@@ -132,7 +132,7 @@ function YourWatchlist({ data, top, onChanged }: { data: Schemas["WatchlistToday
             <ul className="rows">
               {data.in_scan.map((r) => (
                 <li key={r.ticker} className="row">
-                  <TickerLink ticker={r.ticker} />
+                  <TickerLink ticker={r.ticker} named />
                   <span className="cap grow">In the latest scan</span>
                   <span className="cap">HSF</span><ScoreBadge score={r.score} />
                 </li>
@@ -154,7 +154,7 @@ function YourWatchlist({ data, top, onChanged }: { data: Schemas["WatchlistToday
 function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   return (
     <tr className={muted ? "row-muted" : undefined}>
-      <td><TickerLink ticker={s.ticker} /></td>
+      <td><TickerLink ticker={s.ticker} named /></td>
       <td className="hide-narrow"><Pill>{setupLabel(s.primary_setup)}</Pill></td>
       <td><ScoreBar score={s.score} /></td>
       <td className="num mono hide-narrow">{price(s.last)}</td>

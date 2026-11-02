@@ -5196,6 +5196,22 @@
     "title": "ClientErrorReport",
     "type": "object"
    },
+   "CompanyNames": {
+    "properties": {
+     "names": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "title": "Names",
+      "type": "object"
+     }
+    },
+    "required": [
+     "names"
+    ],
+    "title": "CompanyNames",
+    "type": "object"
+   },
    "Coverage": {
     "properties": {
      "enriched": {
@@ -22265,6 +22281,7 @@
         "movers",
         "movers_sp500",
         "movers_nasdaq",
+        "movers_nyse",
         "premarket",
         "postmarket",
         "scan_picks",
@@ -26957,7 +26974,7 @@
   },
   "/v1/premarket/gappers": {
    "get": {
-    "description": "S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs\nyesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.",
+    "description": "U.S. stocks (S&P 500, NASDAQ, NYSE and the rest; no ETFs) gapping before the open: latest pre-market trade vs\nyesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.",
     "operationId": "premarket_gappers_v1_premarket_gappers_get",
     "parameters": [
      {
@@ -28885,6 +28902,58 @@
      }
     ],
     "summary": "Stock Score History"
+   }
+  },
+  "/v1/symbols/names": {
+   "get": {
+    "description": "Short company names for tickers (Alpaca's symbol directory, refreshed every 6 hours),\nshown under tickers in tables. Unknown tickers are left out.",
+    "operationId": "company_names_v1_symbols_names_get",
+    "parameters": [
+     {
+      "description": "Comma-separated; the first 200 are looked up",
+      "in": "query",
+      "name": "tickers",
+      "required": true,
+      "schema": {
+       "description": "Comma-separated; the first 200 are looked up",
+       "maxLength": 2000,
+       "minLength": 1,
+       "title": "Tickers",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CompanyNames"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Company Names"
    }
   },
   "/v1/symbols/search": {

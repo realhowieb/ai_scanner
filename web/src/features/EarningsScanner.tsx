@@ -155,7 +155,7 @@ const blank = (v: number | null | undefined) => v ?? undefined;
 const FiltersCtx = createContext<EarningsFilters>({ when: "today", time: "", all: false });
 function EarnSetupCell({ row }: { row: { original: Row } }) { return <SetupCell r={row.original} f={useContext(FiltersCtx)} />; }
 const EARN_COLUMNS = ecol.columns([
-  ecol.display({ id: "ticker", header: "Ticker", cell: (c) => <><TickerLink ticker={c.row.original.ticker} /><Tags r={c.row.original} /></> }),
+  ecol.display({ id: "ticker", header: "Ticker", cell: (c) => <><TickerLink ticker={c.row.original.ticker} named /><Tags r={c.row.original} /></> }),
   ecol.display({ id: "reports", header: "Reports", cell: (c) => <When time={c.row.original.time} /> }),
   ecol.display({ id: "setup", header: "Setup", cell: EarnSetupCell }),
   ecol.accessor((r) => hasScore(r) ? blank(r.score) : undefined, { id: "score", header: "HSF Score", sortUndefined: "last",
@@ -261,7 +261,7 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
                 {g.rows.map((r) => (
                   <li key={r.ticker} className="result-card setup-card">
                     <div className="sc-top">
-                      <TickerLink ticker={r.ticker} />
+                      <TickerLink ticker={r.ticker} named />
                       <When time={r.time} />
                       <Tags r={r} />
                       <span className="grow" />

@@ -78,7 +78,7 @@ export function StairSteppers({ symbols }: { symbols: string[] }) {
                 <tbody>
                   {matches.map((r) => (
                     <tr key={r.ticker}>
-                      <td><TickerLink ticker={r.ticker} /></td>
+                      <td><TickerLink ticker={r.ticker} named /></td>
                       <td className="num mono strong">{r.r2 == null ? "—" : r.r2.toFixed(3)}</td>
                       <td className={`num mono ${(r.trend_pct_per_hour ?? 0) >= 0 ? "up" : "down"}`}>{num(r.trend_pct_per_hour, 2)}</td>
                       <td className="num mono">{num(r.max_pullback_pct, 2)}</td>

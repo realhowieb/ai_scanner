@@ -13,7 +13,7 @@ import { SectionFailed } from "./TodayView";
 export const GAPPERS_REFRESH_MS = 3 * 60_000;   // the API rebuilds the list every 3 minutes
 const ROW_LIMIT = 10;
 
-/** Today's pre-market gappers across S&P 500 + NASDAQ (Pro), shown before the open. */
+/** Today's pre-market gappers across every U.S. stock (Pro), shown before the open. */
 export function GappersCard() {
   const { can } = useSession();
   const allowed = can("can_premarket");
@@ -28,7 +28,7 @@ export function GappersCard() {
   if (!allowed) {
     return (
       <Card title="Pre-market gappers" id="gap">
-        <Locked title="Pre-market gappers are part of Pro" plan="pro">See which stocks are gapping before the open across the S&amp;P 500 and NASDAQ, with pre-market volume.</Locked>
+        <Locked title="Pre-market gappers are part of Pro" plan="pro">See which stocks are gapping before the open across the whole U.S. market, with pre-market volume.</Locked>
       </Card>
     );
   }
@@ -48,7 +48,7 @@ export function GappersCard() {
         <ul className="rows">
           {rows.slice(0, ROW_LIMIT).map((g) => (
             <li key={g.ticker} className="row">
-              <TickerLink ticker={g.ticker} />
+              <TickerLink ticker={g.ticker} named />
               <span className={`mono strong move ${g.pct > 0 ? "up" : g.pct < 0 ? "down" : ""}`}>{pct(g.pct)}</span>
               <span className="mono cap grow">{price(g.last)}</span>
               {g.pm_volume != null && <span className="cap nowrap">{compact(g.pm_volume)} sh</span>}
@@ -57,7 +57,7 @@ export function GappersCard() {
         </ul>
       )}
       <p className="cap">
-        Latest pre-market trade vs yesterday&apos;s close, S&amp;P 500 and NASDAQ, refreshed every few minutes.
+        Latest pre-market trade vs yesterday&apos;s close, all U.S. stocks (no ETFs), refreshed every few minutes.
         {partial ? " Volume is from the IEX feed, a slice of all pre-market trading." : ""}
       </p>
     </Card>
