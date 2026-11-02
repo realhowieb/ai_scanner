@@ -148,7 +148,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(rep["metrics"]["effective_independent_samples_5d"], 2)
 
     def test_one_day_burst_cannot_pass_the_volume_gate_alone(self):
-        rows = [scored(i, f"B{i:03d}", "2026-09-12T06:54:00", computed="2026-09-23T13:00:00")
+        rows = [scored(i, f"B{i:03d}", "2026-09-26T06:54:00", computed="2026-10-07T13:00:00")
                 for i in range(1, 320)]
         rep = mr.build_report(rows, [], now=NOW)
         gates = {g["gate"]: g for g in rep["gates"]}
@@ -157,6 +157,19 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(gates["max_entry_day_share"]["status"], mr.FAIL)
         self.assertEqual(rep["collection"]["non_trading_day_observations"], 319)
         self.assertNotEqual(rep["status"], mr.READY)
+
+    def test_bootstrap_burst_is_excluded_from_the_population(self):
+        burst = [scored(i, f"B{i:03d}", f"2026-09-{12 + i % 2}T0{1 + i % 8}:00:00", computed="2026-09-23T13:00:00")
+                 for i in range(1, 201)]
+        edges = [scored(901, "EDGE", "2026-09-11T23:59:00", computed="2026-09-23T13:00:00"),
+                 scored(902, "LATE", "2026-09-14T00:00:00", computed="2026-09-23T13:00:00")]
+        rep = mr.build_report(burst + edges, [], now=NOW)
+        self.assertEqual(rep["metrics"]["excluded_bootstrap_observations"], 200)
+        self.assertEqual(rep["metrics"]["total_observations"], 2)
+        self.assertEqual(mr.api_view(rep)["observations"]["excluded_bootstrap"], 200)
+        self.assertFalse(mr.in_bootstrap_burst({"fired_at": "2026-09-11T23:59:59"}))
+        self.assertTrue(mr.in_bootstrap_burst({"fired_at": "2026-09-13T23:59:59"}))
+        self.assertFalse(mr.in_bootstrap_burst({"fired_at": None}))
 
     def test_exact_duplicates_and_late_freezes_are_counted(self):
         a = opp(1, "AAA", "2026-10-01T16:40:00")

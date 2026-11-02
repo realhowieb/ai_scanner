@@ -46,6 +46,13 @@ from analytics import research_dataset as rd
 SCHEMA = "hsf-ml-readiness-1"
 # Opportunity freezes start 2026-09-12; reads begin here so the dataset is read whole.
 DATASET_START = _dt.date(2026, 9, 1)
+# The one-off bootstrap freeze of the weekend of 2026-09-12/13 (603 rows frozen in a few
+# early-Saturday batches, all entering on Monday 2026-09-14). It is not normal collection:
+# left in, one entry day held 24% of matured signal-days. Excluded from the readiness
+# population (and so from ML v4 training) by Howard's decision on 2026-11-02; the rows stay
+# in the database. Window is UTC fired_at [start, end).
+BOOTSTRAP_BURST = (_dt.datetime(2026, 9, 12, tzinfo=_dt.timezone.utc),
+                   _dt.datetime(2026, 9, 14, tzinfo=_dt.timezone.utc))
 PRIMARY_HORIZON = 5
 HORIZONS = (1, 3, 5)
 UNCOLLECTED_HORIZONS = (10, 15, 20)
@@ -133,7 +140,8 @@ GATES: Tuple[Gate, ...] = (
     Gate("max_entry_day_share", "TIME_COVERAGE", ACCUMULATING, "matured_max_day_share_5d", "<=", 0.10,
          "No single entry day may hold more than 10% of matured signal-days (ML v3: 14.2%). Spread evenly over "
          "30+ days a day holds ~3%; 10% allows 3x that. It also stops a one-day burst (e.g. the 2026-09-12 "
-         "weekend freeze, ~200 signal-days on one entry day) from passing the volume gate on its own."),
+         "weekend freeze, ~200 signal-days on one entry day) from passing the volume gate on its own. That "
+         "bootstrap burst itself is excluded from the population (BOOTSTRAP_BURST)."),
     Gate("class_balance", "CLASS_BALANCE", ACCUMULATING, "minority_class_share_5d", ">=", 0.20,
          "Primary label return_5d > 0. Below 20% minority, a 30-row validation fold has < 6 minority rows, "
          "under the fold spec's min_val_class = 5 margin, and AUC is unstable."),
@@ -214,6 +222,12 @@ def model_version_of(row: Mapping[str, Any]) -> Optional[str]:
     if isinstance(art, dict) and art.get("version"):
         return str(art["version"])
     return None
+
+
+def in_bootstrap_burst(row: Mapping[str, Any]) -> bool:
+    """True for a row frozen during the 2026-09-12/13 bootstrap burst (BOOTSTRAP_BURST)."""
+    t = rd.to_dt(row.get("fired_at"))
+    return t is not None and BOOTSTRAP_BURST[0] <= t < BOOTSTRAP_BURST[1]
 
 
 # --------------------------------------------------------------------------- maturation lifecycle
@@ -584,6 +598,9 @@ def build_report(raw_rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapp
 
     now = now or _dt.datetime.now(_dt.timezone.utc)
     rows = [dict(r) for r in raw_rows or [] if r.get("id") is not None]
+    n_before = len(rows)
+    rows = [r for r in rows if not in_bootstrap_burst(r)]
+    bootstrap_excluded = n_before - len(rows)
     records = rd.build_records(rows, scan_rows or [])
     obs_rows = mv3.build_audit_rows(records, rows, unit="observation")
     sd_rows = mv3.build_audit_rows(records, rows, unit="signal_day")
@@ -695,6 +712,7 @@ def build_report(raw_rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapp
     h5 = horizons["5d"]
     metrics = {
         "total_observations": len(rows),
+        "excluded_bootstrap_observations": bootstrap_excluded,
         "signal_days": len(sd_rows),
         "unique_symbols": len({r.ticker for r in sd_rows}),
         "unique_observation_dates": len({r.observed_day for r in sd_rows}),
@@ -762,6 +780,7 @@ def api_view(report: Mapping[str, Any]) -> Dict[str, Any]:
         "generated_at": report["generated_at"], "unit": report["unit"],
         "primary_horizon_days": report["primary_horizon_days"],
         "observations": {"total": m["total_observations"], "signal_days": m["signal_days"],
+                         "excluded_bootstrap": m.get("excluded_bootstrap_observations", 0),
                          "matured": m["matured_observations_5d"], "matured_signal_days": m["matured_signal_days_5d"],
                          "immature": m["immature_observations"], "failed_maturation": m["failed_maturation_observations"],
                          "maturity_pct": m["maturity_pct_observations"],
