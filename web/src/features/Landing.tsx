@@ -19,6 +19,7 @@ import { EmailSignup } from "@/features/EmailSignup";
 import { LiveSetupsPreview } from "@/features/LiveSetupsPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
+import { MUSIC_ORIGIN } from "@/lib/siteHosts";
 import { useSignedIn } from "@/lib/signedIn";
 import { LegalLinks } from "@/components/LegalLinks";
 
@@ -91,6 +92,7 @@ export function PublicFooter() {
       <p className="cap">{DISCLAIMER}</p>
       <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/weekly">Weekly recap</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
       <p className="cap"><LegalLinks refunds={!!founding} /></p>
+      <p className="cap">Also from HSF: <a href={MUSIC_ORIGIN}>High Society&apos;s Finest music &amp; community</a></p>
     </footer>
   );
 }
