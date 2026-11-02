@@ -848,6 +848,20 @@ class ScanJob(BaseModel):
     finished_at: Optional[str] = None
 
 
+class ScheduledScan(BaseModel):
+    id: str
+    name: str
+    run_at: Literal["open", "midday", "close"] = Field(
+        description="open 08:05-09:25 ET, midday 12:00-13:30 ET, close 16:20-18:00 ET, on trading days")
+    request: Dict[str, Any] = Field(description="The custom scan request (same body as POST /v1/scans)")
+    created_at: Optional[str] = None
+    last_status: Optional[str] = Field(default=None, description="running, sent, unsubscribed, unverified, "
+                                       "email_failed, failed or paused; null before the first run")
+    last_detail: Optional[str] = None
+    last_run_at: Optional[str] = None
+    last_scan_id: Optional[str] = Field(default=None, description="The last run's scan (GET /v1/scans/{scan_id}, kept 7 days)")
+
+
 # ---- scan history & historical research (P1-67, Pro) --------------------------------------------
 class RunSummary(BaseModel):
     id: int

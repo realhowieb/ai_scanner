@@ -34,8 +34,15 @@ UPGRADE_MESSAGES = {
     ),
     "can_track_record": ("Pro adds historical research so you can inspect how prior HSF observations evolved."),
     "can_ai_notes": (
-        "Premium adds AI scan summaries and results chat, setup notes on each result and watchlist rundowns, "
-        "for a deeper research workflow."
+        "Premium adds Ask HSF, AI scan summaries and results chat, setup notes on each result, watchlist "
+        "rundowns and the AI journal coach, for a deeper research workflow."
+    ),
+    "can_scheduled_scans": (
+        "Premium runs your saved custom scan on a schedule (before the open, midday or after the close) "
+        "and emails you the results."
+    ),
+    "can_export_research": (
+        "Premium adds CSV export of your watchlists, Track record, journal and scan history."
     ),
     "can_early_breakout": (
         "Premium adds Early Breakout candidate research for investigating setups before they fully form."

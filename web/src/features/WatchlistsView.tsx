@@ -25,6 +25,8 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 
+import { csvFile, ResearchCsvButton, round } from "./ResearchCsv";
+import type { CsvTable } from "./ResearchCsv";
 import { DailySpark, useDailyBarsState } from "./Sparks";
 import { StarterWatchlistButton } from "./Starters";
 import { WatchlistAINote } from "./WatchlistAINote";
@@ -307,6 +309,25 @@ function WatchlistChangesCard({ id }: { id: number }) {
   );
 }
 
+type CsvQuote = { last?: number | null; chg_pct?: number | null; at?: string | null; source?: string | null };
+type CsvScore = { score?: number | null; primary_setup?: string | null; last?: number | null; chg_pct?: number | null; rank?: number | null };
+
+/** Premium CSV of a watchlist: what the Tickers card shows, one row per ticker. */
+export function watchlistCsv(items: WatchlistDetail["items"], scores: Map<string, CsvScore>, quotes: Record<string, CsvQuote>, scanAt?: string | null): CsvTable {
+  return {
+    header: ["Ticker", "HSF Score", "Setup", "Rank in scan", "Price", "Change %", "Price source", "Added", "Price when added", "Note", "Scores from scan (UTC)"],
+    rows: items.map((it) => {
+      const s = scores.get(it.ticker);
+      const q = quotes[it.ticker];
+      const priceNow = q?.last ?? s?.last ?? null;
+      return [it.ticker, s?.score ?? null, s ? setupLabel(s.primary_setup) : "", it.latest?.rank ?? null,
+        round(priceNow, priceNow != null && Math.abs(priceNow) < 1 ? 4 : 2), round(q ? q.chg_pct : s?.chg_pct),
+        q ? (q.source === "daily_bar" ? "daily close" : "latest trade") : s ? "scan" : "",
+        it.added_at ?? "", round(it.price_when_added), it.note ?? "", scanAt ?? ""];
+    }),
+  };
+}
+
 function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
   const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
   const intel = useApi(`wl-intel:${id}`, (signal) => watchlists.intelligence(id, signal));
@@ -402,6 +423,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
             <button type="button" className="btn wl-refresh" onClick={refresh} disabled={refreshing} aria-label={`Refresh prices and scores for ${w.name}`}>
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>
+            <ResearchCsvButton what={`the ${w.name} watchlist`} filename={csvFile("watchlist", w.name)}
+              build={() => watchlistCsv(items, scores, quoteBy, scanAt)} />
           </div>
         )}
         {w.items.length === 0 ? (

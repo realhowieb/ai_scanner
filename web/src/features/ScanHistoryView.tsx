@@ -12,6 +12,8 @@ import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
+import { csvFile, ResearchCsvButton } from "./ResearchCsv";
+import { scannerCsvTable } from "./ScannerCsv";
 import { SetupTable } from "./SetupTable";
 
 function Head({ title, sub }: { title: string; sub?: string }) {
@@ -101,7 +103,11 @@ export function SavedScanView({ id }: { id: number }) {
           : <ErrorState error={run.error} onRetry={run.reload} what="this scan" />)
         : !r ? <Skeleton rows={10} label="Loading the saved scan" />
         : r.setups.length === 0 ? <Card><Empty title="This scan had no ranked setups." /></Card>
-        : <section className="card flush"><SetupTable rows={r.setups} premium={premium} /></section>}
+        : <>
+          <div className="row-actions end"><ResearchCsvButton what="this saved scan" filename={csvFile("saved-scan", r.label || r.name || `scan-${r.id}`)}
+            build={() => scannerCsvTable(r.setups, r.created_at, premium)} /></div>
+          <section className="card flush"><SetupTable rows={r.setups} premium={premium} /></section>
+        </>}
       {r?.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{r.max_results}</b> of <b>{r.total}</b> setups in this scan.</p>

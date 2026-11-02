@@ -15552,6 +15552,129 @@
     "title": "ScannerView",
     "type": "object"
    },
+   "ScheduledScan": {
+    "properties": {
+     "created_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Created At"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "last_detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Detail"
+     },
+     "last_run_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Run At"
+     },
+     "last_scan_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The last run's scan (GET /v1/scans/{scan_id}, kept 7 days)",
+      "title": "Last Scan Id"
+     },
+     "last_status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "running, sent, unsubscribed, unverified, email_failed, failed or paused; null before the first run",
+      "title": "Last Status"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "request": {
+      "additionalProperties": true,
+      "description": "The custom scan request (same body as POST /v1/scans)",
+      "title": "Request",
+      "type": "object"
+     },
+     "run_at": {
+      "description": "open 08:05-09:25 ET, midday 12:00-13:30 ET, close 16:20-18:00 ET, on trading days",
+      "enum": [
+       "open",
+       "midday",
+       "close"
+      ],
+      "title": "Run At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "run_at",
+     "request"
+    ],
+    "title": "ScheduledScan",
+    "type": "object"
+   },
+   "ScheduledScanCreate": {
+    "properties": {
+     "name": {
+      "maxLength": 60,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+     },
+     "run_at": {
+      "description": "open 08:05-09:25 ET (before the open), midday 12:00-13:30 ET, close 16:20-18:00 ET",
+      "enum": [
+       "open",
+       "midday",
+       "close"
+      ],
+      "title": "Run At",
+      "type": "string"
+     },
+     "scan": {
+      "$ref": "#/components/schemas/ScanCreate"
+     }
+    },
+    "required": [
+     "name",
+     "run_at",
+     "scan"
+    ],
+    "title": "ScheduledScanCreate",
+    "type": "object"
+   },
    "ScoreHistory": {
     "properties": {
      "points": {
@@ -29460,6 +29583,139 @@
      }
     ],
     "summary": "A custom scan's status and results"
+   }
+  },
+  "/v1/scheduled-scans": {
+   "get": {
+    "operationId": "scheduled_list_v1_scheduled_scans_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ScheduledScan"
+         },
+         "title": "Response Scheduled List V1 Scheduled Scans Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature, or the scan isn't in your plan"
+     },
+     "404": {
+      "description": "Watchlist or schedule not found (or not yours)"
+     },
+     "409": {
+      "description": "You already have the most scheduled scans allowed (3)"
+     },
+     "422": {
+      "description": "Invalid request"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Your scheduled custom scans (Premium)"
+   },
+   "post": {
+    "description": "Run this custom scan on every trading day at `run_at` and email the results (top 10\nby HSF Score) to your verified address, unless alert emails are switched off. Plan rules\nare checked now and again before each run. Up to 3 per account.",
+    "operationId": "scheduled_create_v1_scheduled_scans_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ScheduledScanCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScheduledScan"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature, or the scan isn't in your plan"
+     },
+     "404": {
+      "description": "Watchlist or schedule not found (or not yours)"
+     },
+     "409": {
+      "description": "You already have the most scheduled scans allowed (3)"
+     },
+     "422": {
+      "description": "Invalid request"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Schedule a custom scan (Premium)"
+   }
+  },
+  "/v1/scheduled-scans/{schedule_id}": {
+   "delete": {
+    "description": "Works on any plan, so a lapsed Premium account can still clean up.",
+    "operationId": "scheduled_delete_v1_scheduled_scans__schedule_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "schedule_id",
+      "required": true,
+      "schema": {
+       "pattern": "^[0-9a-f]{32}$",
+       "title": "Schedule Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature, or the scan isn't in your plan"
+     },
+     "404": {
+      "description": "Watchlist or schedule not found (or not yours)"
+     },
+     "409": {
+      "description": "You already have the most scheduled scans allowed (3)"
+     },
+     "422": {
+      "description": "Invalid request"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete a scheduled custom scan"
    }
   },
   "/v1/sparklines": {

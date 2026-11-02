@@ -45,9 +45,16 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Earnings calendar & filters", "can_earnings"),
     ("Every earnings reporter scored automatically on the Earnings tab", "can_earnings_autoscore"),
     ("Scan history & historical research", "can_scan_history"),
-    ("AI scan summaries and results chat, setup notes on each result and watchlist rundowns", "can_ai_notes"),
-    ("Early Breakout candidate research", "can_early_breakout"),
+    ("Ask HSF: an AI research assistant for your stocks, watchlists and scans", "can_ai_notes"),
+    ("Scheduled custom scans: your scan runs on its own and the results arrive by email", "can_scheduled_scans"),
+    ("AI scan summaries and results chat, plus an AI note on each stock", "can_ai_notes"),
+    ("Early Breakout candidate research and alerts", "can_early_breakout"),
     ("Full-market custom scanning workflow", "can_full_universe"),
+    ("Describe a scan in plain English and AI fills in the filters", "can_ai_notes"),
+    ("AI watchlist rundowns, in the app and in your morning email", "can_ai_notes"),
+    ("A short AI \"why\" line on the alerts you get", "can_ai_notes"),
+    ("AI journal coach that looks for patterns in your closed trades", "can_ai_notes"),
+    ("CSV export of watchlists, Track record, journal and scan history", "can_export_research"),
     ("Alpaca paper-trading workflow", "can_paper_trade"),
 ]
 

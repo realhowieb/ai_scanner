@@ -1275,3 +1275,12 @@ a.chip { display: inline-flex; align-items: center; }
 .recap-days .tile { display: grid; gap: 6px; align-content: start; }
 .recap-days ul { list-style: none; margin: 0; padding: 0; }
 .recap-days li li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Scheduled custom scans (Premium) */
+.sched-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.sched-item { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line, rgba(128,128,128,.25)); border-radius: 10px; }
+.sched-item > .stack-xs { min-width: 0; }
+.sched-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 12px; }
+.sched-form .field { flex: 1 1 200px; min-width: 0; }
+.sched-form .form-error, .sched-form .form-error + * { flex-basis: 100%; }
+.export-csv { margin-left: auto; }
