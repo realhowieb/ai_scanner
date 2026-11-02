@@ -166,7 +166,7 @@ def register(app: FastAPI) -> None:
 
         _chat_allowed(account)
         ratelimit.check("chat_alerts", _user(account))
-        n = chat_delivery.send_all(_user(account), "🔔 Test alert from HSFinest.AI. Real alerts will look like this.")
+        n = chat_delivery.send_all(_user(account), "🔔 Test alert from HSFinest.com. Real alerts will look like this.")
         return {"message": f"Test sent to {n} chat{'s' if n != 1 else ''}." if n else "No connected chat accepted the test."}
 
     @app.post("/v1/telegram/webhook", status_code=200, include_in_schema=False)

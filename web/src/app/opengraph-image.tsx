@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "HSFinest.AI: ranked stock setups from scans of the whole U.S. market";
+export const alt = "HSFinest.com: ranked stock setups from scans of the whole U.S. market";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -12,7 +12,7 @@ export default function Image() {
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between",
         background: "#0b0f14", color: "#e7edf5", padding: "64px 72px", fontFamily: "sans-serif" }}>
-        <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.AI</span></div>
+        <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.com</span></div>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", fontSize: 64, fontWeight: 700, lineHeight: 1.1 }}>The whole U.S. market, ranked.</div>
           <div style={{ display: "flex", fontSize: 30, color: "#b9c6d6", marginTop: 18 }}>Scored setups, the reasons behind them, and alerts when they change.</div>

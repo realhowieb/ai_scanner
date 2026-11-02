@@ -138,7 +138,7 @@ def set_discord(user: str, webhook_url: str) -> Dict[str, Any]:
     url = (webhook_url or "").strip()
     if not DISCORD_URL.match(url):
         raise ChatError("That isn't a Discord webhook URL. In Discord: Channel settings → Integrations → Webhooks → Copy Webhook URL.")
-    ok, _ = send_discord(url, "✅ HSFinest.AI alerts will post in this channel.")
+    ok, _ = send_discord(url, "✅ HSFinest.com alerts will post in this channel.")
     if not ok:
         raise ChatError("Discord didn't accept a test message on that webhook. Check the URL and try again.")
     _save(user, "discord", url, "Discord channel")
@@ -159,12 +159,12 @@ def handle_telegram_update(update: Dict[str, Any]) -> None:
         rows = _run("DELETE FROM hsf_chat_link_codes WHERE code = %s AND expires_at > NOW() RETURNING user_id",
                     (arg.strip()[:64],), True) if arg.strip() else []
         if not rows:
-            send_telegram(str(chat_id), "This link has expired. Open Alerts → Delivery on HSFinest.AI and tap Connect Telegram again.")
+            send_telegram(str(chat_id), "This link has expired. Open Alerts → Delivery on HSFinest.com and tap Connect Telegram again.")
             return
         user = rows[0]["user_id"]
         name = chat.get("title") or chat.get("username") or chat.get("first_name") or "Telegram chat"
         _save(user, "telegram", str(chat_id), str(name)[:60])
-        send_telegram(str(chat_id), "✅ Connected. Your HSFinest.AI alerts will arrive here. Send /stop to turn them off.")
+        send_telegram(str(chat_id), "✅ Connected. Your HSFinest.com alerts will arrive here. Send /stop to turn them off.")
     elif command == "/stop":
         _run("DELETE FROM hsf_chat_destinations WHERE kind = 'telegram' AND target = %s", (str(chat_id),))
         send_telegram(str(chat_id), "Alerts turned off for this chat. Reconnect any time from Alerts → Delivery.")

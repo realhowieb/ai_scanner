@@ -1,6 +1,6 @@
 # AI Scanner
 
-AI Scanner (HSFinest.AI) is a stock scanner: a FastAPI service (`api/`, Render
+AI Scanner (HSFinest.com) is a stock scanner: a FastAPI service (`api/`, Render
 hsf-api-v1), a Next.js web app (`web/`, Render hsf-web-v1), scheduled market scans
 and emails on GitHub Actions, Neon/Postgres storage and Stripe billing. The old
 Streamlit app was retired on 2026-10-21.

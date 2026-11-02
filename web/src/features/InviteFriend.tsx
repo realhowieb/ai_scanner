@@ -41,7 +41,7 @@ export function InviteFriendCard() {
         <input readOnly value={url} aria-label="Your invite link" onFocus={(e) => e.currentTarget.select()} />
         <button type="button" className="btn" onClick={() => void copy()}>{copied === "ok" ? "Copied" : "Copy link"}</button>
         {share && (
-          <button type="button" className="btn" onClick={() => void navigator.share({ title: "HSFinest.AI", text: "Stock setups ranked by HSF Score. Join with my link:", url }).catch(() => undefined)}>
+          <button type="button" className="btn" onClick={() => void navigator.share({ title: "HSFinest.com", text: "Stock setups ranked by HSF Score. Join with my link:", url }).catch(() => undefined)}>
             Share
           </button>
         )}

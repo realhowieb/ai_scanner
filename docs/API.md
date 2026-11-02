@@ -208,7 +208,7 @@ Environment variables:
 |---|---|
 | `DATABASE_URL` | Same Neon URL as the billing service |
 | `API_JWT_SECRET` | New random secret, 32+ characters (e.g. `openssl rand -base64 48`). Only on this service. |
-| `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it from a browser, exactly `scheme://host[:port]`, e.g. `https://app.hsfinest.ai,https://hsf-web.onrender.com`. `https` only (`http://localhost:<port>` allowed for local development). Wildcards, paths and plain-http hosts are ignored with a warning in the log. Empty = no browser access. Native iOS/Android apps don't need it. |
+| `API_CORS_ORIGINS` | Comma-separated web origins allowed to call it from a browser, exactly `scheme://host[:port]`, e.g. `https://app.hsfinest.com,https://hsf-web.onrender.com`. `https` only (`http://localhost:<port>` allowed for local development). Wildcards, paths and plain-http hosts are ignored with a warning in the log. Empty = no browser access. Native iOS/Android apps don't need it. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (`SMTP_FROM_NAME` optional) | Same Resend values as the web app. Needed for sign-up verification and password-reset emails; without them sign-up still works (`verification_sent: false`) and reset requests send nothing. |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (`ALPACA_DATA_FEED` optional) | Same values as the web app. **Needed for custom scans** (`POST /v1/scans`): the US market list and the liquidity pre-filter come from Alpaca, and price downloads fall back to slow one-by-one Yahoo calls without it. |
 | `ANTHROPIC_API_KEY` (`AI_ENABLED`, `AI_DAILY_LIMIT` optional) | Same as the web app. Needed for `/v1/ai/*` (Premium); without it those answer 503. |

@@ -97,7 +97,7 @@ def welcome_content(trial_until: Optional[dt.datetime] = None) -> tuple:
             f"\nNew to HSF? This page explains how the scores work: {base}/how-hsf-works\n")
     items = "".join(f"<li style='margin:6px 0'><a href='{html.escape(url, quote=True)}'>{name}</a>: {what}</li>"
                     for name, url, what in steps)
-    inner = ("<h2 style='font-size:20px;margin:16px 0 8px'>Welcome to HSFinest.AI</h2>"
+    inner = ("<h2 style='font-size:20px;margin:16px 0 8px'>Welcome to HSFinest.com</h2>"
              "<p>Your email is verified and your account is ready.</p>" + trial_html +
              f"<p>Four places to start:</p><ul style='padding-left:20px'>{items}</ul>" +
              _button(f"{base}/today", "Open Today") +

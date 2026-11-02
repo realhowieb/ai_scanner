@@ -41,7 +41,7 @@ export function AuthShell({ title, subtitle, mark, children }: { title: string; 
   return (
     <div className="card narrow login">
       <div className="auth-head">
-        <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
+        <Link href="/" className="brand brand-lg" aria-label="HSFinest.com home">HSFinest<span>.com</span></Link>
         <Link href="/" className="auth-home">&larr; Back to home</Link>
       </div>
       <div className="auth-title">

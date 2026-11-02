@@ -19,7 +19,7 @@ export default async function Image({ params }: { params: Promise<{ ticker: stri
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between",
         background: "#0b0f14", color: "#e7edf5", padding: "60px 72px", fontFamily: "sans-serif" }}>
-        <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.AI</span></div>
+        <div style={{ display: "flex", fontSize: 34, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.com</span></div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", fontSize: 110, fontWeight: 700, letterSpacing: -2 }}>{t}</div>

@@ -75,7 +75,7 @@ export function ListConfirmView() {
   const invalid = !valid || state.error?.status === 400;
   return (
     <div className="card narrow login">
-      <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
+      <Link href="/" className="brand brand-lg" aria-label="HSFinest.com home">HSFinest<span>.com</span></Link>
       <h1 className="h1">Weekly setups email</h1>
       {invalid ? (
         <p className="form-error" role="alert">This link isn&apos;t valid. Sign up again from the HSF home page.</p>

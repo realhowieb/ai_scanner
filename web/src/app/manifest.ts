@@ -5,7 +5,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/today",
-    name: "HSFinest.AI",
+    name: "HSFinest.com",
     short_name: "HSF",
     start_url: "/today",
     scope: "/",

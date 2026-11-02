@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = s.ranked
     ? `${s.ticker}${move} is in HSF's latest ranked setups. ${s.reason ?? ""}`.trim()
     : `${s.ticker}${move}. See how HSF scores it and get alerted when it becomes a ranked setup.`;
-  return { title: { absolute: `${title} · HSFinest.AI` }, description, openGraph: { title, description, type: "website", siteName: "HSFinest.AI" } };
+  return { title: { absolute: `${title} · HSFinest.com` }, description, openGraph: { title, description, type: "website", siteName: "HSFinest.com" } };
 }
 
 export default async function SharePage({ params, searchParams }: Props) {

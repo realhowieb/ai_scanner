@@ -1,7 +1,7 @@
 """SEC EDGAR filings: insider trades (Form 4) and company events (8-K). Free, no key.
 
-EDGAR asks every caller to identify itself: HSF_SEC_USER_AGENT ("HSFinest.AI you@example.com"),
-or "HSFinest.AI <SMTP_FROM>" when that is an email address. Without either, filings are off
+EDGAR asks every caller to identify itself: HSF_SEC_USER_AGENT ("HSFinest.com you@example.com"),
+or "HSFinest.com <SMTP_FROM>" when that is an email address. Without either, filings are off
 (available=False) rather than sending anonymous requests EDGAR would block.
 
 Lookups are shared through api.shared_cache: the ticker -> CIK map for a day, each company's
@@ -51,7 +51,7 @@ def user_agent() -> Optional[str]:
         return ua[:200]
     sender = os.environ.get("SMTP_FROM", "").strip()
     match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", sender)
-    return f"HSFinest.AI {match.group(0)}" if match else None
+    return f"HSFinest.com {match.group(0)}" if match else None
 
 
 def enabled() -> bool:

@@ -20,12 +20,12 @@ export const OG_IMAGE = "/opengraph-image";
 
 export function publicMetadata(path: PublicPage, title: string, description: string): Metadata {
   return {
-    title: { absolute: `${title} · HSFinest.AI` },
+    title: { absolute: `${title} · HSFinest.com` },
     description,
     alternates: { canonical: path },
     robots: { index: true, follow: true },
     // A page's own openGraph replaces the root one, so name the shared preview image again.
-    openGraph: { type: "website", siteName: "HSFinest.AI", title, description, url: path, images: [OG_IMAGE] },
+    openGraph: { type: "website", siteName: "HSFinest.com", title, description, url: path, images: [OG_IMAGE] },
     twitter: { card: "summary_large_image", title, description, images: [OG_IMAGE] },
   };
 }

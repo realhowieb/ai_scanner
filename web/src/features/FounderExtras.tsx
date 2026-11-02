@@ -55,7 +55,7 @@ export function ShareCard({ data }: { data: Benefits }) {
       setCopied("fail");
     }
   };
-  const text = encodeURIComponent(`I'm ${data.badge ?? "an HSF AI founder"}. One of 100 founding members of HSFinest.AI.`);
+  const text = encodeURIComponent(`I'm ${data.badge ?? "an HSF AI founder"}. One of 100 founding members of HSFinest.com.`);
   return (
     <Card title="Share your founder card">
       <div className="stack-sm">

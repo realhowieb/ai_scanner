@@ -69,7 +69,7 @@ export function PublicHeader() {
   const signedIn = useSignedIn();
   return (
     <header className="pub-head">
-      <Link href="/" className="brand">HSFinest<span>.AI</span></Link>
+      <Link href="/" className="brand">HSFinest<span>.com</span></Link>
       <nav aria-label="Site" className="pub-nav">
         <Link href="/how-hsf-works">How it works</Link>
         <Link href="/demo">Demo</Link>

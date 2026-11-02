@@ -25,7 +25,7 @@ describe("sign-up and account recovery pages", () => {
   it("every auth page has a way back to the home page", () => {
     for (const page of [<SignupForm key="s" />, <ForgotPasswordForm key="f" />, <ResetPasswordForm key="r" />, <VerifyEmail key="v" />]) {
       const { unmount } = render(page);
-      expect(screen.getByRole("link", { name: "HSFinest.AI home" })).toHaveAttribute("href", "/");
+      expect(screen.getByRole("link", { name: "HSFinest.com home" })).toHaveAttribute("href", "/");
       expect(screen.getByRole("link", { name: /Back to home/ })).toHaveAttribute("href", "/");
       unmount();
     }
@@ -68,7 +68,7 @@ describe("sign-up and account recovery pages", () => {
     const repeat = screen.getByLabelText("Repeat password");
     expect(password).toHaveAccessibleDescription(/at least 10 characters/);
     expect(screen.getByLabelText("Display name")).toHaveAccessibleDescription(/use it to sign in/);
-    expect(screen.getByRole("link", { name: "HSFinest.AI home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "HSFinest.com home" })).toHaveAttribute("href", "/");
     await u.type(password, "example-passphrase");
     await u.type(repeat, "example-passphrase");
     await u.click(screen.getByRole("button", { name: "Show passwords" }));
