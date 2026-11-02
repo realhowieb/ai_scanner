@@ -18,11 +18,32 @@ import { useSession } from "@/session/SessionProvider";
 
 import { JournalCoach } from "./JournalCoach";
 import { JournalInsightsCard } from "./JournalInsights";
+import { csvFile, ResearchCsvButton, round } from "./ResearchCsv";
+import type { CsvTable } from "./ResearchCsv";
 
 type Trade = Schemas["JournalTrade"];
 const metric = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
 const tid = (id: number) => ({ params: { path: { trade_id: id } } });
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
+
+/** Premium CSV of the whole journal (every page), oldest page last as the API returns it. */
+export function journalCsv(trades: Trade[]): CsvTable {
+  return {
+    header: ["Ticker", "Status", "Source", "Shares", "Entry price", "Entered (UTC)", "Exit price", "Closed (UTC)", "Mark or exit", "P&L $", "P&L %"],
+    rows: trades.map((t) => [t.ticker, t.open ? "Open" : "Closed", t.source ?? "", t.shares ?? null, round(t.entry_price, 4), t.entered_at ?? "",
+      round(t.exit_price, 4), t.closed_at ?? "", round(t.mark, 4), round(t.pnl), round(t.pnl_pct)]),
+  };
+}
+
+async function allTrades(): Promise<Trade[]> {
+  const out: Trade[] = [];
+  for (let offset = 0; offset < 10_000; offset += 200) {
+    const page = await unwrap(api.GET("/v1/journal", { params: { query: { limit: 200, offset } } }));
+    out.push(...page.trades);
+    if (!page.has_more || page.trades.length === 0) break;
+  }
+  return out;
+}
 
 function LogTrade({ onDone }: { onDone: () => void }) {
   const [ticker, setTicker] = useState("");
@@ -118,6 +139,7 @@ export function JournalView() {
         : j.data.trades.length === 0 ? <Card><Empty title={page ? "No trades on this page." : "No trades logged yet."}>{page ? "Go back to an earlier page to see your trades." : "Log your first trade above, or paper trade from a stock page."}</Empty></Card>
         : (
           <Card title="Trades" id="trades" aside={stats?.closed ? `${stats.closed} closed · ${stats.wins ?? "—"} wins · avg ${pct(stats.avg_return_pct)}` : undefined}>
+            <div className="row-actions end"><ResearchCsvButton what="your journal" filename={csvFile("journal")} build={async () => journalCsv(await allTrades())} /></div>
             <div className="metric-strip" aria-label="Journal summary">
               <span><strong>{metric(j.data.summary?.open, j.data.trades.filter((t) => t.open).length)}</strong> open on this page</span>
               <span><strong>{metric(j.data.summary?.closed, j.data.trades.filter((t) => !t.open).length)}</strong> closed on this page</span>

@@ -42,6 +42,8 @@ export const FEATURE_LABELS: Record<string, string> = {
   can_ai_notes: "AI notes and summaries",
   can_paper_trade: "Paper trading",
   can_export_csv: "CSV export",
+  can_scheduled_scans: "Scheduled custom scans",
+  can_export_research: "CSV export of watchlists, journal and history",
 };
 
 const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [

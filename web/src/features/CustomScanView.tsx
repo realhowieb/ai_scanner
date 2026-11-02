@@ -16,6 +16,7 @@ import { useSession } from "@/session/SessionProvider";
 
 import { SavedResearchViews } from "./SavedResearchViews";
 import { ScanBuilder } from "./ScanBuilder";
+import { ScheduledScans } from "./ScheduledScans";
 import { SetupTable } from "./SetupTable";
 
 type Universe = ScanCreate["universe"];
@@ -170,13 +171,12 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     statusRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, [job?.scan_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setFormErr(null);
+  // The form as a POST /v1/scans body, or the message that says what to fix.
+  const buildRequest = (): { req: ScanCreate } | { error: string } => {
     const t = ticker.trim().toUpperCase();
-    if (universe === "ticker" && !TICKER_RE.test(t)) return setFormErr("Enter a ticker symbol like AAPL.");
-    if (universe === "watchlist" && !watchlistId) return setFormErr("Choose a watchlist.");
-    if (universe === "earnings" && earnLocked(earnWindow)) return setFormErr("Scanning tomorrow's or this week's earnings is part of Pro.");
+    if (universe === "ticker" && !TICKER_RE.test(t)) return { error: "Enter a ticker symbol like AAPL." };
+    if (universe === "watchlist" && !watchlistId) return { error: "Choose a watchlist." };
+    if (universe === "earnings" && earnLocked(earnWindow)) return { error: "Scanning tomorrow's or this week's earnings is part of Pro." };
     const filters: NonNullable<ScanCreate["filters"]> = {
       top_n: Math.min(topN, maxRows),
       session,
@@ -186,15 +186,23 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       ...(unusual ? { unusual_volume: true } : {}),
       ...(gap ? { apply_gap_filter: true, ...(optNum(minGap) !== undefined ? { min_gap: optNum(minGap) } : {}) } : {}),
     };
-    startedHere.current = true;
-    const started = await scan.start({
+    return { req: {
       universe,
       ...(universe === "ticker" ? { ticker: t } : {}),
       ...(universe === "watchlist" ? { watchlist_id: Number(watchlistId) } : {}),
       ...(universe === "earnings" ? { earnings_window: earnWindow } : {}),
       ...((universe === "ticker" || universe === "watchlist" || universe === "earnings") && scoreAll ? { score_all: true } : {}),
       filters,
-    });
+    } };
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setFormErr(null);
+    const built = buildRequest();
+    if ("error" in built) return setFormErr(built.error);
+    startedHere.current = true;
+    const started = await scan.start(built.req);
     if (started) captureUsage("custom_scan_started", { universe, session });
   };
 
@@ -395,6 +403,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           )}
         </div>
       </div>
+      <ScheduledScans current={buildRequest} />
     </div>
   );
 }

@@ -24,6 +24,8 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
                         the evening before its post time. Needs BUFFER_API_KEY.
     founder feedback    Mon-Fri from 14:00 UTC: when founders' feedback is waiting for an
                         answer, the admins get the count and the oldest one's age.
+    scheduled scans     every pass on trading days: Premium customers' scheduled custom
+                        scans whose window is open (services.scheduled_scans).
 
 Env (all default on; set to 0 to stop one):
     HSF_OPS_JOBS_ENABLED          the whole thread
@@ -35,6 +37,7 @@ Env (all default on; set to 0 to stop one):
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
     HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
     HSF_SOCIAL_DRAFTS_ENABLED     social drafts to Buffer
+    HSF_SCHEDULED_SCANS_ENABLED   scheduled custom scans (services.scheduled_scans)
 
 Nothing here raises into the API.
 """
@@ -338,6 +341,15 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
         for kind in social_posts.KINDS:
             week = social_posts.due(kind, now)
             _run_once(f"social_{kind}", week, lambda k=kind, w=week: social_posts.send(k, w, now=now))
+    if _on("HSF_SCHEDULED_SCANS_ENABLED"):
+        try:
+            from services import scheduled_scans
+
+            result = scheduled_scans.run_pass(now)
+            if result.get("queued") or result.get("error"):
+                log.info(json.dumps({"event": "scheduled_scans_pass", "result": result}, default=str))
+        except Exception as e:
+            log.warning(json.dumps({"event": "scheduled_scans_error", "error": type(e).__name__}))
 
 
 def start() -> None:
