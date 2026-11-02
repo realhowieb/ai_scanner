@@ -25,7 +25,7 @@ class AcquisitionAttributionTests(unittest.TestCase):
         from ui.acquisition import classify_source
 
         self.assertEqual(classify_source({}), "direct")
-        self.assertEqual(classify_source({"utm_source": "newsletter"}), "other_unknown")
+        self.assertEqual(classify_source({"utm_source": "podcast"}), "other_unknown")
         self.assertEqual(classify_source({}, "https://www.reddit.com/r/stocks/"), "reddit")
 
     def test_user_hash_does_not_expose_email(self):

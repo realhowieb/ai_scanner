@@ -51,7 +51,7 @@ A simple weekly cadence:
 | Sat/Sun | "What HSF ranked this week" with 3 tickers and the `/weekly` link |
 | Mon | "Biggest earnings this week" from the recap's earnings box |
 | Wed | A product view (screenshot of a stock page or Day Trader) with a sign-up link |
-| Fri | Founding 100 seats left, with the `/founding-100` link |
+| Fri | Founding 100 seats left, with the `/pricing` link (it shows the Founding 100 banner) |
 
 ## Reading the report
 

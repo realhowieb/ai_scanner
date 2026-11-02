@@ -19,7 +19,7 @@ class SourceClassificationTests(unittest.TestCase):
             ({"utm_source": "stocktwits"}, None, "stocktwits"),
             ({"utm_source": "ig"}, None, "facebook"),
             ({}, "https://www.linkedin.com/feed/", "linkedin"),
-            ({"utm_source": "newsletter"}, None, "other_unknown"),
+            ({"utm_source": "podcast"}, None, "other_unknown"),
         ]
         for params, ref, want in cases:
             self.assertEqual(classify_source(params, ref), want, (params, ref))

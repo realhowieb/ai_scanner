@@ -73,6 +73,9 @@ SOURCES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("stocktwits", ("stocktwits",), ("stocktwits.com",)),
     ("facebook", ("facebook", "fb", "instagram", "ig", "meta"), ("facebook.com", "instagram.com", "fb.com")),
     ("linkedin", ("linkedin",), ("linkedin.com", "lnkd.in")),
+    ("threads", ("threads",), ("threads.net", "threads.com")),
+    ("bluesky", ("bluesky", "bsky"), ("bsky.app",)),
+    ("newsletter", ("newsletter", "email"), ()),
 )
 SOURCE_NAMES = ("invite", *(s for s, _, _ in SOURCES), "direct", "other_unknown")
 
