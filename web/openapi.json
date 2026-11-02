@@ -6606,6 +6606,23 @@
       ],
       "title": "Last"
      },
+     "logo": {
+      "anyOf": [
+       {
+        "enum": [
+         "standard",
+         "light",
+         "none"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "standard: show on a light chip; light: a white logo, show on a dark chip; none: no usable logo (show the letter); null: not checked",
+      "title": "Logo"
+     },
      "logo_url": {
       "title": "Logo Url",
       "type": "string"

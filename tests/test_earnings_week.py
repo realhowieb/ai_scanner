@@ -26,9 +26,14 @@ SIZES = {"AAPL": {"last": 270.0, "chg_pct": 1.0, "dollar_volume": 9e9},
          "SHOP": {"last": 150.0, "chg_pct": 0.5, "dollar_volume": 2e9}}
 
 
+LOGOS = {"AAPL": {"kind": "logo", "light": False}, "AMD": {"kind": "logo", "light": True}, "PLTR": {"kind": "none"}}
+
+
 def _base():
     return ew.build_base(SUN, calendar=_cal(), sizes=lambda ts: {t: SIZES[t] for t in ts if t in SIZES},
-                         scores=lambda: {"at": "2026-10-30T19:49:00Z", "ranks": {"AAPL": (3, 61), "AMD": (150, 55)}})
+                         scores=lambda: {"at": "2026-10-30T19:49:00Z", "ranks": {"AAPL": (3, 61), "AMD": (150, 55),
+                                                                                  "SHOP": (8, 12)}},
+                         logos=lambda ts: {t: LOGOS[t] for t in ts if t in LOGOS})
 
 
 class WeekTests(unittest.TestCase):
@@ -55,8 +60,14 @@ class WeekTests(unittest.TestCase):
         self.assertIsNone(pro["days"][1]["names"][0]["score"])          # AMD ranked 150, beyond a 100-row cap
         prem = ew.for_plan(base, per_day=1, cap=100, auto={"AMD": {"score": 70}})
         self.assertEqual((prem["days"][1]["names"][0]["score"], prem["days"][1]["names"][0]["score_source"]), (70, "auto"))
-        email = ew.for_plan(base, per_day=1, all_scores=True)
+        email = ew.for_plan(base, per_day=2, all_scores=True)
         self.assertEqual(email["days"][1]["names"][0]["score"], 55)
+        self.assertIsNone(email["days"][1]["names"][1]["score"])        # SHOP 12: below 40 reads as noise, hidden
+
+    def test_logo_kinds(self):
+        out = ew.for_plan(_base(), per_day=3)
+        kinds = {n["ticker"]: n["logo"] for d in out["days"] for n in d["names"]}
+        self.assertEqual((kinds["AAPL"], kinds["AMD"], kinds["PLTR"], kinds["O"]), ("standard", "light", "none", None))
 
     def test_snapshot_size(self):
         s = ew.size_from_snapshot({"latestTrade": {"p": 11}, "dailyBar": {"c": 11, "v": 100},
@@ -68,12 +79,12 @@ class WeekTests(unittest.TestCase):
 class EmailTests(unittest.TestCase):
     def test_compose_has_day_boxes_tiles_and_text(self):
         week = ew.for_plan(_base(), per_day=12, watched={"PLTR"}, all_scores=True)
-        subject, text, html, glance = we.compose(week, base_url="https://app.example", logos={"AAPL": True},
-                                                 watched=["PLTR"])
+        subject, text, html, glance = we.compose(week, base_url="https://app.example", watched=["PLTR"])
         self.assertEqual(subject, "Earnings this week: 7 companies report (week of Nov 2)")
         self.assertIn("Monday, Nov 2", html)
         self.assertIn("https://financialmodelingprep.com/image-stock/AAPL.png", html)
         self.assertNotIn("image-stock/PLTR.png", html)               # no logo -> letter tile, never a broken image
+        self.assertIn("background:#1e293b;border:1px solid #e2e8f0'><img src='https://financialmodelingprep.com/image-stock/AMD.png", html)
         self.assertIn("https://app.example/stocks/AMD", html)
         self.assertIn("+ 1 more", html)                               # PENNY is counted, not shown
         self.assertIn("No companies we track report this day.", html)
@@ -81,13 +92,6 @@ class EmailTests(unittest.TestCase):
         self.assertIn("Monday Nov 2: AAPL (after close), *PLTR (after close), O (after close) + 1 more", text)
         self.assertIn("Busiest day: Monday", glance)
         self.assertIn("PLTR</b> Mon", glance)
-
-    def test_logo_check_cached(self):
-        calls = []
-        with mock.patch("api.shared_cache.get", return_value=None), mock.patch("api.shared_cache.put"):
-            self.assertTrue(we.logo_ok("AAPL", head=lambda u: calls.append(u) or 200))
-            self.assertFalse(we.logo_ok("ZZZZ", head=lambda u: 404))
-        self.assertEqual(calls, ["https://financialmodelingprep.com/image-stock/AAPL.png"])
 
     def test_due_sunday_evening_or_monday_catch_up(self):
         from api.ops_jobs import weekly_earnings_due
@@ -123,7 +127,7 @@ class EmailTests(unittest.TestCase):
             mock.patch("db.email_prefs.unsubscribe_url", return_value="https://u"),
             mock.patch("scheduler.morning_digest.default_watchlist_tickers", return_value=["PLTR"]),
             mock.patch("scheduler.morning_digest.record_email_job"),
-            mock.patch("services.weekly_earnings.logo_ok", return_value=False),
+            mock.patch("api.logo_check.logo_info", return_value={"kind": "none"}),
             mock.patch("ui.email_utils.send_digest_email", side_effect=lambda to, subj, *a, **k: sent.append((to, subj)) or True),
         ]
         for p in patches:
@@ -137,6 +141,63 @@ class EmailTests(unittest.TestCase):
         self.assertEqual([t for t, _ in sent], ["pro@x.com"])
         self.assertEqual(out["skipped"], {"plan_below_pro": 1, "unsubscribed": 1})
         self.assertEqual(again["skipped"].get("already_sent"), 1)
+
+
+def _png(width, height, pixel, ctype=6):
+    """A tiny 8-bit PNG whose pixel(x, y) returns RGBA (ctype 6) or RGB (ctype 2)."""
+    import struct
+    import zlib
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    rows = b""
+    for y in range(height):
+        line = b"".join(bytes(pixel(x, y)[:4 if ctype == 6 else 3]) for x in range(width))
+        rows += b"\x00" + line
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, ctype, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+class LogoCheckTests(unittest.TestCase):
+    def test_classify(self):
+        from api.logo_check import classify
+
+        ring = lambda x, y: (255, 255, 255, 255) if 4 <= x < 12 else (0, 0, 0, 0)          # white on transparent
+        dark = lambda x, y: (20, 20, 20, 255) if 4 <= x < 12 else (0, 0, 0, 0)
+        boxed = lambda x, y: (255, 255, 255) if x < 12 else (200, 0, 0)                      # opaque, two colors
+        photo = lambda x, y: ((x * 37) % 256, (y * 53) % 256, (x * y * 11) % 256)            # opaque, many colors
+        self.assertEqual(classify(_png(16, 16, ring)), {"kind": "logo", "light": True})
+        self.assertEqual(classify(_png(16, 16, dark)), {"kind": "logo", "light": False})
+        self.assertEqual(classify(_png(16, 16, boxed, ctype=2)), {"kind": "logo", "light": False})
+        self.assertEqual(classify(_png(64, 64, photo, ctype=2)), {"kind": "none"})
+        self.assertEqual(classify(b"\xff\xd8\xff\xe0 jpeg"), {"kind": "none"})
+        self.assertEqual(classify(b""), {"kind": "none"})
+
+    def test_paeth_filtered_rows_decode(self):
+        import struct
+        import zlib
+
+        from api.logo_check import decode_png
+
+        # Two 2x1 RGBA rows; row 2 uses the Up filter (2) with zero deltas = same pixels as row 1.
+        raw = b"\x00" + bytes([10, 20, 30, 255, 40, 50, 60, 0]) + b"\x02" + bytes(8)
+
+        def chunk(kind, body):
+            return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+        png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 6, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        self.assertEqual(decode_png(png)["pixels"], [(10, 20, 30, 255), (40, 50, 60, 0)] * 2)
+
+    def test_logo_info_cached_and_errors_read_as_none(self):
+        from api import logo_check
+
+        with mock.patch("api.shared_cache.get", return_value=None), mock.patch("api.shared_cache.put"):
+            self.assertEqual(logo_check.logo_info("ZZZZ", fetch=lambda u: None), {"kind": "none"})
+            self.assertEqual(logo_check.logo_info("BOOM", fetch=lambda u: 1 / 0), {"kind": "none"})
+            got = logo_check.logo_infos(["AAPL", "AAPL"], fetch=lambda u: _png(4, 4, lambda x, y: (0, 0, 0, 255 if x else 0)))
+        self.assertEqual(got, {"AAPL": {"kind": "logo", "light": False}})
 
 
 if __name__ == "__main__":

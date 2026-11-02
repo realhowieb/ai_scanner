@@ -10,9 +10,9 @@ that haven't switched the "earnings" email off. Each account is claimed in the
 lifecycle email log (db.referrals.claim_email, kind "weekly_earnings", ref the ISO week
 of the Monday) before sending, so a restart never sends it twice.
 
-Logos come from FMP's public image URL. Each one is checked once (HEAD, cached a week)
-so a missing logo never shows as a broken image; the ticker is always printed as text,
-so emails with images off still read fine.
+Logos come from FMP's public image URL, checked by api.logo_check (cached a week): a
+missing logo or a photo shows the ticker's first letter, and a white logo sits on a dark
+chip. The ticker is always printed as text, so emails with images off still read fine.
 
 Env: HSF_WEEKLY_EARNINGS_ENABLED=0 stops it (checked in api/ops_jobs.py),
 HSF_WEEKLY_EARNINGS_MAX_USERS (default 500) caps one run. Best effort: never raises.
@@ -31,7 +31,6 @@ KIND = "weekly_earnings"
 UTC = dt.timezone.utc
 PER_DAY = 12
 TILES_PER_ROW = 4
-LOGO_TTL_S = 7 * 24 * 3600
 
 
 def _max_users() -> int:
@@ -46,46 +45,25 @@ def iso_week(day: dt.date) -> str:
     return f"{y}-W{w:02d}"
 
 
-def logo_ok(ticker: str, *, head: Optional[Callable[[str], int]] = None) -> bool:
-    """True when FMP has a logo image for the ticker (cached a week either way)."""
-    from api import shared_cache
-    from api.earnings_week import logo_url
-
-    url = logo_url(ticker)
-
-    def load() -> Dict[str, bool]:
-        try:
-            if head is not None:
-                code = head(url)
-            else:
-                import requests
-
-                r = requests.head(url, timeout=4, allow_redirects=True)
-                code = r.status_code if "image" in (r.headers.get("content-type") or "") else 404
-        except Exception:
-            return {"ok": False}
-        return {"ok": code == 200}
-
-    try:
-        return bool(shared_cache.cached(f"logo_ok:{ticker.upper()}", load, LOGO_TTL_S,
-                                        empty_ttl_s=LOGO_TTL_S, is_empty=lambda v: False).get("ok"))
-    except Exception:
-        return False
-
-
 _TIME = {"bmo": ("☀️", "Before open"), "amc": ("🌙", "After close")}
 
 
-def tile(name: Dict[str, Any], *, base_url: str, logo: bool) -> str:
+def tile(name: Dict[str, Any], *, base_url: str) -> str:
+    """One logo tile. name["logo"]: standard (light chip), light (white logo: dark chip),
+    anything else (missing, a photo, unchecked): the ticker's first letter."""
     from ui import email_kit as k
 
     t = str(name["ticker"])
     icon, label = _TIME.get(name.get("time") or "", ("", "Time TBA"))
-    img = (f"<img src='{k.esc(name['logo_url'])}' width='36' height='36' alt='' "
-           "style='display:block;margin:0 auto 4px;width:36px;height:36px;border-radius:8px;object-fit:contain'>"
-           if logo else
-           f"<div style='width:36px;height:36px;line-height:36px;margin:0 auto 4px;border-radius:8px;"
-           f"background:#e2e8f0;color:#334155;font-weight:700;font-size:15px'>{k.esc(t[:1])}</div>")
+    kind = name.get("logo")
+    if kind in ("standard", "light"):
+        chip = "#1e293b" if kind == "light" else "#ffffff"
+        img = (f"<div style='width:40px;height:40px;margin:0 auto 4px;border-radius:9px;background:{chip};"
+               f"border:1px solid {k.LINE}'><img src='{k.esc(name['logo_url'])}' width='32' height='32' alt='' "
+               "style='display:block;margin:4px;width:32px;height:32px;object-fit:contain'></div>")
+    else:
+        img = (f"<div style='width:40px;height:40px;line-height:40px;margin:0 auto 4px;border-radius:9px;"
+               f"background:#e2e8f0;color:#334155;font-weight:700;font-size:16px'>{k.esc(t[:1])}</div>")
     star = "⭐ " if name.get("on_watchlist") else ""
     score = name.get("score")
     badge = k.score_badge(score) if score is not None else ""
@@ -97,12 +75,12 @@ def tile(name: Dict[str, Any], *, base_url: str, logo: bool) -> str:
             f"<div style='font-size:12px;margin-top:2px'>{when} {badge}</div></div></a>")
 
 
-def day_box(day: Dict[str, Any], *, base_url: str, logos: Dict[str, bool]) -> str:
+def day_box(day: Dict[str, Any], *, base_url: str) -> str:
     from ui import email_kit as k
 
     d = dt.date.fromisoformat(day["date"])
     names = day["names"]
-    cells = [tile(n, base_url=base_url, logo=logos.get(n["ticker"], False)) for n in names]
+    cells = [tile(n, base_url=base_url) for n in names]
     rows = []
     for i in range(0, len(cells), TILES_PER_ROW):
         chunk = cells[i:i + TILES_PER_ROW]
@@ -117,7 +95,7 @@ def day_box(day: Dict[str, Any], *, base_url: str, logos: Dict[str, bool]) -> st
     return k.card(f"{d:%A}, {d:%b} {d.day}", body, sub=sub)
 
 
-def compose(week: Dict[str, Any], *, base_url: str, logos: Dict[str, bool], watched: List[str]) -> tuple:
+def compose(week: Dict[str, Any], *, base_url: str, watched: List[str]) -> tuple:
     """(subject, text, html_inner, glance_html). Pure."""
     from ui import email_kit as k
 
@@ -127,7 +105,7 @@ def compose(week: Dict[str, Any], *, base_url: str, logos: Dict[str, bool], watc
     biggest = max(days, key=lambda d: d["total"]) if days else None
     subject = f"Earnings this week: {total} companies report (week of {start:%b} {start.day})"
     link = f"{base_url}/scanner?signal=earnings&eview=calendar"
-    html = [day_box(d, base_url=base_url, logos=logos) for d in days]
+    html = [day_box(d, base_url=base_url) for d in days]
     html.append(k.card("📅 See the whole week", k.note(
         "Biggest names first, by trading volume. ☀️ reports before the open, 🌙 after the close. "
         "⭐ marks your watchlist. Scores come from the latest HSF scan. Dates come from the earnings "
@@ -166,6 +144,7 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
 
     try:
         from api import earnings_week as ew
+        from api.logo_check import logo_info
         from api.scans import _et_date, earnings_autoscore
         from auth.tiering import get_user_tier, has_min_tier
         from db import referrals as store
@@ -191,7 +170,6 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     except Exception:
         auto = {}
     url = _base_url()
-    logos: Dict[str, bool] = {}
 
     for username in list(users)[:_max_users()]:
         email = str(username or "").strip().lower()
@@ -222,11 +200,11 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
                 skip("already_sent")
                 continue
             week = ew.for_plan(base, per_day=PER_DAY, auto=auto, watched=set(watch), all_scores=True)
-            for d in week["days"]:
+            for d in week["days"]:   # watchlist names beyond the checked top names
                 for n in d["names"]:
-                    if n["ticker"] not in logos:
-                        logos[n["ticker"]] = logo_ok(n["ticker"])
-            subject, text, inner, glance = compose(week, base_url=url, logos=logos, watched=watch)
+                    if n.get("logo") is None:
+                        n["logo"] = ew.logo_kind(logo_info(n["ticker"]))
+            subject, text, inner, glance = compose(week, base_url=url, watched=watch)
             start = base["start"]
             if send_digest_email(email, subject, inner, text, unsubscribe_url=unsubscribe_url(email, "earnings"),
                                  title_line=f"Earnings this week · {start:%b} {start.day} to "
