@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from tests.test_api_paid_features import PaidApiTestCase
+from tests.test_api_v1 import DEPS
 
 UTC = dt.timezone.utc
 
@@ -124,6 +125,7 @@ class EmailTests(unittest.TestCase):
         self.assertIn("Nothing passed your filters", html)
 
 
+@unittest.skipUnless(DEPS, "needs the API dependencies (the runner lives in the API)")
 class RunPassTests(unittest.TestCase):
     NOW = dt.datetime(2026, 11, 2, 13, 30, tzinfo=UTC)   # 8:30 ET Monday: the open window
 
