@@ -1017,6 +1017,24 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 .earn-day-h { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 12px 4px 6px; }
 .pill.earn-yours { color: var(--text-2); font-size: 12px; white-space: nowrap; }
 .earn-score-link { font-size: 13px; white-space: nowrap; }
+/* Earnings week calendar: five day columns of logo tiles (stacked on narrow screens). */
+.ecal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.ecal-day { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-xl); padding: 12px; min-width: 0; }
+.ecal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.ecal-head h3 { font-size: var(--fs-md); font-weight: 600; margin: 0; }
+.ecal-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ecal-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; min-height: 44px;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--raise); color: var(--text); text-decoration: none; }
+.ecal-tile:hover, .ecal-tile:focus-visible { border-color: var(--line-strong); background: var(--raise-2); }
+.ecal-tile.ecal-mine { border-color: var(--info-strong); }
+.ecal-logo { width: 32px; height: 32px; border-radius: var(--radius-md); object-fit: contain; background: #fff; }
+.ecal-letter { display: flex; align-items: center; justify-content: center; background: var(--raise-2); color: var(--text-2); font-weight: 700; }
+.ecal-ticker { font-weight: 700; font-size: var(--fs-sm); font-family: var(--font-mono); }
+.ecal-meta { display: flex; align-items: center; gap: 4px; font-size: var(--fs-xs); min-height: 18px; }
+.ecal-time.earn-bmo { color: var(--accent-2); }
+.ecal-time.earn-amc { color: var(--amber); }
+.ecal-more, .ecal-none { margin: 8px 2px 0; }
+@media (max-width: 1100px) { .ecal { grid-template-columns: 1fr; } .ecal-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); } }
 
 /* Keep research controls close together so the ranked board stays in view. */
 .scanner-page { gap: 12px; }

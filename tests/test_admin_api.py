@@ -138,7 +138,7 @@ class AdminApiTests(ApiTestCase):
         with mock.patch("db.earnings.populate_earnings_calendar", return_value={"AAPL": info}) as pop, \
              mock.patch("db.earnings.mark_earnings_refreshed_today") as mark:
             admin._run_earnings_refresh(["AAPL"])
-        pop.assert_called_once_with(["AAPL"], use_yf_fallback=False, sleep_s=0)
+        pop.assert_called_once_with(["AAPL"], use_yf_fallback=False, sleep_s=0, include_all_bulk=True)
         mark.assert_called_once_with("cron_earnings")
         self.assertEqual(admin.earnings_refresh_status()["state"], "done")
         self.assertEqual(admin.earnings_refresh_status()["dated"], 1)

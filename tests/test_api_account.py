@@ -307,9 +307,9 @@ class PrefsAndBillingTests(AccountApiTestCase):
 
     def test_email_preferences(self):
         self.assertEqual(self.client.get("/v1/me/email-preferences", headers=self.h).json(),
-                         {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
+                         {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True, "earnings": True})
         r = self.client.patch("/v1/me/email-preferences", headers=self.h, json={"evening": False})
-        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True, "weekly": True, "tips": True})
+        self.assertEqual(r.json(), {"digest": True, "evening": False, "alerts": True, "weekly": True, "tips": True, "earnings": True})
 
     def test_checkout_needs_a_verified_email(self):
         r = self.client.post("/v1/billing/checkout", headers=self.h, json={"plan": "pro"})

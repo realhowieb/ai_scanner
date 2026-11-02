@@ -49,6 +49,7 @@ const PREFS: { key: keyof EmailPrefs; label: string; note: string }[] = [
   { key: "evening", label: "Evening market wrap", note: "After the close" },
   { key: "alerts", label: "Alert emails", note: "In-app alerts continue either way" },
   { key: "weekly", label: "Weekly recap", note: "Saturday mornings" },
+  { key: "earnings", label: "Earnings week ahead", note: "Sunday evenings, Pro and up" },
   { key: "tips", label: "Tips and reminders", note: "A few in your first week, and one if you've been away" },
 ];
 

@@ -1350,6 +1350,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/earnings/week": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Earnings week at a glance (Pro)
+         * @description Who reports on each of the next five trading days, biggest companies first, with
+         *     your watchlist names always included. Scores follow your plan: scan scores within
+         *     your Scanner row cap, plus Premium's auto-score of every reporter.
+         */
+        get: operations["earnings_week_v1_earnings_week_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/email-preferences/unsubscribe": {
         parameters: {
             query?: never;
@@ -5564,6 +5586,72 @@ export interface components {
              */
             time?: string | null;
         };
+        /** EarningsWeek */
+        EarningsWeek: {
+            /** Days */
+            days: components["schemas"]["EarningsWeekDay"][];
+            /** End */
+            end: string;
+            /** Per Day */
+            per_day: number;
+            /** Scan At */
+            scan_at?: string | null;
+            /** Start */
+            start: string;
+        };
+        /** EarningsWeekDay */
+        EarningsWeekDay: {
+            /**
+             * Date
+             * @description YYYY-MM-DD (a trading day)
+             */
+            date: string;
+            /** Names */
+            names: components["schemas"]["EarningsWeekName"][];
+            /** Shown */
+            shown: number;
+            /**
+             * Total
+             * @description Every company reporting that day, including ones not shown
+             */
+            total: number;
+        };
+        /** EarningsWeekName */
+        EarningsWeekName: {
+            /** Chg Pct */
+            chg_pct?: number | null;
+            /**
+             * Dollar Volume
+             * @description Last close x volume; the day's sort order
+             */
+            dollar_volume?: number | null;
+            /** Last */
+            last?: number | null;
+            /** Logo Url */
+            logo_url: string;
+            /**
+             * On Watchlist
+             * @default false
+             */
+            on_watchlist: boolean;
+            /**
+             * Score
+             * @description HSF Score when this plan can see one
+             */
+            score?: number | null;
+            /**
+             * Score Source
+             * @description scan or auto (Premium auto-score)
+             */
+            score_source?: string | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Time
+             * @description bmo (before the open), amc (after the close) or null
+             */
+            time?: string | null;
+        };
         /** EliteLimits */
         EliteLimits: {
             /** Ai Multiplier */
@@ -5591,6 +5679,12 @@ export interface components {
              */
             digest: boolean;
             /**
+             * Earnings
+             * @description Sunday earnings week ahead (Pro and up)
+             * @default true
+             */
+            earnings: boolean;
+            /**
              * Evening
              * @description Evening market wrap
              */
@@ -5612,6 +5706,8 @@ export interface components {
             alerts?: boolean | null;
             /** Digest */
             digest?: boolean | null;
+            /** Earnings */
+            earnings?: boolean | null;
             /** Evening */
             evening?: boolean | null;
             /** Tips */
@@ -9618,7 +9714,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "digest" | "evening" | "alerts" | "weekly" | "tips" | "all";
+            kind: "digest" | "evening" | "alerts" | "weekly" | "tips" | "earnings" | "all";
             /** Token */
             token: string;
         };
@@ -13873,6 +13969,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EarningsItem"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    earnings_week_v1_earnings_week_get: {
+        parameters: {
+            query?: {
+                /** @description Names per day, biggest by dollar volume */
+                per_day?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EarningsWeek"];
                 };
             };
             /** @description Not signed in */

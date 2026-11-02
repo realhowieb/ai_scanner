@@ -13,6 +13,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { num, pct, price, setupLabel } from "@/lib/format";
 
+import { EarningsCalendar } from "./EarningsCalendar";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { RvolMeter } from "./Sparks";
 import { Hint } from "@/components/Hint";
@@ -29,7 +30,7 @@ export const EARNINGS_TIMES = [
 ] as const;
 export type EarningsWhen = (typeof EARNINGS_WHEN)[number]["id"];
 export type EarningsTime = "" | "bmo" | "amc";
-export type EarningsFilters = { when: EarningsWhen; time: EarningsTime; all: boolean };
+export type EarningsFilters = { when: EarningsWhen; time: EarningsTime; all: boolean; calendar?: boolean };
 
 type Row = Schemas["EarningsSetup"];
 
@@ -42,16 +43,17 @@ export function readEarningsFilters(sp: URLSearchParams): EarningsFilters {
     when: (EARNINGS_WHEN.some((x) => x.id === w) ? w : "today") as EarningsWhen,
     time: (t === "bmo" || t === "amc" ? t : "") as EarningsTime,
     all: sp.get("all") === "1",
+    calendar: sp.get("eview") === "calendar",
   };
 }
 
 export function earningsLocked(f: EarningsFilters, pro: boolean): boolean {
-  return f.when !== "today" && !pro;
+  return (f.when !== "today" || Boolean(f.calendar)) && !pro;
 }
 
 /** The earnings scan for these filters; null key (no request) while the window is locked. */
 export function useEarningsScan(f: EarningsFilters, enabled: boolean) {
-  const key = enabled ? `earnings-scan:${f.when}:${f.time}:${f.all ? 1 : 0}` : null;
+  const key = enabled && !f.calendar ? `earnings-scan:${f.when}:${f.time}:${f.all ? 1 : 0}` : null;
   const res = useApi(key, (signal) => unwrap(api.GET("/v1/scans/latest/earnings", {
     params: { query: { window: f.when, ...(f.time ? { time: f.time } : {}), ...(f.all ? { include_unranked: true } : {}) } },
     signal,
@@ -115,6 +117,13 @@ function timeOf(iso: string): string {
 export function EarningsControls({ f, pro, set }: { f: EarningsFilters; pro: boolean; set: (patch: Record<string, string | number>) => void }) {
   return (
     <div className="row-actions earn-controls">
+      <div className="seg-group" role="group" aria-label="Earnings view">
+        <button type="button" className={`seg${!f.calendar ? " on" : ""}`} aria-pressed={!f.calendar} onClick={() => set({ eview: "" })}>Table</button>
+        <button type="button" className={`seg${f.calendar ? " on" : ""}`} aria-pressed={Boolean(f.calendar)} onClick={() => set({ eview: "calendar" })}>
+          Week calendar{!pro && <span className="chip-lock"> · Pro</span>}
+        </button>
+      </div>
+      {!f.calendar && <>
       <div className="seg-group" role="group" aria-label="Reporting window">
         {EARNINGS_WHEN.map((w) => (
           <button key={w.id} type="button" className={`seg${f.when === w.id ? " on" : ""}`} aria-pressed={f.when === w.id}
@@ -133,6 +142,7 @@ export function EarningsControls({ f, pro, set }: { f: EarningsFilters; pro: boo
         <button type="button" className={`seg${!f.all ? " on" : ""}`} aria-pressed={!f.all} onClick={() => set({ all: 0 })}>Ranked setups</button>
         <button type="button" className={`seg${f.all ? " on" : ""}`} aria-pressed={f.all} onClick={() => set({ all: 1 })}>All reporters</button>
       </div>
+      </>}
     </div>
   );
 }
@@ -213,6 +223,7 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
   f: EarningsFilters; pro: boolean; autoScore?: boolean;
   res: ReturnType<typeof useEarningsScan>; onClear: () => void;
 }) {
+  if (f.calendar) return <EarningsCalendar pro={pro} />;
   if (earningsLocked(f, pro)) {
     return (
       <Card><Locked title="The earnings week ahead is part of Pro" plan="pro">

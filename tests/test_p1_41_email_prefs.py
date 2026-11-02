@@ -66,7 +66,7 @@ class PrefsStoreTests(unittest.TestCase):
 
         with with_db(Conn()):
             self.assertEqual(get_prefs("a@example.com"),
-                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
+                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True, "earnings": True})
         with mock.patch("db.email_prefs.get_neon_conn", return_value=None):
             self.assertTrue(wants_email("a@example.com", "digest"))
 
@@ -76,7 +76,7 @@ class PrefsStoreTests(unittest.TestCase):
         db = Conn({"a@example.com": {"prefs": (False, True, False, True, False)}})
         with with_db(db):
             self.assertEqual(get_prefs("A@Example.com"),
-                             {"digest": False, "evening": True, "alerts": False, "weekly": True, "tips": False})
+                             {"digest": False, "evening": True, "alerts": False, "weekly": True, "tips": False, "earnings": True})
 
     def test_set_prefs_upserts_only_known_kinds(self):
         from db.email_prefs import set_prefs

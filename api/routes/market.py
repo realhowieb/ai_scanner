@@ -24,6 +24,29 @@ def register(app: FastAPI) -> None:
         wanted = [t for t in (tickers or "").split(",") if t.strip()][:500]
         return market.earnings(days, wanted)
 
+    @app.get("/v1/earnings/week", response_model=models.EarningsWeek, responses={**_AUTH, 403: {"description": "Pro feature"}},
+             summary="Earnings week at a glance (Pro)")
+    def earnings_week(account: Dict[str, Any] = Depends(current_account),
+                      per_day: int = Query(16, ge=1, le=40, description="Names per day, biggest by dollar volume")
+                      ) -> Dict[str, Any]:
+        """Who reports on each of the next five trading days, biggest companies first, with
+        your watchlist names always included. Scores follow your plan: scan scores within
+        your Scanner row cap, plus Premium's auto-score of every reporter."""
+        from api import earnings_week as ew
+        from api.routes.data import _watched_tickers
+        from api.scans import earnings_autoscore, max_results_for
+
+        require_feature(account, "can_earnings")
+        ent = entitlements_for(account)
+        auto = None
+        if ent["entitlements"].get("can_earnings_autoscore"):
+            try:
+                auto = earnings_autoscore(ent["entitlements"]).get("rows")
+            except Exception:
+                auto = None
+        return json_safe(ew.for_plan(ew.cached_base(), per_day=per_day, cap=max_results_for(ent["tier"]),
+                                     auto=auto, watched=_watched_tickers(_user(account))))
+
     _DT = {**_AUTH, 403: {"description": "Pro feature"}}
 
     @app.get("/v1/day-trader", response_model=models.DayTrader, responses=_DT, summary="Live Day Trader monitor (Pro)")

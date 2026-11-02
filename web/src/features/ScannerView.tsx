@@ -124,7 +124,7 @@ export function ScannerView() {
   const countText = !data ? "" : earnings
     ? `${plural(scanTotal)} ranked${earn.data ? ` · ${earn.data.total} report ${earnWindow}` : ""}`
     : `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}`;
-  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, price: "", rvol: 0 };
+  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, eview: "", price: "", rvol: 0 };
 
 
   return (
@@ -190,19 +190,19 @@ export function ScannerView() {
       {earnings && <EarningsControls f={ef} pro={pro} set={set} />}
       {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
-      <div className="scanner-toolbar" role="group" aria-label="Scanner tools">
+      {!(earnings && ef.calendar) && <div className="scanner-toolbar" role="group" aria-label="Scanner tools">
       <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100,
           price: f.price, rvol: f.rvol as 0 | 1.5 | 2 | 3 }}
         onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25,
           price: v.price ?? "", rvol: v.rvol ?? 0 }); }} />
-      <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !earningsLocked(ef, pro) ? ef.when : undefined}
+      <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !ef.calendar && !earningsLocked(ef, pro) ? ef.when : undefined}
         setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label}
         initial={{ min_price: minPrice, max_price: maxPrice, min_rvol: f.rvol || undefined }} />
       {data && data.setups.length > 0 && !earnings && !lockedSignal && can("can_export_csv") && (
         <ScannerCsvButton query={filterQuery} total={visibleTotal} scanAt={data.scan_at} premium={premium} />
       )}
       {preferences.data && <TablePreferences key={JSON.stringify(preferences.data.table)} initial={preferences.data.table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
-      </div>
+      </div>}
 
       {earnings ? (
         <EarningsResults f={ef} pro={pro} autoScore={can("can_earnings_autoscore")} res={earn} onClear={() => set({ all: 1 })} />

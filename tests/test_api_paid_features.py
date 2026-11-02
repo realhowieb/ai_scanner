@@ -147,6 +147,30 @@ class EarningsTests(PaidApiTestCase):
         self.assertEqual(self.get("pro@example.com", "/v1/earnings?days=31").status_code, 422)
 
 
+class EarningsWeekTests(PaidApiTestCase):
+    def test_pro_gets_week_free_refused(self):
+        import datetime as dt
+
+        from api import earnings_week as ew
+
+        base = ew.build_base(dt.date(2026, 11, 1), calendar=[
+            {"symbol": "AAPL", "earnings_date": dt.date(2026, 11, 2), "earnings_time": "amc"},
+            {"symbol": "NET", "earnings_date": dt.date(2026, 11, 5), "earnings_time": None}],
+            sizes=lambda ts: {"AAPL": {"last": 270.0, "chg_pct": 1.0, "dollar_volume": 9e9}},
+            scores=lambda: {"at": None, "ranks": {"AAPL": (2, 64)}})
+        with mock.patch("api.earnings_week.cached_base", return_value=base), \
+                mock.patch("api.routes.data._watched_tickers", return_value={"NET"}):
+            self.assertEqual(self.get("free@example.com", "/v1/earnings/week").status_code, 403)
+            r = self.get("pro@example.com", "/v1/earnings/week?per_day=5")
+            self.assertEqual(self.get("pro@example.com", "/v1/earnings/week?per_day=41").status_code, 422)
+        self.assertEqual(r.status_code, 200, r.text)
+        d = r.json()
+        self.assertEqual(len(d["days"]), 5)
+        self.assertEqual(d["days"][0]["names"][0]["ticker"], "AAPL")
+        self.assertEqual(d["days"][0]["names"][0]["score"], 64)
+        self.assertTrue(d["days"][3]["names"][0]["on_watchlist"])
+
+
 class BriefTests(PaidApiTestCase):
     DATA = {"gappers": [{"ticker": "MSFT ⚠️E3d", "last": 400.0, "chg_pct": 2.0, "gap_pct": 3.1}],
             "golden": ["AAPL"], "top_setups": [("NVDA", 91.5)],
