@@ -6,7 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
-import { api, unwrap } from "@/api/client";
+import { api, sessionEndingOnPurpose, unwrap } from "@/api/client";
 import { account } from "@/api/account";
 import type { ApiError, Schemas } from "@/api/client";
 import { useApi } from "@/hooks/useApi";
@@ -55,6 +55,7 @@ export const SIGNED_OUT_PATH = "/signed-out";
  * state from the old session). Lands on the "You're signed out" page unless `to` says
  * otherwise (account deletion goes to the sign-in page). */
 export async function signOut(to: string = SIGNED_OUT_PATH): Promise<void> {
+  sessionEndingOnPurpose();
   resetUsageIdentity();
   finishBilling();
   clearCachedMe();
