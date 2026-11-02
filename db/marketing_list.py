@@ -97,8 +97,18 @@ def _close(conn) -> None:
         pass
 
 
+_SELECT = {
+    "email": "SELECT * FROM hsf_marketing_subscribers WHERE email = %s",
+    "token": "SELECT * FROM hsf_marketing_subscribers WHERE token = %s",
+}
+_SET_STATUS = {
+    "confirmed": "UPDATE hsf_marketing_subscribers SET status = 'confirmed', confirmed_at = %s WHERE token = %s",
+    "unsubscribed": "UPDATE hsf_marketing_subscribers SET status = 'unsubscribed', unsubscribed_at = %s WHERE token = %s",
+}
+
+
 def _get(cur, column: str, value: str) -> Optional[Dict[str, Any]]:
-    cur.execute(f"SELECT * FROM hsf_marketing_subscribers WHERE {column} = %s", (value,))
+    cur.execute(_SELECT[column], (value,))
     return _row(cur, cur.fetchone())
 
 
@@ -151,7 +161,7 @@ def subscribe(email: str, attribution: Mapping[str, Any] | None = None, surface:
 
 def _set_status(token: str, status: str, now: Optional[dt.datetime] = None) -> Optional[Dict[str, Any]]:
     token = str(token or "").strip()
-    if not token or status not in STATUSES:
+    if not token or status not in _SET_STATUS:
         return None
     now = now or _now()
     try:
@@ -167,9 +177,7 @@ def _set_status(token: str, status: str, now: Optional[dt.datetime] = None) -> O
             return None
         before = str(row.get("status") or "pending")
         if before != status:
-            stamp = "confirmed_at" if status == "confirmed" else "unsubscribed_at"
-            cur.execute(f"UPDATE hsf_marketing_subscribers SET status = %s, {stamp} = %s WHERE token = %s",
-                        (status, _iso(now), token))
+            cur.execute(_SET_STATUS[status], (_iso(now), token))
             conn.commit()
         return {"email": row["email"], "status": status, "changed": before != status}
     except Exception:

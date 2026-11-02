@@ -31,7 +31,8 @@ def register(app: FastAPI) -> None:
                   _l: None = Depends(ratelimit.limit("list_signup"))) -> Dict[str, Any]:
         """Sends one confirm email; the address joins the list only after the link is opened.
         Answers the same way whether or not the address was already on the list."""
-        from db.marketing_list import normalize_email, subscribe as add
+        from db.marketing_list import normalize_email
+        from db.marketing_list import subscribe as add
         from services.marketing_list import enabled, send_confirm
         from ui.acquisition import attribution_from_params
 
