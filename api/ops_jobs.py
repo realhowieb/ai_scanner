@@ -19,6 +19,9 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
     business email      Monday from 12:00 UTC: services.business_report to the admins.
     daily account mail  from 15:00 UTC: free Pro ended, first-week tips and the 14-day
                         come-back email (services.lifecycle_emails, services.onboarding_emails).
+    social drafts       the weekly social posts to Buffer as drafts (services.social_posts):
+                        earnings Mon, product Wed, Founding 100 Fri, recap Sat, each from
+                        the evening before its post time. Needs BUFFER_API_KEY.
     founder feedback    Mon-Fri from 14:00 UTC: when founders' feedback is waiting for an
                         answer, the admins get the count and the oldest one's age.
     scheduled scans     every pass on trading days: Premium customers' scheduled custom
@@ -33,6 +36,7 @@ Env (all default on; set to 0 to stop one):
     HSF_BUSINESS_EMAIL_ENABLED    business email (services.business_report)
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
     HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
+    HSF_SOCIAL_DRAFTS_ENABLED     social drafts to Buffer
     HSF_SCHEDULED_SCANS_ENABLED   scheduled custom scans (services.scheduled_scans)
 
 Nothing here raises into the API.
@@ -331,6 +335,12 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
     _run_once("daily_account_mail", daily_mail_due(now), daily)
     if _on("HSF_FOUNDER_FEEDBACK_NUDGE"):
         _run_once("founder_feedback_nudge", founder_nudge_due(now), founder_feedback_nudge)
+    if _on("HSF_SOCIAL_DRAFTS_ENABLED") and os.environ.get("BUFFER_API_KEY", "").strip():
+        from services import social_posts
+
+        for kind in social_posts.KINDS:
+            week = social_posts.due(kind, now)
+            _run_once(f"social_{kind}", week, lambda k=kind, w=week: social_posts.send(k, w, now=now))
     if _on("HSF_SCHEDULED_SCANS_ENABLED"):
         try:
             from services import scheduled_scans

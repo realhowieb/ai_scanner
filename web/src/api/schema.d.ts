@@ -420,6 +420,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/marketing/social": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Weekly social drafts: Buffer setup, next posts and recent sends */
+        get: operations["admin_social_v1_admin_marketing_social_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/marketing/social/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the next post of one kind to Buffer as drafts now
+         * @description Channels that already have this week's draft are skipped.
+         */
+        post: operations["admin_social_send_v1_admin_marketing_social__kind__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/marketing/subscribers.csv": {
         parameters: {
             query?: never;
@@ -2608,6 +2645,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/social/{kind}/{week}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a weekly social post's image shows (public)
+         * @description The stored post, or the next one of that kind (nothing else is composed on request).
+         */
+        get: operations["social_post_v1_public_social__kind___week__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/stocks/{ticker}": {
         parameters: {
             query?: never;
@@ -4411,6 +4468,33 @@ export interface components {
              * @default false
              */
             truncated: boolean;
+        };
+        /** AdminSocial */
+        AdminSocial: {
+            /** Channel Error */
+            channel_error?: string | null;
+            /**
+             * Channels
+             * @default []
+             */
+            channels: components["schemas"]["SocialChannel"][];
+            /**
+             * Configured
+             * @description BUFFER_API_KEY is set on the API
+             */
+            configured: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Posts
+             * @default []
+             */
+            posts: components["schemas"]["SocialPostStatus"][];
+            /**
+             * Recent
+             * @default []
+             */
+            recent: components["schemas"]["SocialDraftRow"][];
         };
         /** AdminStairStepper */
         AdminStairStepper: {
@@ -8590,6 +8674,20 @@ export interface components {
              */
             weeks: components["schemas"]["RecapWeek"][];
         };
+        /** PublicSocialPost */
+        PublicSocialPost: {
+            /**
+             * Image
+             * @description What the post's image shows (kind-specific)
+             */
+            image: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /** Week */
+            week: string;
+        };
         /** PublicStock */
         PublicStock: {
             /** Change Pct */
@@ -9737,6 +9835,107 @@ export interface components {
              * @description Market-data feed behind volume figures: 'iex' counts IEX exchange trades only (a small share of U.S. volume), 'sip' is consolidated
              */
             volume_feed?: string | null;
+        };
+        /** SocialChannel */
+        SocialChannel: {
+            /** Name */
+            name: string;
+            /** Service */
+            service: string;
+        };
+        /** SocialDraftRow */
+        SocialDraftRow: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /** Channel Name */
+            channel_name?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Kind */
+            kind: string;
+            /** Service */
+            service?: string | null;
+            /** Status */
+            status: string;
+            /** Updated At */
+            updated_at: string;
+            /** Week */
+            week: string;
+        };
+        /** SocialPostStatus */
+        SocialPostStatus: {
+            /**
+             * Drafted
+             * @default 0
+             */
+            drafted: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /** Kind */
+            kind: string;
+            /** Post At */
+            post_at: string;
+            preview?: components["schemas"]["SocialPreview"] | null;
+            /** Week */
+            week: string;
+        };
+        /** SocialPreview */
+        SocialPreview: {
+            /** Image Url */
+            image_url: string;
+            /** Kind */
+            kind: string;
+            /** Post At */
+            post_at: string;
+            /**
+             * Problem
+             * @description Why it would be refused (a performance claim), if so
+             */
+            problem?: string | null;
+            /**
+             * Texts
+             * @description Post text per network (threads, linkedin, instagram)
+             */
+            texts: {
+                [key: string]: string;
+            };
+            /** Week */
+            week: string;
+        };
+        /** SocialSendResult */
+        SocialSendResult: {
+            /**
+             * Already
+             * @default 0
+             */
+            already: number;
+            /** Error */
+            error?: string | null;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Gave Up
+             * @default 0
+             */
+            gave_up: number;
+            /**
+             * Sent
+             * @default 0
+             */
+            sent: number;
+            /** Skipped */
+            skipped?: string | null;
+            /** Why */
+            why?: string | null;
         };
         /** Sparklines */
         Sparklines: {
@@ -11898,6 +12097,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminMarketing"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_social_v1_admin_marketing_social_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSocial"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_social_send_v1_admin_marketing_social__kind__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialSendResult"];
                 };
             };
             /** @description Not signed in */
@@ -17888,6 +18175,45 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ListConfig"];
                 };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    social_post_v1_public_social__kind___week__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                week: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicSocialPost"];
+                };
+            };
+            /** @description No such post */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request fields */
             422: {
