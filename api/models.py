@@ -2019,3 +2019,127 @@ class PublicStock(BaseModel):
     setup: Optional[str] = None
     reason: Optional[str] = Field(default=None, description="The first reason only; the rest needs an account")
     hidden_insights: int = Field(description="Other reasons, signals and risks shown after signing up")
+
+
+# ---- marketing: email list, public weekly recap, admin report ----------------------------------
+class ListSubscribe(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    attribution: Dict[str, str] = Field(default_factory=dict, max_length=12,
+                                        description="utm_* tags and referrer from the visitor's first page")
+    surface: Optional[str] = Field(default=None, max_length=40, description="Which page the form was on")
+    website: Optional[str] = Field(default=None, max_length=200, description="Leave empty (a trap for bots)")
+
+
+class ListSubscribeResult(BaseModel):
+    ok: bool = True
+    message: str
+
+
+class ListStatus(BaseModel):
+    email: str = Field(description="Masked address")
+    status: Literal["pending", "confirmed", "unsubscribed"]
+
+
+class ListAction(BaseModel):
+    token: str = Field(min_length=10, max_length=64)
+    action: Literal["confirm", "unsubscribe"]
+
+
+class ListConfig(BaseModel):
+    enabled: bool
+
+
+class RecapName(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    days: int = Field(description="Trading days the name was in the first scan's top 10")
+    best_score: int
+    setup: Optional[str] = None
+    first_day: str
+
+
+class RecapEarningsName(BaseModel):
+    ticker: str
+    time: Optional[str] = None
+
+
+class RecapEarningsDay(BaseModel):
+    date: str
+    total: int
+    names: List[RecapEarningsName] = []
+
+
+class RecapEarnings(BaseModel):
+    start: str
+    end: str
+    days: List[RecapEarningsDay] = []
+
+
+class PublicRecap(BaseModel):
+    week: str
+    start: str
+    end: str
+    built_at: str
+    scan_days: int
+    ranked_names: int
+    ranked: List[RecapName] = []
+    earnings: Optional[RecapEarnings] = None
+
+
+class RecapWeek(BaseModel):
+    week: str
+    start: str
+    end: str
+
+
+class PublicRecapIndex(BaseModel):
+    latest: Optional[PublicRecap] = None
+    weeks: List[RecapWeek] = []
+
+
+class MarketingSourceRow(BaseModel):
+    source: str
+    visits: int
+    clicks: int
+    list_signups: int
+    list_confirmed: int
+    accounts: int
+    paid: int
+    founders: int
+
+
+class MarketingTotals(BaseModel):
+    visits: int = 0
+    clicks: int = 0
+    list_signups: int = 0
+    list_confirmed: int = 0
+    accounts: int = 0
+    paid: int = 0
+    founders: int = 0
+
+
+class MarketingCampaign(BaseModel):
+    utm_source: str
+    campaign: str
+    visits: int
+    clicks: int
+    list_signups: int
+    accounts: int
+
+
+class MarketingList(BaseModel):
+    confirmed: int
+    pending: int
+    unsubscribed: int
+    new_in_period: int
+    sync_configured: bool = Field(description="Confirmed addresses are copied to a Resend segment")
+
+
+class AdminMarketing(BaseModel):
+    days: int
+    by_source: List[MarketingSourceRow] = []
+    totals: MarketingTotals
+    campaigns: List[MarketingCampaign] = []
+    founder_revenue_cents: int = 0
+    list: MarketingList
+    unavailable: List[str] = []

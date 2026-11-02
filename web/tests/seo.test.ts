@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/server/publicRecap", () => ({
+  loadRecapIndex: async () => ({ latest: null, weeks: [{ week: "2026-W44", start: "2026-10-26", end: "2026-10-30" }] }),
+}));
 
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { PRIVATE_PATHS, PUBLIC_PAGES, publicMetadata, siteOrigin } from "@/lib/seo";
 
 describe("search metadata", () => {
-  it("lists only public pages in the sitemap", () => {
-    const urls = sitemap().map((e) => e.url);
-    expect(urls).toEqual(PUBLIC_PAGES.map((p) => `${siteOrigin()}${p === "/" ? "" : p}`));
+  it("lists only public pages in the sitemap, plus each published weekly recap", async () => {
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toEqual([...PUBLIC_PAGES.map((p) => `${siteOrigin()}${p === "/" ? "" : p}`), `${siteOrigin()}/weekly/2026-W44`]);
     for (const u of urls) {
       expect(PRIVATE_PATHS.some((p) => new URL(u).pathname.startsWith(p))).toBe(false);
     }

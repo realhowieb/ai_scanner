@@ -235,3 +235,59 @@ def load_signup_funnel(days: int = 30) -> dict[str, Any]:
             conn.close()
         except Exception:
             pass
+
+
+MARKETING_EVENTS = ("landing_visit", "primary_cta_click", "signup_started", "signup_completed",
+                    "successful_paid_conversion")
+
+
+def load_marketing(days: int = 30) -> dict[str, Any]:
+    """Raw inputs for the admin Marketing report (api.marketing_report): the period's funnel
+    events with their source and campaign, every account's sign-up source, and the period's
+    Founding 100 purchases. Read-only; a part that fails is listed in `errors`."""
+    conn = get_neon_conn()
+    if conn is None:
+        return {"available": False, "errors": {"database": "unavailable"}}
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=max(1, int(days)))
+    errors: dict[str, str] = {}
+    try:
+        rows, error = _query(
+            conn,
+            "SELECT event_name, source, utm_source, utm_campaign, user_hash FROM acquisition_events "
+            "WHERE event_name = ANY(%s) AND occurred_at >= %s ORDER BY occurred_at DESC LIMIT %s",
+            (list(MARKETING_EVENTS), since, MAX_EVENTS * 5),
+        )
+        if error:
+            return {"available": False, "errors": {"events": error}}
+        events = [{"event": _value(r, "event_name", 0), "source": _value(r, "source", 1),
+                   "utm_source": _value(r, "utm_source", 2), "utm_campaign": _value(r, "utm_campaign", 3),
+                   "user_hash": _value(r, "user_hash", 4)} for r in rows]
+        src_rows, error = _query(
+            conn,
+            "SELECT user_hash, source FROM acquisition_events WHERE event_name = 'signup_completed' "
+            "AND user_hash IS NOT NULL ORDER BY occurred_at DESC LIMIT %s",
+            (MAX_EVENTS * 5,),
+        )
+        if error:
+            errors["sources"] = error
+        sources: dict[str, str] = {}
+        for r in src_rows:
+            sources.setdefault(str(_value(r, "user_hash", 0)), str(_value(r, "source", 1) or ""))
+        f_rows, error = _query(
+            conn,
+            "SELECT user_id, tier, status, purchase_price_cents, purchased_at FROM founding_memberships "
+            "WHERE purchased_at >= %s",
+            (since.isoformat(),),
+        )
+        if error:
+            errors["founding"] = error
+        founders = [{"user": str(_value(r, "user_id", 0) or "").strip().lower(), "tier": _value(r, "tier", 1),
+                     "status": _value(r, "status", 2), "cents": int(_value(r, "purchase_price_cents", 3) or 0)}
+                    for r in f_rows]
+        return {"available": True, "events": events, "sources": sources, "founders": founders, "errors": errors,
+                "since": since.isoformat()}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

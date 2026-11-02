@@ -11,6 +11,10 @@ const ROUTES: Record<string, ReadonlyArray<"GET" | "POST">> = {
   "v1/events": ["POST"],
   "v1/client-errors": ["POST"],
   "v1/email-preferences/unsubscribe": ["GET", "POST"],
+  "v1/public/list": ["GET"],
+  "v1/public/subscribe": ["POST"],
+  "v1/public/subscribe/status": ["GET"],
+  "v1/public/subscribe/action": ["POST"],
 };
 const MAX_BODY = 4096;
 const GATEWAY = new Set([502, 503, 504]);

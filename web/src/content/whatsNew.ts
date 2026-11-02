@@ -8,6 +8,13 @@ export type WhatsNewEntry = { id: string; title: string; items: string[] };
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    id: "2026-11-02",
+    title: "What's new",
+    items: [
+      "New public Weekly recap (app.hsfinest.com/weekly): the stocks HSF's scanner ranked most each week, plus next week's biggest earnings. Share it with a friend.",
+    ],
+  },
+  {
     id: "2026-10-27",
     title: "What's new",
     items: [

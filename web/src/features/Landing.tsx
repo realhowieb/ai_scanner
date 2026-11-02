@@ -15,6 +15,7 @@ import type { Schemas } from "@/api/client";
 import { ErrorState, Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
 import { FoundingBanner, usePublicFounding } from "@/features/FoundingBanner";
+import { EmailSignup } from "@/features/EmailSignup";
 import { LiveSetupsPreview } from "@/features/LiveSetupsPreview";
 import { useApi } from "@/hooks/useApi";
 import { captureAttribution, track } from "@/lib/funnel";
@@ -88,7 +89,7 @@ export function PublicFooter() {
   return (
     <footer className="pub-foot">
       <p className="cap">{DISCLAIMER}</p>
-      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
+      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/weekly">Weekly recap</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
       <p className="cap"><LegalLinks refunds={!!founding} /></p>
     </footer>
   );
@@ -271,6 +272,8 @@ export function Landing() {
           </div>
           <p className="cap">{SCORE_LINE} <Link href="/how-hsf-works">How HSF works, in full</Link></p>
         </section>
+
+        <EmailSignup surface="landing" title="Not ready to sign up? Get the weekly setups by email" />
 
         <section aria-labelledby="plans" className="stack-sm" id="pricing">
           <h2 id="plans" className="h2">Plans</h2>

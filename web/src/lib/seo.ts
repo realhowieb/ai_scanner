@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 
 /** The pages search engines may list (also the sitemap). */
-export const PUBLIC_PAGES = ["/", "/pricing", "/how-hsf-works", "/demo"] as const;
+export const PUBLIC_PAGES = ["/", "/pricing", "/how-hsf-works", "/demo", "/weekly"] as const;
 export type PublicPage = (typeof PUBLIC_PAGES)[number];
 
 /** Signed-in areas and server routes that crawlers are asked to skip (robots.txt). */

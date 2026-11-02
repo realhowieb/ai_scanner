@@ -1,0 +1,27 @@
+import type { Metadata } from "next";
+
+import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
+import { loadRecap, loadRecapIndex } from "@/server/publicRecap";
+
+type Props = { params: Promise<{ week: string }> };
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const recap = await loadRecap((await params).week);
+  if (!recap) return { title: "Weekly recap not found" };
+  const title = `HSF weekly recap: ${weekRange(recap.start, recap.end)}`;
+  const top = recap.ranked.slice(0, 3).map((r) => r.ticker).join(", ");
+  const description = `The stocks HSF's scanner ranked most the week of ${weekRange(recap.start, recap.end)}${top ? `, led by ${top}` : ""}. A record of rankings, not recommendations.`;
+  return {
+    title: { absolute: `${title} · HSFinest.AI` }, description,
+    alternates: { canonical: `/weekly/${recap.week}` }, robots: { index: true, follow: true },
+    openGraph: { type: "article", siteName: "HSFinest.AI", title, description, url: `/weekly/${recap.week}` },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
+
+export default async function Page({ params }: Props) {
+  const [recap, index] = await Promise.all([loadRecap((await params).week), loadRecapIndex()]);
+  return <WeeklyRecapView recap={recap} weeks={index.weeks} />;
+}

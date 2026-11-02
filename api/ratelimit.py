@@ -41,6 +41,7 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "founding_checkout": (20, 600),  # per account: founder checkout starts (each may contact Stripe)
     "founding_refund": (5, 3600),    # per account: refund requests
     "events": (120, 3600),       # per IP: anonymous funnel events from the web landing page
+    "list_signup": (5, 3600),    # per IP: weekly-setups email list sign-ups (each may send an email)
     "unsubscribe": (30, 600),    # per IP: token lookups on the emailed unsubscribe link
     "client_errors": (30, 600),  # per IP: crash reports from the web app
     "export": (10, 3600),        # per account: "Download my data"
