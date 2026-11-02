@@ -1,11 +1,12 @@
 """P1-41 — per-account email preferences and unsubscribe links.
 
-Five email types, each on by default:
+Six email types, each on by default:
   digest   morning market digest       (scheduler/morning_digest.py)
   evening  evening market wrap         (scheduler/evening_wrap.py)
   alerts   alert emails                (scheduler/alert_runner.py, intelligence
            alerts, and the billing service's live alerts)
   weekly   Saturday weekly recap       (services/weekly_recap.py)
+  earnings Sunday earnings week ahead  (services/weekly_earnings.py)
   tips     first-week tips and the come-back email (services/onboarding_emails.py)
 
 Every email carries a link to pages/unsubscribe.py with the account's random
@@ -24,9 +25,10 @@ from typing import Any, Dict, Optional
 
 from .engine import get_neon_conn, schema_once
 
-KINDS = ("digest", "evening", "alerts", "weekly", "tips")
+KINDS = ("digest", "evening", "alerts", "weekly", "tips", "earnings")
 LABELS = {"digest": "Morning market digest", "evening": "Evening market wrap", "alerts": "Alert emails",
-          "weekly": "Weekly recap", "tips": "Tips and reminders"}
+          "weekly": "Weekly recap", "tips": "Tips and reminders",
+          "earnings": "Earnings week ahead"}
 TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS hsf_email_prefs (
     user_id TEXT PRIMARY KEY,
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS hsf_email_prefs (
     alerts BOOLEAN NOT NULL DEFAULT TRUE,
     weekly BOOLEAN NOT NULL DEFAULT TRUE,
     tips BOOLEAN NOT NULL DEFAULT TRUE,
+    earnings BOOLEAN NOT NULL DEFAULT TRUE,
     unsub_token TEXT UNIQUE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
@@ -50,7 +53,7 @@ def _ensure_table(conn) -> None:
     """Once per process and database (P2-81: it ran on every preference read)."""
     cur = conn.cursor()
     cur.execute(TABLE_SQL)
-    for col in ("weekly", "tips"):  # added 2026-10-23; older tables lack them
+    for col in ("weekly", "tips", "earnings"):  # added 2026-10-23 / 2026-11-01; older tables lack them
         cur.execute(f"ALTER TABLE hsf_email_prefs ADD COLUMN IF NOT EXISTS {col} BOOLEAN NOT NULL DEFAULT TRUE")
     conn.commit()
     cur.close()
@@ -65,7 +68,7 @@ def _conn():
 
 
 def get_prefs(user: Any) -> Dict[str, bool]:
-    """{digest, evening, alerts, weekly, tips} for the account; all True when unknown."""
+    """{digest, evening, alerts, weekly, tips, earnings} for the account; all True when unknown."""
     prefs = {k: True for k in KINDS}
     u = _norm(user)
     if not u:

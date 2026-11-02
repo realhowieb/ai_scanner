@@ -6495,6 +6495,174 @@
     "title": "EarningsSetup",
     "type": "object"
    },
+   "EarningsWeek": {
+    "properties": {
+     "days": {
+      "items": {
+       "$ref": "#/components/schemas/EarningsWeekDay"
+      },
+      "title": "Days",
+      "type": "array"
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "per_day": {
+      "title": "Per Day",
+      "type": "integer"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scan At"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "per_day",
+     "days"
+    ],
+    "title": "EarningsWeek",
+    "type": "object"
+   },
+   "EarningsWeekDay": {
+    "properties": {
+     "date": {
+      "description": "YYYY-MM-DD (a trading day)",
+      "title": "Date",
+      "type": "string"
+     },
+     "names": {
+      "items": {
+       "$ref": "#/components/schemas/EarningsWeekName"
+      },
+      "title": "Names",
+      "type": "array"
+     },
+     "shown": {
+      "title": "Shown",
+      "type": "integer"
+     },
+     "total": {
+      "description": "Every company reporting that day, including ones not shown",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "date",
+     "total",
+     "shown",
+     "names"
+    ],
+    "title": "EarningsWeekDay",
+    "type": "object"
+   },
+   "EarningsWeekName": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Chg Pct"
+     },
+     "dollar_volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Last close x volume; the day's sort order",
+      "title": "Dollar Volume"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last"
+     },
+     "logo_url": {
+      "title": "Logo Url",
+      "type": "string"
+     },
+     "on_watchlist": {
+      "default": false,
+      "title": "On Watchlist",
+      "type": "boolean"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF Score when this plan can see one",
+      "title": "Score"
+     },
+     "score_source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "scan or auto (Premium auto-score)",
+      "title": "Score Source"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "bmo (before the open), amc (after the close) or null",
+      "title": "Time"
+     }
+    },
+    "required": [
+     "ticker",
+     "logo_url"
+    ],
+    "title": "EarningsWeekName",
+    "type": "object"
+   },
    "EliteLimits": {
     "properties": {
      "ai_multiplier": {
@@ -6552,6 +6720,12 @@
       "title": "Digest",
       "type": "boolean"
      },
+     "earnings": {
+      "default": true,
+      "description": "Sunday earnings week ahead (Pro and up)",
+      "title": "Earnings",
+      "type": "boolean"
+     },
      "evening": {
       "description": "Evening market wrap",
       "title": "Evening",
@@ -6601,6 +6775,17 @@
        }
       ],
       "title": "Digest"
+     },
+     "earnings": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Earnings"
      },
      "evening": {
       "anyOf": [
@@ -16624,6 +16809,7 @@
        "alerts",
        "weekly",
        "tips",
+       "earnings",
        "all"
       ],
       "title": "Kind",
@@ -22393,6 +22579,62 @@
      }
     ],
     "summary": "Upcoming earnings (Pro)"
+   }
+  },
+  "/v1/earnings/week": {
+   "get": {
+    "description": "Who reports on each of the next five trading days, biggest companies first, with\nyour watchlist names always included. Scores follow your plan: scan scores within\nyour Scanner row cap, plus Premium's auto-score of every reporter.",
+    "operationId": "earnings_week_v1_earnings_week_get",
+    "parameters": [
+     {
+      "description": "Names per day, biggest by dollar volume",
+      "in": "query",
+      "name": "per_day",
+      "required": false,
+      "schema": {
+       "default": 16,
+       "description": "Names per day, biggest by dollar volume",
+       "maximum": 40,
+       "minimum": 1,
+       "title": "Per Day",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EarningsWeek"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Earnings week at a glance (Pro)"
    }
   },
   "/v1/email-preferences/unsubscribe": {

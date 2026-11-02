@@ -13,10 +13,10 @@ import { ErrorLine, ErrorState, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 
-type Kind = "digest" | "evening" | "alerts" | "weekly" | "tips";
+type Kind = "digest" | "evening" | "alerts" | "weekly" | "tips" | "earnings";
 const LABELS: Record<Kind, string> = {
   digest: "Morning market digest", evening: "Evening market wrap", alerts: "Alert emails",
-  weekly: "Weekly recap", tips: "Tips and reminders",
+  weekly: "Weekly recap", tips: "Tips and reminders", earnings: "Earnings week ahead",
 };
 const KINDS = Object.keys(LABELS) as Kind[];
 

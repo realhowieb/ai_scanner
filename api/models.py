@@ -769,6 +769,7 @@ class EmailPrefs(BaseModel):
     alerts: bool = Field(description="Alert emails")
     weekly: bool = Field(description="Saturday weekly recap")
     tips: bool = Field(description="First-week tips and the come-back email")
+    earnings: bool = Field(default=True, description="Sunday earnings week ahead (Pro and up)")
 
 
 class BillingLink(BaseModel):
@@ -897,6 +898,33 @@ class EarningsItem(BaseModel):
     earnings_date: Optional[str] = Field(default=None, description="YYYY-MM-DD")
     days_until: Optional[int] = None
     time: Optional[str] = Field(default=None, description="bmo / amc / … when known")
+
+
+class EarningsWeekName(BaseModel):
+    ticker: str
+    time: Optional[str] = Field(default=None, description="bmo (before the open), amc (after the close) or null")
+    last: Optional[float] = None
+    chg_pct: Optional[float] = None
+    dollar_volume: Optional[float] = Field(default=None, description="Last close x volume; the day's sort order")
+    score: Optional[float] = Field(default=None, description="HSF Score when this plan can see one")
+    score_source: Optional[str] = Field(default=None, description="scan or auto (Premium auto-score)")
+    on_watchlist: bool = False
+    logo_url: str
+
+
+class EarningsWeekDay(BaseModel):
+    date: str = Field(description="YYYY-MM-DD (a trading day)")
+    total: int = Field(description="Every company reporting that day, including ones not shown")
+    shown: int
+    names: List[EarningsWeekName]
+
+
+class EarningsWeek(BaseModel):
+    start: str
+    end: str
+    scan_at: Optional[str] = None
+    per_day: int
+    days: List[EarningsWeekDay]
 
 
 class BriefIndex(BaseModel):
