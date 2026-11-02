@@ -28,12 +28,13 @@ function dayTitle(date: string): { weekday: string; rest: string } {
   };
 }
 
-function Logo({ ticker }: { ticker: string }) {
+function Logo({ ticker, kind }: { ticker: string; kind: Name["logo"] }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <span className="ecal-logo ecal-letter" aria-hidden="true">{ticker.slice(0, 1)}</span>;
-  // Same-origin proxy (api/logo): the CSP allows only our own images.
+  // "none": the API found no usable logo (missing, or a photo), so skip the request.
+  if (failed || kind === "none") return <span className="ecal-logo ecal-letter" aria-hidden="true">{ticker.slice(0, 1)}</span>;
+  // Same-origin proxy (api/logo): the CSP allows only our own images. White logos sit on a dark chip.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="ecal-logo" src={`/api/logo/${encodeURIComponent(ticker)}`} alt="" width={32} height={32} loading="lazy" onError={() => setFailed(true)} />;
+  return <img className={`ecal-logo${kind === "light" ? " ecal-logo-dark" : ""}`} src={`/api/logo/${encodeURIComponent(ticker)}`} alt="" width={32} height={32} loading="lazy" onError={() => setFailed(true)} />;
 }
 
 function Tile({ n }: { n: Name }) {
@@ -42,7 +43,7 @@ function Tile({ n }: { n: Name }) {
   return (
     <li>
       <Link href={`/stocks/${encodeURIComponent(n.ticker)}`} className={`ecal-tile${n.on_watchlist ? " ecal-mine" : ""}`} aria-label={label}>
-        <Logo ticker={n.ticker} />
+        <Logo ticker={n.ticker} kind={n.logo} />
         <span className="ecal-ticker">{n.on_watchlist && <span aria-hidden="true">★ </span>}{n.ticker}</span>
         <span className="ecal-meta" aria-hidden="true">
           {t ? <span className={`ecal-time ${t.cls}`} title={t.label}>{t.icon}</span> : <span className="ecal-time cap" title="Time not announced">TBA</span>}

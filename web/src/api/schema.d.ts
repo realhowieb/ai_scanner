@@ -5627,6 +5627,11 @@ export interface components {
             dollar_volume?: number | null;
             /** Last */
             last?: number | null;
+            /**
+             * Logo
+             * @description standard: show on a light chip; light: a white logo, show on a dark chip; none: no usable logo (show the letter); null: not checked
+             */
+            logo?: ("standard" | "light" | "none") | null;
             /** Logo Url */
             logo_url: string;
             /**

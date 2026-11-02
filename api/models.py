@@ -910,6 +910,9 @@ class EarningsWeekName(BaseModel):
     score_source: Optional[str] = Field(default=None, description="scan or auto (Premium auto-score)")
     on_watchlist: bool = False
     logo_url: str
+    logo: Optional[Literal["standard", "light", "none"]] = Field(
+        default=None, description="standard: show on a light chip; light: a white logo, show on a dark chip; "
+                                  "none: no usable logo (show the letter); null: not checked")
 
 
 class EarningsWeekDay(BaseModel):
