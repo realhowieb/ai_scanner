@@ -20,10 +20,11 @@ const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { max
 
 /** utm_source values ui/acquisition.py credits to each site. */
 export const CHANNELS = [["x", "X"], ["reddit", "Reddit"], ["stocktwits", "Stocktwits"], ["youtube", "YouTube"],
-  ["tiktok", "TikTok"], ["discord", "Discord"], ["facebook", "Facebook / Instagram"], ["linkedin", "LinkedIn"],
+  ["threads", "Threads"], ["bluesky", "Bluesky"], ["tiktok", "TikTok"], ["discord", "Discord"],
+  ["facebook", "Facebook / Instagram"], ["linkedin", "LinkedIn"],
   ["newsletter", "Newsletter"]] as const;
-export const PAGES = [["/", "Home page"], ["/weekly", "Weekly recap"], ["/pricing", "Pricing"], ["/founding-100", "Founding 100"],
-  ["/demo", "Demo"]] as const;
+export const PAGES = [["/", "Home page"], ["/weekly", "Weekly recap"], ["/pricing", "Pricing and Founding 100"],
+  ["/founders", "Founders Wall"], ["/demo", "Demo"]] as const;
 
 /** The page link with utm tags; the campaign is lower-cased with spaces as dashes. */
 export function taggedLink(origin: string, page: string, source: string, campaign: string): string {

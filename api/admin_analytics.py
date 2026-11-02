@@ -137,7 +137,8 @@ FUNNEL_STEPS = (("signed_up", "Signed up"), ("verified", "Verified email"),
                 ("engaged", "Saved a stock or alert"), ("paid", "Pays for Pro"))
 SOURCE_LABELS = {"invite": "Invite link", "x": "X", "reddit": "Reddit", "google": "Google", "youtube": "YouTube",
                  "tiktok": "TikTok", "discord": "Discord", "stocktwits": "Stocktwits",
-                 "facebook": "Facebook / Instagram", "linkedin": "LinkedIn", "direct": "Direct",
+                 "facebook": "Facebook / Instagram", "linkedin": "LinkedIn", "threads": "Threads", "bluesky": "Bluesky",
+                 "newsletter": "Newsletter", "direct": "Direct",
                  "other_unknown": "Other"}
 
 
