@@ -18,12 +18,17 @@ const PAGE = 200;
 /** Rounded for a spreadsheet; missing or non-finite stays blank (never 0). */
 const round = (v: number | null | undefined, digits: number) => (v == null || !Number.isFinite(v) ? null : Number(v.toFixed(digits)));
 
-export function scannerCsv(rows: Row[], scanAt: string | null | undefined, premium: boolean): string {
+export function scannerCsvTable(rows: Row[], scanAt: string | null | undefined, premium: boolean): { header: string[]; rows: unknown[][] } {
   const header = ["Rank", "Ticker", "HSF Score", "Setup", "Status", "Signals", "Scan price", "Change % at scan", "Gap %", "Relative volume", "Breakout score",
     ...(premium ? ["PreBreakout % (model estimate)"] : []), "Scanned at (UTC)"];
-  return toCsv(header, rows.map((r, i) => [i + 1, r.ticker, r.score, setupLabel(r.primary_setup), r.status ?? "", r.signals.map(setupLabel).join("; "),
+  return { header, rows: rows.map((r, i) => [i + 1, r.ticker, r.score, setupLabel(r.primary_setup), r.status ?? "", r.signals.map(setupLabel).join("; "),
     round(r.last, r.last != null && Math.abs(r.last) < 1 ? 4 : 2), round(r.chg_pct, 2), round(r.gap_pct, 2), round(r.rvol, 2), round(r.breakout_score, 1),
-    ...(premium ? [round(r.prob, 1)] : []), scanAt ?? ""]));
+    ...(premium ? [round(r.prob, 1)] : []), scanAt ?? ""]) };
+}
+
+export function scannerCsv(rows: Row[], scanAt: string | null | undefined, premium: boolean): string {
+  const t = scannerCsvTable(rows, scanAt, premium);
+  return toCsv(t.header, t.rows);
 }
 
 /** "hsf-scanner-2026-10-30-1549-ET.csv" from the scan time. */

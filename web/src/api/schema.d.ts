@@ -3085,6 +3085,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/scheduled-scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your scheduled custom scans (Premium) */
+        get: operations["scheduled_list_v1_scheduled_scans_get"];
+        put?: never;
+        /**
+         * Schedule a custom scan (Premium)
+         * @description Run this custom scan on every trading day at `run_at` and email the results (top 10
+         *     by HSF Score) to your verified address, unless alert emails are switched off. Plan rules
+         *     are checked now and again before each run. Up to 3 per account.
+         */
+        post: operations["scheduled_create_v1_scheduled_scans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/scheduled-scans/{schedule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a scheduled custom scan
+         * @description Works on any plan, so a lapsed Premium account can still clean up.
+         */
+        delete: operations["scheduled_delete_v1_scheduled_scans__schedule_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sparklines": {
         parameters: {
             query?: never;
@@ -9457,6 +9500,54 @@ export interface components {
              * @enum {string}
              */
             when: "today" | "tomorrow" | "week";
+        };
+        /** ScheduledScan */
+        ScheduledScan: {
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** Last Detail */
+            last_detail?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /**
+             * Last Scan Id
+             * @description The last run's scan (GET /v1/scans/{scan_id}, kept 7 days)
+             */
+            last_scan_id?: string | null;
+            /**
+             * Last Status
+             * @description running, sent, unsubscribed, unverified, email_failed, failed or paused; null before the first run
+             */
+            last_status?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Request
+             * @description The custom scan request (same body as POST /v1/scans)
+             */
+            request: {
+                [key: string]: unknown;
+            };
+            /**
+             * Run At
+             * @description open 08:05-09:25 ET, midday 12:00-13:30 ET, close 16:20-18:00 ET, on trading days
+             * @enum {string}
+             */
+            run_at: "open" | "midday" | "close";
+        };
+        /** ScheduledScanCreate */
+        ScheduledScanCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Run At
+             * @description open 08:05-09:25 ET (before the open), midday 12:00-13:30 ET, close 16:20-18:00 ET
+             * @enum {string}
+             */
+            run_at: "open" | "midday" | "close";
+            scan: components["schemas"]["ScanCreate"];
         };
         /** ScoreHistory */
         ScoreHistory: {
@@ -19223,6 +19314,175 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
+            };
+        };
+    };
+    scheduled_list_v1_scheduled_scans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledScan"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature, or the scan isn't in your plan */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Watchlist or schedule not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description You already have the most scheduled scans allowed (3) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    scheduled_create_v1_scheduled_scans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledScanCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledScan"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature, or the scan isn't in your plan */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Watchlist or schedule not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description You already have the most scheduled scans allowed (3) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    scheduled_delete_v1_scheduled_scans__schedule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schedule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature, or the scan isn't in your plan */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Watchlist or schedule not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description You already have the most scheduled scans allowed (3) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

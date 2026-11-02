@@ -15,6 +15,8 @@ import { etDate, etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { OutcomeEvidence } from "./OutcomeEvidence";
+import { csvFile, ResearchCsvButton, round } from "./ResearchCsv";
+import type { CsvTable } from "./ResearchCsv";
 
 type Ranking = "breakout" | "prebreakout";
 type Day = Schemas["TrackRecordDay"];
@@ -76,6 +78,19 @@ function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: bo
       </figcaption>
     </figure>
   );
+}
+
+/** Premium CSV: the ranking study by horizon, then the chosen horizon's day-by-day series.
+ * Rates for horizons still building are left blank, as on the page. */
+export function trackRecordCsv(rows: TrackRecordSummary[], days: Day[], horizon: number): CsvTable {
+  const p = (v: number | null | undefined) => (v == null ? null : round(v * 100, 3));
+  const out: unknown[][] = rows.map((r) => ["Summary", r.ranking_label, r.horizon_days, "", r.sufficient ? p(r.avg_excess_return) : null,
+    r.sufficient ? p(r.median_excess_return) : null, r.sufficient ? p(r.win_rate) : null, r.sample_size ?? null, r.runs_used ?? null, r.benchmark, r.computed_at ?? ""]);
+  for (const d of days) out.push(["Daily", rows[0]?.ranking_label ?? "", horizon, d.day, p(d.avg_excess_return), null, null, null, null, rows[0]?.benchmark ?? "SPY", ""]);
+  return {
+    header: ["Section", "Ranking", "Horizon (trading days)", "Day", "Avg vs benchmark %", "Median vs benchmark %", "Beat benchmark %", "Matured picks", "Scans", "Benchmark", "Computed (UTC)"],
+    rows: out,
+  };
 }
 
 function SummaryTable({ rows, minSample }: { rows: TrackRecordSummary[]; minSample: number }) {
@@ -157,6 +172,8 @@ function Research() {
               A horizon needs at least {d.min_sample_size} matured picks before rates are shown.
             </p>
             <SummaryTable rows={rows} minSample={d.min_sample_size} />
+            <div className="row-actions end"><ResearchCsvButton what="the Track record" filename={csvFile("track-record", rk.label)}
+              build={() => trackRecordCsv(rows, daily.data ?? [], chosen ?? rows[0]!.horizon_days)} /></div>
           </Card>
 
           <Card title="Day by day" id="daily" aside={

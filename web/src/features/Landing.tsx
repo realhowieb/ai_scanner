@@ -154,7 +154,7 @@ export function annualValue(monthly: string, yearly: string): string | null {
 
 function summaryHighlights(id: string, highlights: string[]): string[] {
   if (id === "basic") return highlights.slice(0, 5);
-  const priority = id === "pro" ? /^(\d+ alerts?$)|email|nasdaq|day trader|historical/i : /^(\d+ alerts?$)|AI |early breakout|full-market|alpaca/i;
+  const priority = id === "pro" ? /^(\d+ alerts?$)|email|nasdaq|day trader|historical/i : /^(\d+ alerts?$)|^Ask HSF|^Scheduled custom scans|^AI scan summaries|early breakout/i;
   return [...highlights.filter((h) => priority.test(h)), ...highlights.filter((h) => !priority.test(h))].slice(0, 5);
 }
 

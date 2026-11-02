@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Response
 from pydantic import BaseModel, Field
 
 from api import models, ratelimit, user_data
-from api.deps import _AUTH, _OWNED, _user, current_account, entitlements_for
+from api.deps import _AUTH, _OWNED, _user, current_account, entitlements_for, require_feature
 from api.scans import json_safe
 
 
@@ -42,6 +42,18 @@ class ScanCreate(BaseModel):
         None, description="For universe=earnings: today (default, every plan), tomorrow or week = next 7 days (Pro)")
     score_all: bool = Field(False, description="Watchlist and earnings: score every symbol, ignoring the screens (as on the web)")
     filters: ScanFilters = Field(default_factory=ScanFilters)
+
+
+class ScheduledScanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    run_at: Literal["open", "midday", "close"] = Field(
+        description="open 08:05-09:25 ET (before the open), midday 12:00-13:30 ET, close 16:20-18:00 ET")
+    scan: ScanCreate
+
+
+def _schedule_out(row: Dict[str, Any]) -> Dict[str, Any]:
+    return json_safe({k: row.get(k) for k in ("id", "name", "run_at", "request", "created_at", "last_status",
+                                               "last_detail", "last_run_at", "last_scan_id")})
 
 
 def _job_out(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,3 +114,53 @@ def register(app: FastAPI) -> None:
         if job is None:
             raise user_data.NotFound("scan")
         return _job_out(job)
+
+    # ---- scheduled custom scans (Premium, services.scheduled_scans) ------------------------------------
+    _SCHED = {**_AUTH, 403: {"description": "Premium feature, or the scan isn't in your plan"},
+              404: {"description": "Watchlist or schedule not found (or not yours)"},
+              409: {"description": "You already have the most scheduled scans allowed (3)"},
+              422: {"description": "Invalid request"}}
+
+    @app.get("/v1/scheduled-scans", response_model=List[models.ScheduledScan], responses=_SCHED,
+             summary="Your scheduled custom scans (Premium)")
+    def scheduled_list(account: Dict[str, Any] = Depends(current_account)) -> List[Dict[str, Any]]:
+        from db import scheduled_scans as store
+
+        require_feature(account, "can_scheduled_scans")
+        return [_schedule_out(r) for r in user_data._db(store.list_for_user, _user(account))]
+
+    @app.post("/v1/scheduled-scans", response_model=models.ScheduledScan, status_code=201, responses=_SCHED,
+              summary="Schedule a custom scan (Premium)")
+    def scheduled_create(body: ScheduledScanCreate, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Run this custom scan on every trading day at `run_at` and email the results (top 10
+        by HSF Score) to your verified address, unless alert emails are switched off. Plan rules
+        are checked now and again before each run. Up to 3 per account."""
+        from db import scheduled_scans as store
+
+        require_feature(account, "can_scheduled_scans")
+        user = _user(account)
+        request = body.scan.model_dump()
+        try:
+            params = custom_scans.plan_or_raise(request, entitlements_for(account), now_session="regular")
+        except custom_scans.PlanError:
+            raise
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        if params["universe"] == "watchlist":
+            user_data.get_watchlist(user, int(params["watchlist_id"]))   # 404 when not yours
+        try:
+            row = user_data._db(store.create, user, body.name, request, body.run_at)
+        except store.ScheduleLimitReached as e:
+            raise HTTPException(409, str(e)) from e
+        return _schedule_out(row)
+
+    @app.delete("/v1/scheduled-scans/{schedule_id}", status_code=204, responses=_SCHED,
+                summary="Delete a scheduled custom scan")
+    def scheduled_delete(schedule_id: str = Path(pattern="^[0-9a-f]{32}$"),
+                         account: Dict[str, Any] = Depends(current_account)) -> Response:
+        """Works on any plan, so a lapsed Premium account can still clean up."""
+        from db import scheduled_scans as store
+
+        if not user_data._db(store.delete, _user(account), schedule_id):
+            raise user_data.NotFound("schedule")
+        return Response(status_code=204)

@@ -157,8 +157,8 @@ describe("Custom scan controls follow server entitlements", () => {
     const refusing: ScanApi = { ...idle, create: async () => { throw new ApiError(403, "US market scans are part of Premium.", null, null, null); } };
     render(<SessionProvider initialMe={me("pro")}><CustomScanView client={refusing} /></SessionProvider>);
     screen.getByRole("button", { name: "Start scan" }).click();
-    expect(await screen.findByText("US market scans are part of Premium.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
+    const refusal = await screen.findByText("US market scans are part of Premium.");
+    expect(within(refusal.closest(".locked") as HTMLElement).getByRole("button", { name: "Upgrade to Premium" })).toBeInTheDocument();
   });
 });
 
