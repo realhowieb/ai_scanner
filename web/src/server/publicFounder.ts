@@ -42,3 +42,11 @@ export async function loadFoundersWall(): Promise<FoundersWall | null> {
   const wall = await getJson<FoundersWall>("/v1/public/founding/wall");
   return wall?.open ? wall : null;
 }
+
+export type PublicFounding = Schemas["PublicFounding"];
+
+/** Seats left per tier for the public /founding-100 page; null when closed or the API can't answer. */
+export async function loadPublicFounding(): Promise<PublicFounding | null> {
+  const d = await getJson<PublicFounding>("/v1/public/founding");
+  return d?.open ? d : null;
+}

@@ -75,4 +75,13 @@ export const founderBriefing = {
   send: (note: string) => unwrap(api.POST("/v1/admin/founding/briefing/send", { body: { note, confirm: true } })),
 };
 
+// The Founding 100 launch and reminder emails (admins preview, then send each once).
+export type PushCampaign = "launch" | "reminder";
+export type PushPreview = Schemas["PushPreview"];
+
+export const foundingPush = {
+  preview: (campaign: PushCampaign, note: string) => unwrap(api.POST("/v1/admin/founding/push/preview", { body: { campaign, note } })),
+  send: (campaign: PushCampaign, note: string) => unwrap(api.POST("/v1/admin/founding/push/send", { body: { campaign, note, confirm: true } })),
+};
+
 export const dollars = (c: number) => `$${Math.round(c / 100).toLocaleString("en-US")}`;

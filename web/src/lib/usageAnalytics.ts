@@ -5,8 +5,8 @@ import { posthogHost } from "./posthogConfig";
 
 export const USAGE_PREFERENCE_EVENT = "hsf-usage-preference";
 const PREFERENCE = "hsf-usage-disabled";
-const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "watchlist_deleted", "watchlist_stock_removed", "alert_created", "alert_enabled_changed", "alert_deleted", "custom_scan_started", "journal_trade_logged", "journal_trade_closed", "checkout_started", "signup_completed", "getting_started_step_opened", "getting_started_dismissed", "feedback_sent", "stock_shared", "checkout_completed", "ask_hsf_asked", "quick_setup_completed", "scheduled_scan_saved"]);
-export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "watchlist_deleted" | "watchlist_stock_removed" | "alert_created" | "alert_enabled_changed" | "alert_deleted" | "custom_scan_started" | "journal_trade_logged" | "journal_trade_closed" | "checkout_started" | "signup_completed" | "getting_started_step_opened" | "getting_started_dismissed" | "feedback_sent" | "stock_shared" | "checkout_completed" | "ask_hsf_asked" | "quick_setup_completed" | "scheduled_scan_saved";
+const EVENTS = new Set(["page_viewed", "scanner_viewed", "stock_viewed", "watchlist_created", "watchlist_stock_added", "watchlist_deleted", "watchlist_stock_removed", "alert_created", "alert_enabled_changed", "alert_deleted", "custom_scan_started", "journal_trade_logged", "journal_trade_closed", "checkout_started", "signup_completed", "getting_started_step_opened", "getting_started_dismissed", "feedback_sent", "stock_shared", "checkout_completed", "ask_hsf_asked", "quick_setup_completed", "scheduled_scan_saved", "founding_checkout_started"]);
+export type UsageEvent = "page_viewed" | "scanner_viewed" | "stock_viewed" | "watchlist_created" | "watchlist_stock_added" | "watchlist_deleted" | "watchlist_stock_removed" | "alert_created" | "alert_enabled_changed" | "alert_deleted" | "custom_scan_started" | "journal_trade_logged" | "journal_trade_closed" | "checkout_started" | "signup_completed" | "getting_started_step_opened" | "getting_started_dismissed" | "feedback_sent" | "stock_shared" | "checkout_completed" | "ask_hsf_asked" | "quick_setup_completed" | "scheduled_scan_saved" | "founding_checkout_started";
 type UsageProperties = {
   route?: string;
   kind?: "price" | "technical" | "hsf" | "scan";
@@ -19,7 +19,7 @@ type UsageProperties = {
   done?: number;
   method?: "native" | "copy";
 };
-const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/ask", "/paper-trading", "/account", "/share/:ticker", "/how-hsf-works"]);
+const ROUTES = new Set(["/", "/demo", "/methodology", "/pricing", "/signup", "/today", "/brief", "/scanner", "/scanner/custom", "/scanner/history", "/compare", "/watchlists", "/alerts", "/track-record", "/day-trader", "/journal", "/ask", "/paper-trading", "/account", "/share/:ticker", "/how-hsf-works", "/weekly", "/weekly/:week", "/founding-100", "/founders", "/account/founder"]);
 let sdk: PostHog | null = null;
 let clientPromise: Promise<PostHog | null> | null = null;
 let identityGeneration = 0;
@@ -33,6 +33,7 @@ export function usageRoute(pathname: string): string | null {
   const path = pathname.split(/[?#]/, 1)[0]!;
   if (/^\/stocks\/[^/]+$/.test(path)) return "/stocks/:ticker";
   if (/^\/share\/[^/]+$/.test(path)) return "/share/:ticker";
+  if (/^\/weekly\/[^/]+$/.test(path)) return "/weekly/:week";
   return ROUTES.has(path) ? path : null;
 }
 
@@ -109,7 +110,7 @@ export function captureUsage(event: UsageEvent, properties: UsageProperties = {}
   if (!usageAllowed()) return;
   const generation = identityGeneration;
   void initializeUsageAnalytics().then((ph) => {
-    if (ph && usageAllowed() && generation === identityGeneration) ph.capture(event, properties, (event === "signup_completed" || event === "checkout_started") ? { send_instantly: true } : undefined);
+    if (ph && usageAllowed() && generation === identityGeneration) ph.capture(event, properties, (event === "signup_completed" || event === "checkout_started" || event === "founding_checkout_started") ? { send_instantly: true } : undefined);
   }).catch(() => undefined);
 }
 

@@ -26,7 +26,7 @@ export const CHANNELS = [["x", "X"], ["reddit", "Reddit"], ["stocktwits", "Stock
   ["threads", "Threads"], ["bluesky", "Bluesky"], ["tiktok", "TikTok"], ["discord", "Discord"],
   ["facebook", "Facebook / Instagram"], ["linkedin", "LinkedIn"],
   ["newsletter", "Newsletter"]] as const;
-export const PAGES = [["/", "Home page"], ["/weekly", "Weekly recap"], ["/pricing", "Pricing and Founding 100"],
+export const PAGES = [["/", "Home page"], ["/weekly", "Weekly recap"], ["/founding-100", "Founding 100"], ["/pricing", "Pricing"],
   ["/founders", "Founders Wall"], ["/demo", "Demo"]] as const;
 
 /** The page link with utm tags; the campaign is lower-cased with spaces as dashes. */

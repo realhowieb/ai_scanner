@@ -351,6 +351,18 @@ def release_email(user_id: str, kind: str, ref: str = "") -> None:
         _close(conn, sq)
 
 
+def emails_sent(kind: str, ref: str = "") -> Dict[str, str]:
+    """{user_id: sent_at} for every claim of one email (kind, ref): who already got it."""
+    conn, sq = _lifecycle_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT user_id, sent_at FROM hsf_lifecycle_emails WHERE kind = %s AND ref = %s", sq),
+                    (kind, ref))
+        return {str(u): str(t) for u, t in cur.fetchall()}
+    finally:
+        _close(conn, sq)
+
+
 def grants_ending(within: dt.timedelta) -> list:
     """[(user_id, until_at text)] for free Pro that is still running and ends within `within`."""
     now = _now()

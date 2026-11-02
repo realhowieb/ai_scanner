@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 
 /** The pages search engines may list (also the sitemap). */
-export const PUBLIC_PAGES = ["/", "/pricing", "/how-hsf-works", "/demo", "/weekly"] as const;
+export const PUBLIC_PAGES = ["/", "/pricing", "/how-hsf-works", "/demo", "/weekly", "/founding-100"] as const;
 export type PublicPage = (typeof PUBLIC_PAGES)[number];
 
 /** Signed-in areas and server routes that crawlers are asked to skip (robots.txt). */
@@ -18,14 +18,14 @@ export function siteOrigin(env: Record<string, string | undefined> = process.env
 /** The shared link-preview image (app/opengraph-image.tsx). */
 export const OG_IMAGE = "/opengraph-image";
 
-export function publicMetadata(path: PublicPage, title: string, description: string): Metadata {
+export function publicMetadata(path: PublicPage, title: string, description: string, image: string = OG_IMAGE): Metadata {
   return {
     title: { absolute: `${title} · HSFinest.com` },
     description,
     alternates: { canonical: path },
     robots: { index: true, follow: true },
     // A page's own openGraph replaces the root one, so name the shared preview image again.
-    openGraph: { type: "website", siteName: "HSFinest.com", title, description, url: path, images: [OG_IMAGE] },
-    twitter: { card: "summary_large_image", title, description, images: [OG_IMAGE] },
+    openGraph: { type: "website", siteName: "HSFinest.com", title, description, url: path, images: [image] },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }

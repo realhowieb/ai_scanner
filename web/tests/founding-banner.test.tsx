@@ -27,7 +27,7 @@ describe("FoundingBanner", () => {
     render(<FoundingBanner surface="test-open" />);
     expect(await screen.findByRole("heading", { name: "97 of 100 founding seats left" })).toBeTruthy();
     expect(screen.getByText(/Founder Pro \$499 \(73 left\) · Founder Elite \$999 \(24 left\)/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "See the Founding 100" }).getAttribute("href")).toBe("/account/founder");
+    expect(screen.getByRole("link", { name: "See the Founding 100" }).getAttribute("href")).toBe("/founding-100");
     const req = f.mock.calls[0]![0];
     expect(String(typeof req === "string" ? req : req.url)).toContain("/api/public/v1/public/founding");
   });

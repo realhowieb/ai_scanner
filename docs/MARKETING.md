@@ -9,6 +9,9 @@ Shipped 2026-11-02. Three pieces in the app, two outside services.
 | Weekly setups email list | Form on `/` and `/weekly`; confirm/unsubscribe page `/subscribe/confirm` | `HSF_MARKETING_LIST_ENABLED=0` hides it (default on) |
 | Marketing report | Admin > Marketing | admins only |
 | Public weekly recap | `/weekly` (latest) and `/weekly/2026-W44` | always on; a week appears from Saturday 00:00 ET |
+| Founding 100 page | `/founding-100` (public, indexable, share image with seats left); every Founding link points here | shows "not open" while `FOUNDING_100_ENABLED` is off |
+| Founding 100 emails | Admin > Founding > Founding 100 emails: launch email, then one reminder; preview first, each account gets each once | admins send by hand; never automatic |
+| Founding sale alert | Email/chat to the admins when a founder payment completes (tier, number, amount, seats left) | `HSF_OPS_ALERT_EMAIL` picks who; `HSF_OPS_NOTIFY_ENABLED=0` stops all ops messages |
 
 - The list is **double opt-in**: an address only counts after its confirm link is opened. HSF sends only that confirm email; the newsletter itself goes out from Resend.
 - Confirmed addresses are copied to Resend automatically when `HSF_RESEND_SEGMENT_ID` is set on hsf-api-v1. Otherwise use Admin > Marketing > Download confirmed (CSV) and import it.

@@ -672,3 +672,43 @@ def briefing_send(account: Dict[str, Any], note: str, now: Optional[dt.datetime]
     extras.finish_briefing(month, out["sent"], out["failed"], now=now)
     log.info("founder briefing %s sent by %s: %s", month, admin, out)
     return {"month": month, **out}
+
+
+# ---- Founding 100 push emails (services/founding_push.py) -------------------------------------
+
+def push_preview(campaign: str, note: str = "") -> Dict[str, Any]:
+    """The launch or reminder email as it would go out, who it goes to and what was sent.
+    Sends nothing."""
+    from services import founding_push as push
+
+    if campaign not in push.CAMPAIGNS:
+        raise CodedError(400, "Unknown email.", "push_campaign")
+    o = push.offer()
+    msg = push.compose(campaign, o, base=push._base(), note=note) if o else None
+    if msg:
+        from ui import email_kit as k
+
+        msg["html"] = k.shell(msg["html"], title_line="Founding 100")
+    who = push.recipients(campaign)
+    state = push.campaign_state(campaign)
+    launch = push.campaign_state("launch") if campaign == "reminder" else state
+    return {"campaign": campaign, "on_sale": bool(o), "subject": (msg or {}).get("subject", ""),
+            "html": (msg or {}).get("html", ""), "text": (msg or {}).get("text", ""),
+            "recipients": len(who["to"]), "skipped": who["skipped"], "sent": state["sent"],
+            "first_sent_at": state["first_sent_at"], "launch_sent": launch["sent"],
+            "launch_sent_at": launch["first_sent_at"]}
+
+
+def push_send(account: Dict[str, Any], campaign: str, note: str = "") -> Dict[str, Any]:
+    """Send the launch or reminder email to everyone eligible who hasn't had it."""
+    from services import founding_push as push
+
+    if campaign not in push.CAMPAIGNS:
+        raise CodedError(400, "Unknown email.", "push_campaign")
+    if not push.offer():
+        raise CodedError(409, "No founding seats are on sale right now.", "push_closed")
+    if campaign == "reminder" and not push.campaign_state("launch")["sent"]:
+        raise CodedError(409, "Send the launch email first.", "push_no_launch")
+    out = push.send(campaign, note)
+    log.info("founding push %s sent by %s: %s", campaign, str(account["username"]).strip().lower(), out)
+    return {"campaign": campaign, **out}
