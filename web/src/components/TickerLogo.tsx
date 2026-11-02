@@ -12,20 +12,21 @@ const SYMBOL = /^[A-Z]{1,6}([.-][A-Z]{1,2})?$/;
 
 const LIGHT_LUMA = 0.82;
 const TRANSPARENT_SHARE = 0.05;
-const PHOTO_COLORS = 300;   // distinct 4-bit colors in a 48px copy above this = a photo
+const PHOTO_TOP_SHARE = 0.3;   // opaque, and the most common 4-bit color covers less than this = a photo
 
 /** standard / light / none for a loaded logo image. Exported for tests. */
 export function classifyPixels(data: Uint8ClampedArray): Exclude<Kind, "pending"> {
   let visible = 0, luma = 0;
   const total = data.length / 4;
-  const colors = new Set<number>();
+  const counts = new Map<number, number>();
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!, a = data[i + 3]!;
-    colors.add(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4));
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
     if (a >= 128) { visible += 1; luma += 0.2126 * r + 0.7152 * g + 0.0722 * b; }
   }
   if (!visible) return "none";
-  if (1 - visible / total < TRANSPARENT_SHARE) return colors.size > PHOTO_COLORS ? "none" : "standard";
+  if (1 - visible / total < TRANSPARENT_SHARE) return Math.max(...counts.values()) / total < PHOTO_TOP_SHARE ? "none" : "standard";
   return luma / (255 * visible) > LIGHT_LUMA ? "light" : "standard";
 }
 
