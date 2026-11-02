@@ -171,6 +171,9 @@ class LogoCheckTests(unittest.TestCase):
         self.assertEqual(classify(_png(16, 16, dark)), {"kind": "logo", "light": False})
         self.assertEqual(classify(_png(16, 16, boxed, ctype=2)), {"kind": "logo", "light": False})
         self.assertEqual(classify(_png(64, 64, photo, ctype=2)), {"kind": "none"})
+        # A detailed logo on a plain background (many colors, but most pixels share one): still a logo.
+        busy = lambda x, y: photo(x, y) if 24 <= x < 40 and 24 <= y < 40 else (255, 255, 255)
+        self.assertEqual(classify(_png(64, 64, busy, ctype=2)), {"kind": "logo", "light": False})
         self.assertEqual(classify(b"\xff\xd8\xff\xe0 jpeg"), {"kind": "none"})
         self.assertEqual(classify(b""), {"kind": "none"})
 
