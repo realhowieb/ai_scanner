@@ -2143,3 +2143,62 @@ class AdminMarketing(BaseModel):
     founder_revenue_cents: int = 0
     list: MarketingList
     unavailable: List[str] = []
+
+
+class SocialPreview(BaseModel):
+    kind: str
+    week: str
+    post_at: str
+    image_url: str
+    texts: Dict[str, str] = Field(description="Post text per network (threads, linkedin, instagram)")
+    problem: Optional[str] = Field(None, description="Why it would be refused (a performance claim), if so")
+
+
+class SocialPostStatus(BaseModel):
+    kind: str
+    week: str
+    post_at: str
+    preview: Optional[SocialPreview] = None
+    drafted: int = 0
+    failed: int = 0
+
+
+class SocialChannel(BaseModel):
+    name: str
+    service: str
+
+
+class SocialDraftRow(BaseModel):
+    kind: str
+    week: str
+    service: Optional[str] = None
+    channel_name: Optional[str] = None
+    status: str
+    error: Optional[str] = None
+    attempts: int = 0
+    updated_at: str
+
+
+class AdminSocial(BaseModel):
+    configured: bool = Field(description="BUFFER_API_KEY is set on the API")
+    enabled: bool
+    channels: List[SocialChannel] = []
+    channel_error: Optional[str] = None
+    posts: List[SocialPostStatus] = []
+    recent: List[SocialDraftRow] = []
+
+
+class SocialSendResult(BaseModel):
+    sent: int = 0
+    already: int = 0
+    failed: int = 0
+    gave_up: int = 0
+    skipped: Optional[str] = None
+    why: Optional[str] = None
+    error: Optional[str] = None
+
+
+class PublicSocialPost(BaseModel):
+    kind: str
+    week: str
+    image: Dict[str, Any] = Field(description="What the post's image shows (kind-specific)")

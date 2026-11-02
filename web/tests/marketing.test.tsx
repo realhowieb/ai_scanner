@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MarketingTab, taggedLink } from "@/features/AdminMarketing";
+import { MarketingTab, SocialCard, taggedLink } from "@/features/AdminMarketing";
 import { EmailSignup, ListConfirmView } from "@/features/EmailSignup";
 import { Landing } from "@/features/Landing";
 import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
@@ -133,6 +133,31 @@ describe("admin marketing", () => {
     list: { confirmed: 3, pending: 2, unsubscribed: 0, new_in_period: 5, sync_configured: false },
   };
 
+  const social = {
+    configured: true, enabled: true, channel_error: null, recent: [],
+    channels: [{ name: "hsfinest", service: "threads" }, { name: "hsfinest", service: "instagram" }],
+    posts: [
+      { kind: "earnings", week: "2026-W46", post_at: "2026-11-09T13:30:00Z", drafted: 2, failed: 0,
+        preview: { kind: "earnings", week: "2026-W46", post_at: "2026-11-09T13:30:00Z", image_url: "https://app.hsfinest.com/social/earnings/2026-W46.png",
+          texts: { threads: "Big earnings week.\n\nMon: $AAPL", linkedin: "x", instagram: "y" }, problem: null } },
+      { kind: "founding", week: "2026-W45", post_at: "2026-11-06T17:00:00Z", drafted: 0, failed: 0, preview: null },
+      { kind: "product", week: "2026-W45", post_at: "2026-11-04T17:00:00Z", drafted: 0, failed: 0,
+        preview: { kind: "product", week: "2026-W45", post_at: "2026-11-04T17:00:00Z", image_url: "u", texts: { threads: "t", linkedin: "l", instagram: "i" }, problem: null } },
+    ],
+  };
+
+  it("shows the social drafts and sends one now", async () => {
+    handler = (path, method) => method === "POST" ? { sent: 2, already: 1, failed: 0, gave_up: 0 } : social;
+    render(<SocialCard />);
+    expect(await screen.findByText("2 channels")).toBeInTheDocument();
+    const earnings = screen.getByRole("row", { name: /Earnings this week/ });
+    expect(within(earnings).getByText("2 drafted")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /Founding 100/ })).getByRole("button", { name: "Send now" })).toBeDisabled();
+    await userEvent.click(within(screen.getByRole("row", { name: /What HSF does/ })).getByRole("button", { name: "Send now" }));
+    expect(await screen.findByText("Sent 2 drafts to Buffer, 1 already there.")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "POST" && c.path === "/v1/admin/marketing/social/product")).toBe(true);
+  });
+
   it("builds tagged links", () => {
     expect(taggedLink("https://app.hsfinest.com", "/weekly", "x", " Weekly Recap W45! "))
       .toBe("https://app.hsfinest.com/weekly?utm_source=x&utm_medium=social&utm_campaign=weekly-recap-w45");
@@ -146,7 +171,7 @@ describe("admin marketing", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { saved.push(this.download); });
     handler = (path) => path.endsWith("subscribers.csv")
       ? new Response("email,status\na@x.com,confirmed\n", { status: 200, headers: { "content-type": "text/csv" } })
-      : report;
+      : path.endsWith("/social") ? { ...social, configured: false, channels: [] } : report;
     render(<MarketingTab />);
     const row = await screen.findByRole("row", { name: /^X/ });
     expect(within(row).getByText("(3 confirmed)")).toBeInTheDocument();
@@ -156,5 +181,6 @@ describe("admin marketing", () => {
     await userEvent.click(screen.getByRole("button", { name: "Download confirmed (CSV)" }));
     await waitFor(() => expect(saved).toEqual(["hsf-email-list-confirmed.csv"]));
     expect((screen.getByLabelText("Tagged link") as HTMLInputElement).value).toContain("/weekly?utm_source=x&utm_medium=social");
+    expect(await screen.findByText("No Buffer key")).toBeInTheDocument();
   });
 });
