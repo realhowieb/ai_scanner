@@ -8,7 +8,7 @@ Four posts a week, each to every Buffer channel (Instagram, Threads, LinkedIn, .
     recap      Sat 10am ET     the top 3 from the public weekly recap (api/public_recap)
 
 api/ops_jobs.py sends each one from the evening before (recap: from Saturday 1am ET, once
-the week's recap is published) until its post time. Each channel gets its own text: a
+the week's recap is published) until 2 hours before its post time. Each channel gets its own text: a
 link tagged with utm_source for that network (so visits show up in Admin > Marketing),
 or "link in bio" plus hashtags on Instagram, where caption links don't work. Every post
 carries an image drawn by the web app at /social/<kind>/<week>.png from the same stored
@@ -42,6 +42,7 @@ KINDS = ("earnings", "product", "founding", "recap")
 POST_AT = {"earnings": (0, 8, 30), "product": (2, 12, 0), "founding": (4, 12, 0), "recap": (5, 10, 0)}
 MAX_ATTEMPTS = 3
 PREVIEW_TTL_S = 600
+LEAD = dt.timedelta(hours=2)  # automatic drafts stop this long before the post time
 NAMES_PER_DAY = 3
 UTM_SOURCE = {"threads": "threads", "linkedin": "linkedin", "instagram": "instagram", "twitter": "x", "x": "x",
               "bluesky": "bluesky", "facebook": "facebook", "mastodon": "mastodon"}
@@ -121,14 +122,16 @@ def next_week_for(kind: str, now: dt.datetime) -> str:
 
 def due(kind: str, now: dt.datetime) -> Optional[str]:
     """The week to send now, or None: from 6pm ET the day before the post (recap: 1am ET on
-    Saturday, after the recap publishes) until the post time."""
+    Saturday, after the recap publishes) until LEAD before the post time. A draft that would
+    land later than that is skipped: there's no time to approve it, and the post was likely
+    already made by hand (Send now still works)."""
     week = next_week_for(kind, now)
     at = post_time(kind, week).astimezone(_et())
     if kind == "recap":
         start = at.replace(hour=1, minute=0)
     else:
         start = (at - dt.timedelta(days=1)).replace(hour=18, minute=0)
-    return week if start.astimezone(UTC) <= now < at.astimezone(UTC) else None
+    return week if start.astimezone(UTC) <= now < (at - LEAD).astimezone(UTC) else None
 
 
 def check_claims(text: str) -> None:
