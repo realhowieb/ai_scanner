@@ -11,6 +11,18 @@ const UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_ter
 export type Attribution = Partial<Record<(typeof UTM)[number] | "referrer" | "ref", string>>;
 
 const REF_RE = /^[a-z0-9]{4,32}$/;
+const HANDOFF_REFERRER = "hsf_referrer";
+
+/** This visitor's kept attribution as link parameters, so a hop from www.hsfinest.com to the
+ * app (a different host, so different storage) still credits the sign-up to where they came from. */
+export function handoffParams(attribution: Attribution | null = storedAttribution()): URLSearchParams {
+  const out = new URLSearchParams();
+  if (!attribution) return out;
+  for (const k of UTM) if (attribution[k]) out.set(k, attribution[k]!);
+  if (attribution.ref) out.set("ref", attribution.ref);
+  if (attribution.referrer) out.set(HANDOFF_REFERRER, attribution.referrer);
+  return out;
+}
 
 /** An invite code (?ref=) on this page; it wins over an older first visit, so the friend who
  * sent the latest link gets the credit. */
@@ -46,7 +58,10 @@ export function captureAttribution(href = typeof window === "undefined" ? "" : w
       const v = url.searchParams.get(k);
       if (v) found[k] = v.slice(0, 120);
     }
-    if (referrer && new URL(referrer).host !== url.host) found.referrer = referrer.slice(0, 200);
+    // www.hsfinest.com passes its visitor's outside referrer along when it hands them to the app.
+    const handed = url.searchParams.get(HANDOFF_REFERRER);
+    if (handed) found.referrer = handed.slice(0, 200);
+    else if (referrer && new URL(referrer).host !== url.host) found.referrer = referrer.slice(0, 200);
   } catch {
     /* no attribution */
   }
