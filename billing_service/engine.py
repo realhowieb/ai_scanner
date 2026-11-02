@@ -63,6 +63,16 @@ def _founding_notify(name, *args, **kwargs):
         pass
 
 
+def _founding_sale_alert(email, *, upgrade=False):
+    """Tell the admins about a founder payment (services/founding_push.py); never fail a webhook."""
+    try:
+        from services.founding_push import sale_alert
+
+        sale_alert(email, upgrade=upgrade)
+    except Exception:
+        pass
+
+
 class Engine:
     def __init__(self, billing, store):
         self.b, self.store = billing, store
@@ -82,6 +92,7 @@ class Engine:
             self.b._log.warning("founding payment needs review: event=%s reason=%s", event_id, result.get("reason"))
         if result["outcome"] in ("activated", "upgraded"):
             _founding_notify("purchase_confirmation", email, upgrade=result["outcome"] == "upgraded")
+            _founding_sale_alert(email, upgrade=result["outcome"] == "upgraded")
         return JSONResponse({"received": True, "type": kind, "founding": result["outcome"]})
 
     def founding_refund(self, event_id, kind, data, email):

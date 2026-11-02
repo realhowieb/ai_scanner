@@ -24,6 +24,7 @@ import type { Me } from "@/session/SessionProvider";
 import { UsageAnalyticsPreference } from "@/components/UsageAnalytics";
 
 import { InviteFriendCard } from "./InviteFriend";
+import { FoundingSwitchNote } from "./FoundingBanner";
 
 /** What each entitlement means to a customer. Unknown flags are not shown. */
 export const FEATURE_LABELS: Record<string, string> = {
@@ -80,6 +81,7 @@ function BillingDetails({ me }: { me: Me }) {
       {data.checked_at && <div><dt>Last confirmed</dt><dd>{etTime(data.checked_at)}</dd></div>}
     </dl>
     {(data.sync_state !== "confirmed" || data.cancel_at_period_end) && <p className="notice" role="status">{data.message}</p>}
+    {data.interval && <FoundingSwitchNote endsAt={data.cancel_at_period_end ? data.cancellation_at : null} />}
     {data.checkout_pending && <div className="row-actions">
       {data.checkout_url && <button type="button" className="btn btn-primary" onClick={() => {
         beginBilling(me.plan);

@@ -297,6 +297,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/founding/push/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview the Founding 100 launch or reminder email (admin)
+         * @description The email as it would go out and how many accounts it goes to. Sends nothing.
+         */
+        post: operations["push_preview_v1_admin_founding_push_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/founding/push/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the Founding 100 launch or reminder email (admin)
+         * @description Each account gets each email at most once. Never sent automatically.
+         */
+        post: operations["push_send_v1_admin_founding_push_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/founding/refunds": {
         parameters: {
             query?: never;
@@ -8757,6 +8797,81 @@ export interface components {
              */
             stale: boolean;
         };
+        /** PushBody */
+        PushBody: {
+            /**
+             * Campaign
+             * @description launch, or the one reminder a week later
+             * @enum {string}
+             */
+            campaign: "launch" | "reminder";
+            /**
+             * Note
+             * @description Optional personal opening, in your words
+             * @default
+             */
+            note: string;
+        };
+        /** PushPreview */
+        PushPreview: {
+            /** Campaign */
+            campaign: string;
+            /** First Sent At */
+            first_sent_at?: string | null;
+            /** Html */
+            html: string;
+            /** Launch Sent */
+            launch_sent: number;
+            /** Launch Sent At */
+            launch_sent_at?: string | null;
+            /** On Sale */
+            on_sale: boolean;
+            /** Recipients */
+            recipients: number;
+            /** Sent */
+            sent: number;
+            /** Skipped */
+            skipped: {
+                [key: string]: number;
+            };
+            /** Subject */
+            subject: string;
+            /** Text */
+            text: string;
+        };
+        /** PushSendBody */
+        PushSendBody: {
+            /**
+             * Campaign
+             * @description launch, or the one reminder a week later
+             * @enum {string}
+             */
+            campaign: "launch" | "reminder";
+            /**
+             * Confirm
+             * @description Must be true: emails every eligible account
+             */
+            confirm: boolean;
+            /**
+             * Note
+             * @description Optional personal opening, in your words
+             * @default
+             */
+            note: string;
+        };
+        /** PushSent */
+        PushSent: {
+            /** Campaign */
+            campaign: string;
+            /** Failed */
+            failed: number;
+            /** Sent */
+            sent: number;
+            /** Skipped */
+            skipped: {
+                [key: string]: number;
+            };
+        };
         /** QueueCount */
         QueueCount: {
             /** Count */
@@ -11787,6 +11902,114 @@ export interface operations {
             };
             /** @description Admins only */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    push_preview_v1_admin_founding_push_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushPreview"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    push_send_v1_admin_founding_push_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSendBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSent"];
+                };
+            };
+            /** @description Not confirmed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No seats on sale, or the reminder before the launch */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

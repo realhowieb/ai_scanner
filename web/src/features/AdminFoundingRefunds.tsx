@@ -5,8 +5,8 @@
 // and access changes only when Stripe confirms it.
 import { useId, useState } from "react";
 
-import { cents, founderBenefits, founderBriefing, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
-import type { AdminRefundRequest, BriefingPreview, RefundBasis, RefundStatus } from "@/api/founding";
+import { cents, founderBenefits, founderBriefing, foundingPush, REFUND_STATUS_LABEL, refunds } from "@/api/founding";
+import type { AdminRefundRequest, BriefingPreview, PushCampaign, PushPreview, RefundBasis, RefundStatus } from "@/api/founding";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
@@ -222,6 +222,71 @@ export function FounderBriefingCard() {
       <ConfirmDialog open={confirming} title="Send the Founder Briefing?" confirmLabel="Send now" busy={send.busy}
         error={<ErrorLine error={send.error} />} onConfirm={doSend} onClose={() => setConfirming(false)}
         body={<p className="body-sm">This emails {preview?.recipients ?? 0} active founders now. It can only be sent once this month.</p>} />
+    </Card>
+  );
+}
+
+const PUSH_SKIP: Record<string, string> = {
+  founder: "already founders", unsubscribed: "switched tips off", unverified: "unverified", already_sent: "already got it",
+  no_launch_email: "didn't get the launch email", not_eligible: "inactive",
+};
+
+/** The Founding 100 launch email, then one reminder: preview, then send each once. */
+export function FoundingPushCard() {
+  const [campaign, setCampaign] = useState<PushCampaign>("launch");
+  const [note, setNote] = useState("");
+  const [preview, setPreview] = useState<PushPreview | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const look = useAction();
+  const send = useAction();
+  const id = useId();
+  const doPreview = (c: PushCampaign = campaign) => void look.run(async () => { setPreview(await foundingPush.preview(c, note)); return true; });
+  const doSend = () => void send.run(async () => {
+    const out = await foundingPush.send(campaign, note);
+    setResult(`Sent to ${out.sent} account${out.sent === 1 ? "" : "s"}${out.failed ? `, ${out.failed} failed` : ""}.`);
+    setConfirming(false);
+    setPreview(await foundingPush.preview(campaign, note));
+    return true;
+  });
+  const pick = (c: PushCampaign) => { setCampaign(c); setPreview(null); setResult(null); };
+  const skipped = preview ? Object.entries(preview.skipped).filter(([, n]) => n > 0) : [];
+  const blocked = !preview || !preview.on_sale || preview.recipients === 0 || (campaign === "reminder" && preview.launch_sent === 0);
+  return (
+    <Card title="Founding 100 emails" aside={preview ? `${preview.recipients} to send` : undefined}>
+      <div className="stack-sm">
+        <p className="cap">To verified accounts that haven&apos;t switched off tips and reminders and aren&apos;t founders. Each account gets each email once. Never sent automatically.</p>
+        <div className="row-actions" role="group" aria-label="Which email">
+          <button type="button" className={campaign === "launch" ? "btn btn-sm btn-primary" : "btn btn-sm"} aria-pressed={campaign === "launch"} onClick={() => pick("launch")}>Launch email</button>
+          <button type="button" className={campaign === "reminder" ? "btn btn-sm btn-primary" : "btn btn-sm"} aria-pressed={campaign === "reminder"} onClick={() => pick("reminder")}>Reminder (a week later)</button>
+        </div>
+        <label className="field" htmlFor={id}>
+          <span className="cap">Optional personal opening (blank line between paragraphs)</span>
+          <textarea id={id} className="input" rows={4} maxLength={2000} value={note} onChange={(e) => { setNote(e.target.value); setResult(null); }} />
+        </label>
+        <div className="row-actions">
+          <button type="button" className="btn btn-sm" onClick={() => doPreview()} disabled={look.busy}>Preview</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirming(true)} disabled={blocked || send.busy}>
+            Send {campaign === "launch" ? "launch email" : "reminder"}
+          </button>
+        </div>
+        {preview && !preview.on_sale && <p className="cap" role="status">No founding seats are on sale, so nothing can be sent.</p>}
+        {preview && campaign === "reminder" && preview.launch_sent === 0 && <p className="cap" role="status">Send the launch email first. The reminder only goes to people who got it.</p>}
+        {preview && preview.sent > 0 && <p className="cap" role="status">Already sent to {preview.sent}{preview.first_sent_at ? `, first on ${etTime(preview.first_sent_at)}` : ""}. Sending again only reaches accounts that haven&apos;t had it.</p>}
+        {campaign === "reminder" && preview?.launch_sent_at && <p className="cap">Launch email went out {etTime(preview.launch_sent_at)}.</p>}
+        {skipped.length > 0 && <p className="cap">Skipped: {skipped.map(([k, n]) => `${n} ${PUSH_SKIP[k] ?? k}`).join(", ")}.</p>}
+        {result && <p className="notice" role="status">{result}</p>}
+        <ErrorLine error={look.error ?? send.error} />
+        {preview?.html && (
+          <div className="stack-xs">
+            <p className="cap">Subject: <span className="strong">{preview.subject}</span></p>
+            <iframe title="Founding email preview" className="briefing-frame" sandbox="" srcDoc={preview.html} />
+          </div>
+        )}
+      </div>
+      <ConfirmDialog open={confirming} title={campaign === "launch" ? "Send the launch email?" : "Send the reminder?"} confirmLabel="Send now" busy={send.busy}
+        error={<ErrorLine error={send.error} />} onConfirm={doSend} onClose={() => setConfirming(false)}
+        body={<p className="body-sm">This emails {preview?.recipients ?? 0} accounts now. Each account only ever gets it once.</p>} />
     </Card>
   );
 }

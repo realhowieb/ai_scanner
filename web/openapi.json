@@ -13825,6 +13825,171 @@
     "title": "PublicTopSetups",
     "type": "object"
    },
+   "PushBody": {
+    "properties": {
+     "campaign": {
+      "description": "launch, or the one reminder a week later",
+      "enum": [
+       "launch",
+       "reminder"
+      ],
+      "title": "Campaign",
+      "type": "string"
+     },
+     "note": {
+      "default": "",
+      "description": "Optional personal opening, in your words",
+      "maxLength": 2000,
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "required": [
+     "campaign"
+    ],
+    "title": "PushBody",
+    "type": "object"
+   },
+   "PushPreview": {
+    "properties": {
+     "campaign": {
+      "title": "Campaign",
+      "type": "string"
+     },
+     "first_sent_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "First Sent At"
+     },
+     "html": {
+      "title": "Html",
+      "type": "string"
+     },
+     "launch_sent": {
+      "title": "Launch Sent",
+      "type": "integer"
+     },
+     "launch_sent_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Launch Sent At"
+     },
+     "on_sale": {
+      "title": "On Sale",
+      "type": "boolean"
+     },
+     "recipients": {
+      "title": "Recipients",
+      "type": "integer"
+     },
+     "sent": {
+      "title": "Sent",
+      "type": "integer"
+     },
+     "skipped": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Skipped",
+      "type": "object"
+     },
+     "subject": {
+      "title": "Subject",
+      "type": "string"
+     },
+     "text": {
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "campaign",
+     "on_sale",
+     "subject",
+     "html",
+     "text",
+     "recipients",
+     "skipped",
+     "sent",
+     "launch_sent"
+    ],
+    "title": "PushPreview",
+    "type": "object"
+   },
+   "PushSendBody": {
+    "properties": {
+     "campaign": {
+      "description": "launch, or the one reminder a week later",
+      "enum": [
+       "launch",
+       "reminder"
+      ],
+      "title": "Campaign",
+      "type": "string"
+     },
+     "confirm": {
+      "description": "Must be true: emails every eligible account",
+      "title": "Confirm",
+      "type": "boolean"
+     },
+     "note": {
+      "default": "",
+      "description": "Optional personal opening, in your words",
+      "maxLength": 2000,
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "required": [
+     "campaign",
+     "confirm"
+    ],
+    "title": "PushSendBody",
+    "type": "object"
+   },
+   "PushSent": {
+    "properties": {
+     "campaign": {
+      "title": "Campaign",
+      "type": "string"
+     },
+     "failed": {
+      "title": "Failed",
+      "type": "integer"
+     },
+     "sent": {
+      "title": "Sent",
+      "type": "integer"
+     },
+     "skipped": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Skipped",
+      "type": "object"
+     }
+    },
+    "required": [
+     "campaign",
+     "sent",
+     "failed",
+     "skipped"
+    ],
+    "title": "PushSent",
+    "type": "object"
+   },
    "QueueCount": {
     "properties": {
      "count": {
@@ -20368,6 +20533,112 @@
      }
     ],
     "summary": "Founder poll results (admin)"
+   }
+  },
+  "/v1/admin/founding/push/preview": {
+   "post": {
+    "description": "The email as it would go out and how many accounts it goes to. Sends nothing.",
+    "operationId": "push_preview_v1_admin_founding_push_preview_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PushBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PushPreview"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Preview the Founding 100 launch or reminder email (admin)"
+   }
+  },
+  "/v1/admin/founding/push/send": {
+   "post": {
+    "description": "Each account gets each email at most once. Never sent automatically.",
+    "operationId": "push_send_v1_admin_founding_push_send_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PushSendBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PushSent"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Not confirmed"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "409": {
+      "description": "No seats on sale, or the reminder before the launch"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send the Founding 100 launch or reminder email (admin)"
    }
   },
   "/v1/admin/founding/refunds": {

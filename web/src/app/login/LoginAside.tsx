@@ -50,7 +50,7 @@ export function LoginAside() {
         </section>
       )}
       {founding && founding.remaining > 0 && (
-        <Link href="/pricing" className="auth-founding">★ {founding.remaining} of 100 Founding seats left</Link>
+        <Link href="/founding-100" className="auth-founding">★ {founding.remaining} of 100 Founding seats left</Link>
       )}
     </aside>
   );

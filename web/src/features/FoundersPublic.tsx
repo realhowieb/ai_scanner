@@ -11,7 +11,7 @@ import { PublicFooter, PublicHeader, useLandingVisit } from "@/features/Landing"
 import { track } from "@/lib/funnel";
 import { monthYear } from "@/lib/founders";
 
-import { FOUNDER_HREF } from "./FoundingBanner";
+import { FOUNDING_PAGE } from "./FoundingBanner";
 
 type FounderCard = Schemas["PublicFounderCard"];
 type FoundersWall = Schemas["FoundersWall"];
@@ -75,7 +75,7 @@ export function FoundersWallView({ wall }: { wall: FoundersWall | null }) {
         </header>
         {wall && wall.taken < 100 && (
           <div className="row-actions">
-            <Link href={FOUNDER_HREF} className="btn btn-primary" onClick={() => track("primary_cta_click", "founding_wall")}>Claim a seat</Link>
+            <Link href={FOUNDING_PAGE} className="btn btn-primary" onClick={() => track("primary_cta_click", "founding_wall")}>Claim a seat</Link>
             <Link href="/founding-100/terms" className="cap">Founding terms</Link>
           </div>
         )}

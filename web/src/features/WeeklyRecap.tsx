@@ -8,6 +8,7 @@ import Link from "@/components/Link";
 import type { Schemas } from "@/api/client";
 import { TickerLogo } from "@/components/TickerLogo";
 import { EmailSignup } from "@/features/EmailSignup";
+import { FoundingStrip } from "@/features/FoundingBanner";
 import { PublicFooter, PublicHeader, useLandingVisit } from "@/features/Landing";
 import { setupLabel } from "@/lib/format";
 import { track } from "@/lib/funnel";
@@ -94,6 +95,7 @@ export function WeeklyRecapView({ recap, weeks }: { recap: Recap | null; weeks: 
           <section className="card stack-sm"><p className="body-sm">This recap isn&apos;t available. Recaps are published each weekend after the market closes on Friday.</p>
             {weeks.length > 0 && <p><Link href={`/weekly/${weeks[0]!.week}`}>Read the latest recap</Link></p>}</section>
         )}
+        <FoundingStrip surface="weekly" />
         <EmailSignup surface="weekly" />
         <section className="card stack-sm">
           <h2 className="h3">See today&apos;s ranked setups</h2>
