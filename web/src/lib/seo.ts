@@ -15,13 +15,17 @@ export function siteOrigin(env: Record<string, string | undefined> = process.env
 }
 
 /** Title, description, canonical URL, Open Graph and X card for one public page. */
+/** The shared link-preview image (app/opengraph-image.tsx). */
+export const OG_IMAGE = "/opengraph-image";
+
 export function publicMetadata(path: PublicPage, title: string, description: string): Metadata {
   return {
     title: { absolute: `${title} · HSFinest.AI` },
     description,
     alternates: { canonical: path },
     robots: { index: true, follow: true },
-    openGraph: { type: "website", siteName: "HSFinest.AI", title, description, url: path },
-    twitter: { card: "summary_large_image", title, description },
+    // A page's own openGraph replaces the root one, so name the shared preview image again.
+    openGraph: { type: "website", siteName: "HSFinest.AI", title, description, url: path, images: [OG_IMAGE] },
+    twitter: { card: "summary_large_image", title, description, images: [OG_IMAGE] },
   };
 }

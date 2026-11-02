@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
+import { OG_IMAGE } from "@/lib/seo";
 import { loadRecap, loadRecapIndex } from "@/server/publicRecap";
 
 type Props = { params: Promise<{ week: string }> };
@@ -16,8 +17,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: { absolute: `${title} · HSFinest.AI` }, description,
     alternates: { canonical: `/weekly/${recap.week}` }, robots: { index: true, follow: true },
-    openGraph: { type: "article", siteName: "HSFinest.AI", title, description, url: `/weekly/${recap.week}` },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: { type: "article", siteName: "HSFinest.AI", title, description, url: `/weekly/${recap.week}`, images: [OG_IMAGE] },
+    twitter: { card: "summary_large_image", title, description, images: [OG_IMAGE] },
   };
 }
 
