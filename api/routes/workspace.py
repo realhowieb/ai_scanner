@@ -18,6 +18,10 @@ class SymbolSuggestions(BaseModel):
     available: bool
 
 
+class CompanyNames(BaseModel):
+    names: dict[str, str]
+
+
 def register(app: FastAPI):
     @app.get("/v1/me/research-preferences", response_model=WorkspacePreferences, responses=_AUTH)
     def get_preferences(account: dict = Depends(current_account)):
@@ -37,6 +41,16 @@ def register(app: FastAPI):
         from api.symbol_search import search
         ratelimit.check("symbol_search", _user(account))
         return search(q)
+
+    @app.get("/v1/symbols/names", response_model=CompanyNames, responses=_AUTH)
+    def company_names(tickers: str = Query(..., min_length=1, max_length=2000,
+                                           description="Comma-separated; the first 200 are looked up"),
+                      account: dict = Depends(current_account)):
+        """Short company names for tickers (Alpaca's symbol directory, refreshed every 6 hours),
+        shown under tickers in tables. Unknown tickers are left out."""
+        from api.symbol_search import names
+        wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()][:200]
+        return {"names": names(wanted)}
 
     @app.get("/v1/alerts/deliveries", response_model=list[Delivery], responses=_AUTH)
     def deliveries(account: dict = Depends(current_account)):

@@ -95,7 +95,8 @@ await step("session survives reload and navigation", async () => {
 await step("find a setup and save it to a new watchlist from the Scanner", async () => {
   const first = page.locator("table .tk").first();
   await first.waitFor();
-  ticker = (await first.textContent()).trim();
+  // The ticker from the link itself: the cell also carries a logo letter and the company name.
+  ticker = decodeURIComponent(((await first.getAttribute("href")) ?? "").split("/stocks/")[1] ?? "").trim();
   await page.getByRole("button", { name: `Save ${ticker} to a watchlist` }).first().click();
   const dlg = page.getByRole("dialog", { name: `Save ${ticker} to a watchlist` });
   await dlg.getByLabel("New watchlist").fill(RUN);
@@ -107,7 +108,7 @@ await step("find a setup and save it to a new watchlist from the Scanner", async
 });
 
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
-  await page.locator("table").getByRole("link", { name: ticker, exact: true }).first().click();
+  await page.locator(`table a.tk[href="/stocks/${encodeURIComponent(ticker)}"]`).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));
   await page.getByRole("heading", { name: "HSF Score", exact: true }).waitFor();
   await page.getByRole("link", { name: RUN }).waitFor();

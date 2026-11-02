@@ -22,9 +22,10 @@ type Row = Schemas["DayTraderRow"];
 
 const SOURCES = [
   { id: "watchlist", label: "My default watchlist" },
-  { id: "movers", label: "Top movers" },
+  { id: "movers", label: "Top movers (all U.S.)" },
   { id: "movers_sp500", label: "S&P 500 movers" },
   { id: "movers_nasdaq", label: "NASDAQ movers" },
+  { id: "movers_nyse", label: "NYSE & other movers" },
   { id: "premarket", label: "Pre-market scan" },
   { id: "postmarket", label: "After-hours scan" },
   { id: "scan_picks", label: "Latest scan picks" },
@@ -453,7 +454,7 @@ function Live() {
             {shownRows.map((r) => (
               <article key={r.ticker} data-t={r.ticker} className={`card dt-card${flagged(r) ? " row-muted" : ""}`}>
                 <div className="dt-card-head">
-                  <TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
+                  <TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
                   <span className="grow" />
                   <Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash>
                 </div>
@@ -497,7 +498,7 @@ function Live() {
                   {shownRows.map((r) => (
                     <Fragment key={r.ticker}>
                       <tr data-t={r.ticker} className={flagged(r) ? "row-muted" : undefined}>
-                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
+                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
                         <td className="num">
                           <button type="button" className="th-sort" aria-expanded={open === r.ticker} aria-label={`Why ${r.ticker} scores ${r.day_trade_score == null ? "no score" : Math.round(r.day_trade_score)}`}
                             onClick={() => toggle(r.ticker)}><Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash></button>

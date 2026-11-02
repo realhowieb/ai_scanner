@@ -12,7 +12,11 @@ except Exception:  # streamlit not installed (lightweight suites)
     pass
 
 
+import os as _os
 import sys as _sys
+
+# Email logo chips fetch company images; tests that want them pass infos explicitly.
+_os.environ.setdefault("HSF_EMAIL_LOGOS", "0")
 
 import pytest as _pytest
 

@@ -4,11 +4,18 @@ Every piece returns an HTML fragment with inline styles only, so it renders the
 same in Gmail, Apple Mail and Outlook (no <style> block, no flexbox). The look:
 white cards on a light grey page, fixed column widths so numbers line up across
 tables, colored score badges and small tags.
+
+Tickers carry a small company logo. ticker() leaves a marker in front of the name, and
+shell() swaps every marker for a logo chip in one batch (api.logo_check, cached a week):
+a white logo sits on a dark chip, a missing logo or a photo shows the first letter.
+HSF_EMAIL_LOGOS=0 turns the logos off.
 """
 from __future__ import annotations
 
 import html as _html
-from typing import Any, Iterable, List, Optional, Sequence, Tuple
+import os
+import re
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 FONT = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
 INK = "#0f172a"
@@ -71,8 +78,51 @@ def tag(text: str, kind: str = "earnings") -> str:
             f"padding:1px 7px;margin-left:4px;background:{bg};color:{fg};white-space:nowrap'>{esc(text)}</span>")
 
 
-def ticker(t: Any, *, extra: str = "") -> str:
-    return f"<strong>{esc(t)}</strong>{extra}"
+_LOGO_TICKER = re.compile(r"[A-Z]{1,6}([.\-][A-Z]{1,2})?")
+_LOGO_MARK = re.compile(r"<!--hsf-logo:([A-Z.\-]{1,9})-->")
+
+
+def ticker(t: Any, *, extra: str = "", logo: bool = True) -> str:
+    sym = str(t or "").strip().upper()
+    mark = f"<!--hsf-logo:{sym}-->" if logo and _LOGO_TICKER.fullmatch(sym) else ""
+    return f"{mark}<strong>{esc(t)}</strong>{extra}"
+
+
+def logo_chip(t: str, kind: Optional[str], *, size: int = 20) -> str:
+    """A small inline logo before a ticker. kind: standard (light chip), light (a white logo:
+    dark chip), anything else (missing, a photo): the ticker's first letter."""
+    from api.earnings_week import logo_url
+
+    box = (f"display:inline-block;width:{size}px;height:{size}px;border-radius:5px;vertical-align:middle;"
+           f"margin-right:6px;border:1px solid {LINE};overflow:hidden;text-align:center")
+    if kind in ("standard", "light"):
+        bg = "#1e293b" if kind == "light" else "#ffffff"
+        inner = size - 4
+        return (f"<span style='{box};background:{bg}'><img src='{esc(logo_url(t))}' width='{inner}' height='{inner}' "
+                f"alt='' style='display:block;margin:2px;width:{inner}px;height:{inner}px;object-fit:contain'></span>")
+    return (f"<span style='{box};background:#e2e8f0;color:#334155;font-size:{max(9, size // 2)}px;"
+            f"font-weight:700;line-height:{size}px'>{esc(t[:1])}</span>")
+
+
+def resolve_logos(html_doc: str, *, infos: Optional[Dict[str, Dict[str, Any]]] = None) -> str:
+    """Swap every ticker() marker for a logo chip, checking each logo once. With
+    HSF_EMAIL_LOGOS=0, or when the check fails outright, the markers are just removed."""
+    tickers = list(dict.fromkeys(_LOGO_MARK.findall(html_doc)))
+    if not tickers:
+        return html_doc
+    if os.environ.get("HSF_EMAIL_LOGOS", "1").strip() == "0":
+        return _LOGO_MARK.sub("", html_doc)
+    if infos is None:
+        try:
+            from api.logo_check import logo_infos
+
+            infos = logo_infos(tickers)
+        except Exception:
+            return _LOGO_MARK.sub("", html_doc)
+    from api.earnings_week import logo_kind
+
+    chips = {t: logo_chip(t, logo_kind((infos or {}).get(t)) or "none") for t in tickers}
+    return _LOGO_MARK.sub(lambda m: chips.get(m.group(1), ""), html_doc)
 
 
 def table(headers: Sequence[str], rows: Iterable[Sequence[str]], widths: Optional[Sequence[int]] = None) -> str:
@@ -149,6 +199,7 @@ def is_kit(html_inner: str) -> bool:
 def shell(html_inner: str, *, title_line: str = "", glance: str = "", footer_html: str = "") -> str:
     """Whole email: dark header (brand + title line), optional 'At a glance' band,
     then the body (cards, or a plain fragment wrapped in one card)."""
+    html_inner = resolve_logos(html_inner)
     sub = f"<div style='color:{FAINT};font-size:13px;margin-top:2px'>{title_line}</div>" if title_line else ""
     radius = "12px 12px 0 0" if glance else "12px"
     head = (f"<tr><td style='background:{HEADER_BG};color:#ffffff;border-radius:{radius};padding:18px 22px'>"

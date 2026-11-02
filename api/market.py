@@ -181,7 +181,7 @@ def brief(entitlements: Dict[str, bool]) -> Dict[str, Any]:
 
 
 # ---- Day Trader (P1-70) --------------------------------------------------------------------------
-DT_SOURCES = ("watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket", "postmarket",
+DT_SOURCES = ("watchlist", "movers", "movers_sp500", "movers_nasdaq", "movers_nyse", "premarket", "postmarket",
               "scan_picks", "megacaps", "custom")
 DT_ROWS_TTL_S = 10          # live quotes: shared across users for 10 s (the web refreshes every 15 s while trading)
 DT_MOVERS_TTL_S = 120       # the movers screen, as on the web
@@ -205,6 +205,7 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
         "movers": lambda: dtm._top_movers_symbols(),
         "movers_sp500": lambda: dtm._top_movers_symbols(universe=dtm._sp500_universe()),
         "movers_nasdaq": lambda: dtm._top_movers_symbols(universe=dtm._nasdaq_universe()),
+        "movers_nyse": lambda: dtm._top_movers_symbols(universe=dtm._other_listed_universe()),
         "premarket": lambda: dtm._session_scan_symbols("premarket"),
         "postmarket": lambda: dtm._session_scan_symbols("postmarket"),
         "scan_picks": lambda: dtm._scan_pick_symbols(),
@@ -295,12 +296,13 @@ def start_day_trader_keep_warm() -> None:
     threading.Thread(target=run, name="day-trader-keep-warm", daemon=True).start()
 
 
-PM_GAPPERS_TTL_S = 180      # the whole-market pre-market screen (~4,000 snapshots) reloads every 3 minutes
+PM_GAPPERS_TTL_S = 180      # the whole-market pre-market screen (~7,000 snapshots) reloads every 3 minutes
 PM_GAPPERS_STALE_S = 600
 
 
 def premarket_gappers(limit: int = 25) -> Dict[str, Any]:
-    """Today's pre-market gappers over S&P 500 + NASDAQ: biggest % moves vs
+    """Today's pre-market gappers over every U.S. common stock (S&P 500, NASDAQ, NYSE and
+    the other exchanges; no ETFs): biggest % moves vs
     yesterday's close among names that traded today and clear the pre-market
     dollar-volume floor. Empty outside pre-market (4:00 ET to the open)."""
     from api.today import _cached

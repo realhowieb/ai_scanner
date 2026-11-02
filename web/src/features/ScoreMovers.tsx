@@ -18,7 +18,7 @@ function MoverList({ rows, dir }: { rows: Row[]; dir: "up" | "down" }) {
     <ul className="mover-list">
       {rows.map((r) => (
         <li key={r.ticker} className="mover-row">
-          <TickerLink ticker={r.ticker} />
+          <TickerLink ticker={r.ticker} named />
           <span className="cap grow">{r.setup ? setupLabel(r.setup) : ""}</span>
           <span className="mono">{r.previous_score} → {r.score}</span>
           <span className={`delta-chip mono ${dir}`} aria-label={`${dir === "up" ? "up" : "down"} ${Math.abs(r.change)} points`}>
