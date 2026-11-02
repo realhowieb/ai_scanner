@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { UsageAnalytics } from "@/components/UsageAnalytics";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { OfflineReady } from "@/components/OfflineReady";
+import { MarketingHandoff } from "@/components/MarketingHandoff";
 import { STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
 
 import "./globals.css";
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <UsageAnalytics />
         <ErrorReporter />
         <OfflineReady />
+        <MarketingHandoff />
         {children}
       </body>
     </html>
