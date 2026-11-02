@@ -56,6 +56,7 @@ With `BUFFER_API_KEY` set on hsf-api-v1 (a personal key from publish.buffer.com/
 | Weekly recap top 3 | Sat 10am | Sat 1am |
 
 - Each network gets its own text: Threads and LinkedIn get a link tagged with their utm_source; Instagram gets "link in bio" plus hashtags. Threads posts carry the topic Earnings or Stocks.
+- Automatic drafts stop 2 hours before the post time, so a late start never drafts a post you may have already made by hand. **Send now** in Admin still works any time.
 - Every post has an image drawn at `/social/<kind>/<week>.png` from the same stored post.
 - Text with performance language (returns, wins, "beat", percentages) is refused, never sent.
 - A channel that fails is retried on the next pass, up to 3 times. Admin > Marketing > Social drafts shows each post, its preview and status, and has **Send now**.
