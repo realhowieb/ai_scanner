@@ -14,6 +14,8 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
                         historical parity finding) are left out.
     weekly recap        Saturday from 14:00 UTC: services.weekly_recap to every verified,
                         opted-in account.
+    weekly earnings     Sunday from 22:00 UTC (or Monday before 13:00 UTC if Sunday was missed):
+                        services.weekly_earnings, the week ahead's reporters, to Pro and up.
     business email      Monday from 12:00 UTC: services.business_report to the admins.
     daily account mail  from 15:00 UTC: free Pro ended, first-week tips and the 14-day
                         come-back email (services.lifecycle_emails, services.onboarding_emails).
@@ -25,6 +27,7 @@ Env (all default on; set to 0 to stop one):
     HSF_LIVE_CHECK_NOTIFY         live check notices
     HSF_NIGHTLY_OPS_NOTE          nightly ops note
     HSF_WEEKLY_RECAP_ENABLED      weekly recap (services.weekly_recap)
+    HSF_WEEKLY_EARNINGS_ENABLED   weekly earnings email (services.weekly_earnings)
     HSF_BUSINESS_EMAIL_ENABLED    business email (services.business_report)
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
     HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
@@ -236,6 +239,16 @@ def weekly_recap_due(now: dt.datetime) -> Optional[str]:
     return None
 
 
+def weekly_earnings_due(now: dt.datetime) -> Optional[str]:
+    """The ISO week of the coming Monday: Sunday from 22:00 UTC, or Monday before 13:00 UTC
+    (a catch-up when the API was down Sunday evening; the claim keeps it to one send)."""
+    if now.weekday() == 6 and now.hour >= 22:
+        return iso_week(now.date() + dt.timedelta(days=1))
+    if now.weekday() == 0 and now.hour < 13:
+        return iso_week(now.date())
+    return None
+
+
 def business_due(now: dt.datetime) -> Optional[str]:
     if now.weekday() == 0 and now.hour >= 12:
         return iso_week(_et(now).date())
@@ -295,6 +308,10 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
         from services import weekly_recap
 
         _run_once("weekly_recap", weekly_recap_due(now), lambda: weekly_recap.run(now=now))
+    if _on("HSF_WEEKLY_EARNINGS_ENABLED"):
+        from services import weekly_earnings
+
+        _run_once("weekly_earnings", weekly_earnings_due(now), lambda: weekly_earnings.run(now=now))
     if _on("HSF_BUSINESS_EMAIL_ENABLED"):
         from services import business_report
 

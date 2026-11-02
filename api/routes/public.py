@@ -38,7 +38,7 @@ class ClientErrorReport(BaseModel):
 
 class UnsubscribeBody(BaseModel):
     token: str = Field(min_length=10, max_length=64)
-    kind: Literal["digest", "evening", "alerts", "weekly", "tips", "all"]
+    kind: Literal["digest", "evening", "alerts", "weekly", "tips", "earnings", "all"]
 
 
 def register(app: FastAPI) -> None:

@@ -412,7 +412,7 @@ class EmailPrefKindsTests(unittest.TestCase):
         self.assertIn("tips", email_prefs.KINDS)
         with mock.patch.object(email_prefs, "_conn", return_value=None):
             self.assertEqual(email_prefs.get_prefs("a@x.com"),
-                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True})
+                             {"digest": True, "evening": True, "alerts": True, "weekly": True, "tips": True, "earnings": True})
 
 
 # ---- 7. Dependabot -----------------------------------------------------------------------------------

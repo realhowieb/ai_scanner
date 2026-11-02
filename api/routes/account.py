@@ -70,6 +70,7 @@ class EmailPrefsUpdate(BaseModel):
     alerts: Optional[bool] = None
     weekly: Optional[bool] = None
     tips: Optional[bool] = None
+    earnings: Optional[bool] = None
 
 
 class CheckoutBody(BaseModel):
