@@ -97,7 +97,7 @@ def docs_enabled() -> bool:
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or load_settings()
     docs = docs_enabled()
-    app = FastAPI(title="HSFinest.AI API", version="1.0.0",
+    app = FastAPI(title="HSFinest.com API", version="1.0.0",
                   docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
                   openapi_url="/openapi.json" if docs else None,
                   responses={422: {"model": models.ValidationErrorResponse, "description": "Invalid request fields"}})
@@ -170,7 +170,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def root() -> Any:
         if docs:
             return RedirectResponse("/docs")
-        return {"ok": True, "service": "HSFinest.AI API"}
+        return {"ok": True, "service": "HSFinest.com API"}
 
     @app.get("/healthz", response_model=models.Health)
     def healthz() -> Dict[str, bool]:

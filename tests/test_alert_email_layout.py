@@ -112,7 +112,7 @@ class RedesignTests(unittest.TestCase):
         from ui.email_kit import shell
 
         html = shell(compose([B30])[2])
-        self.assertIn("HSFinest.AI", html)
+        self.assertIn("HSFinest.com", html)
         self.assertEqual(html.count("border-radius:12px;padding:16px 20px"), 1)   # not double-wrapped
 
 
@@ -133,7 +133,7 @@ class OtherEmailTests(unittest.TestCase):
         from ui.email_utils import _branded_card, alert_html
 
         html = alert_html("HSF Intelligence Alert", "line one\nline <two>")
-        self.assertIn("⚡ HSFinest.AI", html)
+        self.assertIn("⚡ HSFinest.com", html)
         self.assertIn("line &lt;two&gt;", html)
         self.assertNotIn("<pre>", html)
         card = _branded_card("Reset", "<p>x</p>", "https://a/b?t=1&k=2", "Reset my password", "30 minutes")

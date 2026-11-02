@@ -55,12 +55,12 @@ def payment_failed_content(plan: str, grace_ends_at: Optional[str]) -> tuple:
     keep = (f"You keep {name} until {_day(until)} while you sort it out." if until
             else f"You keep {name} for a few days while you sort it out.")
     subject = "Your payment didn't go through"
-    text = (f"We couldn't charge your card for HSFinest.AI {name}.\n\n{keep} "
+    text = (f"We couldn't charge your card for HSFinest.com {name}.\n\n{keep} "
             "After that your account goes back to Starter.\n\n"
             f"Update your card under Account, then Manage subscription: {account}\n\n"
             "If you meant to stop paying, there's nothing to do.\n")
     inner = ("<h2 style='font-size:20px;margin:16px 0 8px'>Your payment didn't go through</h2>"
-             f"<p>We couldn't charge your card for HSFinest.AI {html.escape(name)}.</p>"
+             f"<p>We couldn't charge your card for HSFinest.com {html.escape(name)}.</p>"
              f"<p>{html.escape(keep)} After that your account goes back to Starter.</p>"
              + _button(account, "Update payment method") +
              "<p style='color:#555'>If you meant to stop paying, there's nothing to do.</p>")
@@ -74,7 +74,7 @@ def plan_ended_content(plan: str) -> tuple:
     pricing = f"{_base_url()}/pricing"
     perks = ", ".join(PRO_PERKS[:-1]) + f" and {PRO_PERKS[-1]}"
     subject = f"Your {name} plan has ended"
-    text = (f"Your HSFinest.AI {name} subscription has ended, so your account is on Starter now. "
+    text = (f"Your HSFinest.com {name} subscription has ended, so your account is on Starter now. "
             "Starter stays free, and your watchlists, alerts and journal are all still there.\n\n"
             f"What's paused: {perks}.\n\n"
             f"Come back any time: {pricing}\n")

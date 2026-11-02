@@ -42,7 +42,7 @@ export function FounderCardView({ card }: { card: FounderCard | null }) {
               {card.badge && <p><Pill tone="gold">{card.badge}</Pill></p>}
             </section>
             <section className="card stack-sm">
-              <h2 className="h3">One of 100 founding members of HSFinest.AI</h2>
+              <h2 className="h3">One of 100 founding members of HSFinest.com</h2>
               <p className="body-sm">HSF scans the market and ranks stock setups with an HSF Score. Start free; join with this link and the founder who shared it gets credit.</p>
               <div className="row-actions">
                 <Link href={signup} className="btn btn-primary" onClick={() => track("primary_cta_click", "founder_card")}>Create a free account</Link>

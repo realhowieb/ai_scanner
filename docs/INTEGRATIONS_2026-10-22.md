@@ -7,7 +7,7 @@ be promoted before any keys exist. Never commit keys or paste them into chat.
 | --- | --- | --- | --- | --- |
 | 1 | Alpaca News | `hsf-api-v1` | none (uses `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`); `HSF_NEWS_ENABLED=0` turns it off | works now |
 | 2 | Cloudflare Turnstile | `hsf-web-v1` + `hsf-api-v1` | web: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (rebuild); API: `TURNSTILE_SECRET_KEY` | no bot check |
-| 3 | SEC EDGAR | `hsf-api-v1` | `HSF_SEC_USER_AGENT="HSFinest.AI you@yourdomain"` (or a valid `SMTP_FROM`); `HSF_FILINGS_ENABLED=0` turns it off | card hidden |
+| 3 | SEC EDGAR | `hsf-api-v1` | `HSF_SEC_USER_AGENT="HSFinest.com you@yourdomain"` (or a valid `SMTP_FROM`); `HSF_FILINGS_ENABLED=0` turns it off | card hidden |
 | 4 | Telegram / Discord alerts | `hsf-api-v1` | Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET`; Discord: none. `HSF_CHAT_ALERTS_ENABLED=0` turns both off | Discord works now; Telegram hidden |
 | 5 | Render Key Value | `hsf-api-v1` | `REDIS_URL` = the Key Value's **Internal** URL | each process counts in memory (as before) |
 | 6 | Sentry source maps | `hsf-web-v1` | `SENTRY_AUTH_TOKEN` (org token, project:releases); optional `SENTRY_ORG` (default `hs-finest-ai`), `SENTRY_PROJECT` (default `python`) | web errors stay minified |

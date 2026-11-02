@@ -136,7 +136,7 @@ export function LoginForm() {
   const needsCaptcha = mode === "link" && !!TURNSTILE_SITE_KEY && !captcha;
   return (
     <form onSubmit={submit} noValidate>
-      <AuthShell title="Welcome back" subtitle="Sign in to HSFinest.AI">
+      <AuthShell title="Welcome back" subtitle="Sign in to HSFinest.com">
       <p className="auth-pitch">Today&apos;s setups, your watchlists and your alerts are waiting.</p>
       {expired && <p className="notice" role="status">Your session ended. Sign in again to continue.</p>}
       {linkSent ? (

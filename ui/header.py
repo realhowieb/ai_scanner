@@ -4,7 +4,7 @@ import os
 
 from utils.st_compat import st
 
-# Brand logo: prefer the HSFinest.AI logo; fall back to the legacy asset so the
+# Brand logo: prefer the HSFinest.com logo; fall back to the legacy asset so the
 # header never breaks if the new file hasn't been added yet.
 _LOGO_CANDIDATES = (
     # Run 62: same artwork cropped above the baked-in "SCAN. ANALYZE. TRADE.
@@ -45,7 +45,7 @@ HEADER_PROVIDER_ERRORS = (RuntimeError, TimeoutError, ConnectionError, OSError, 
 
 
 def render_header() -> None:
-    """Render a compact, left-aligned HSFinest.AI header logo."""
+    """Render a compact, left-aligned HSFinest.com header logo."""
 
     # Logo column + spacer (prevents full-width stretch)
     logo_col, _ = st.columns([1.2, 4])

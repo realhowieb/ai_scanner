@@ -13,7 +13,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
     <html lang="en">
       <body style={{ margin: 0, minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b0f14", color: "#e7edf5", fontFamily: "system-ui, sans-serif" }}>
         <main style={{ maxWidth: 420, padding: 24, textAlign: "center" }} role="alert">
-          <title>Something went wrong · HSFinest.AI</title>
+          <title>Something went wrong · HSFinest.com</title>
           <h1 style={{ fontSize: 22 }}>Something went wrong</h1>
           <p style={{ opacity: 0.75 }}>We&apos;ve been told about it. Trying again usually fixes it.</p>
           <button type="button" onClick={() => retry()}

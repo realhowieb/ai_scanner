@@ -219,7 +219,7 @@ class FilingsTests(unittest.TestCase):
     def test_stock_filings_reads_insiders_and_8k_items(self):
         from api import filings
 
-        with mock.patch.dict("os.environ", {"HSF_SEC_USER_AGENT": "HSFinest.AI test@example.com"}), \
+        with mock.patch.dict("os.environ", {"HSF_SEC_USER_AGENT": "HSFinest.com test@example.com"}), \
                 mock.patch.object(filings, "_get", side_effect=self._fake_get):
             r = filings.stock_filings("aapl")
         self.assertTrue(r["available"])
@@ -234,7 +234,7 @@ class FilingsTests(unittest.TestCase):
             self.assertFalse(filings.enabled())
             self.assertFalse(filings.stock_filings("AAPL")["available"])
         with mock.patch.dict("os.environ", {"HSF_SEC_USER_AGENT": "", "SMTP_FROM": "HSF <alerts@hsf.example>"}):
-            self.assertEqual(filings.user_agent(), "HSFinest.AI alerts@hsf.example")
+            self.assertEqual(filings.user_agent(), "HSFinest.com alerts@hsf.example")
 
 
 class InsiderRuleTests(unittest.TestCase):

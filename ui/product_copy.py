@@ -13,7 +13,7 @@ import re
 from typing import List
 
 PRODUCT_NAME = "HSF AI Stock Scanner"
-BRAND = "HSFinest.AI"
+BRAND = "HSFinest.com"
 
 # The headline promise, used as the hero line and page subtitle.
 TAGLINE = "Turn the whole market into a short list."

@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <main className="center">
       <div className="card narrow login stack">
-        <Link href="/" className="brand brand-lg" aria-label="HSFinest.AI home">HSFinest<span>.AI</span></Link>
+        <Link href="/" className="brand brand-lg" aria-label="HSFinest.com home">HSFinest<span>.com</span></Link>
         <h1 className="h1">Page not found</h1>
         <p className="cap">That page doesn&apos;t exist, or the link is out of date.</p>
         <div className="row-actions">

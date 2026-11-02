@@ -327,7 +327,7 @@ def _send_email(to_address: str, subject: str, body: str,
         "Trading involves risk of loss."
     )
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"HSFinest.AI — {subject}"
+    msg["Subject"] = f"HSFinest.com — {subject}"
     from email.utils import formataddr, parseaddr
 
     name, addr = parseaddr(sender)
@@ -340,9 +340,9 @@ def _send_email(to_address: str, subject: str, body: str,
         unsub_text = f"\n\nDon't want these emails? Unsubscribe: {unsubscribe_url}"
         unsub_html = (f"<p style='color:#aaa;font-size:11px'>Don't want these emails? "
                       f"<a href='{unsubscribe_url}' style='color:#888'>Unsubscribe</a></p>")
-    msg.attach(MIMEText(f"HSFinest.AI alert\n\n{body}\n\n{disclaimer}{unsub_text}", "plain"))
+    msg.attach(MIMEText(f"HSFinest.com alert\n\n{body}\n\n{disclaimer}{unsub_text}", "plain"))
     html = _live_alert_html(body, snap, ticker, disclaimer, unsubscribe_url) or (
-        f"<p><strong>⚡ HSFinest.AI</strong></p><pre>{body}</pre>"
+        f"<p><strong>⚡ HSFinest.com</strong></p><pre>{body}</pre>"
         f"<p style='color:#aaa;font-size:11px'>{disclaimer}</p>{unsub_html}")
     msg.attach(MIMEText(html, "html"))
     try:

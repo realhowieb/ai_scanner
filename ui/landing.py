@@ -168,7 +168,7 @@ def _asset_data_uri(relative_path: str) -> str:
 
 
 def hero_html(logo_uri: str = "") -> str:
-    img = (f'<img src="{logo_uri}" alt="HSFinest.AI logo">' if logo_uri else "")
+    img = (f'<img src="{logo_uri}" alt="HSFinest.com logo">' if logo_uri else "")
     return (
         f'{_CSS}<div class="hsf-land"><div class="hsf-hero">{img}<div>'
         f'<h1>{html.escape(PRODUCT_NAME)}</h1>'
