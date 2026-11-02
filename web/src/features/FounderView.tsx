@@ -13,6 +13,7 @@ import { Card, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etDate } from "@/lib/format";
+import { captureUsage } from "@/lib/usageAnalytics";
 
 import { FounderBenefits } from "./FounderBenefits";
 import { FounderRefunds } from "./FounderRefunds";
@@ -78,7 +79,10 @@ export function FounderView() {
 
   async function start(tier: FounderTier, upgrade = false) {
     const out = await buy.run(() => founding.checkout(offer!, tier, agreed, upgrade));
-    if (out?.checkout_url) window.location.assign(out.checkout_url);
+    if (out?.checkout_url) {
+      captureUsage("founding_checkout_started", { plan: tier === "founder_elite" ? "premium" : "pro" });
+      window.location.assign(out.checkout_url);
+    }
   }
 
   const m = offer.membership;

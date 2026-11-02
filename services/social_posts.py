@@ -197,7 +197,7 @@ def compose_founding(week: str, status: Optional[Dict[str, Any]] = None) -> Opti
     lead = f"HSF's Founding {total} is open: {total} numbered memberships, one payment"
     body = lead + (", 5 years." if five else ".") + "\n\n" + "\n".join(
         f"{s['label']} {s['price']}: {s['left']} of {s['of']} left" for s in seats)
-    return {"kind": "founding", "week": week, "body": body, "cta": "Seats and terms", "page": "/pricing",
+    return {"kind": "founding", "week": week, "body": body, "cta": "Seats and terms", "page": "/founding-100",
             "image": {"kicker": "Founding membership", "headline": f"The Founding {total}.",
                       "sub": "One payment" + (", 5 years." if five else ".") + " Numbered seats.", "seats": seats}}
 

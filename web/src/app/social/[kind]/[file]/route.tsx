@@ -99,13 +99,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ kind: string; 
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: C.bg, color: C.text,
         padding: "80px 80px 70px", fontFamily: "sans-serif",
         backgroundImage: "radial-gradient(circle at 90% 0%, rgba(76,194,255,0.18), transparent 45%)" }}>
-        <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: C.accent }}>.AI</span></div>
+        <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}><span>HSFinest</span><span style={{ color: C.accent }}>.com</span></div>
         <div style={{ display: "flex", marginTop: 64, fontSize: 28, letterSpacing: 4, color: C.accent, fontWeight: 700 }}>{(img.kicker ?? "").toUpperCase()}</div>
         <div style={{ display: "flex", marginTop: 14, fontSize: 84, fontWeight: 700, lineHeight: 1.05 }}>{img.headline ?? ""}</div>
         {img.sub ? <div style={{ display: "flex", marginTop: 18, fontSize: 30, color: C.dim }}>{img.sub}</div> : null}
         <div style={{ display: "flex", flexDirection: "column", marginTop: 52 }}><Body img={img} /></div>
         <div style={{ display: "flex", marginTop: "auto", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <span style={{ fontSize: 32, fontWeight: 700 }}>app.hsfinest.com</span>
+          <span style={{ fontSize: 32, fontWeight: 700 }}>www.hsfinest.com</span>
           <span style={{ fontSize: 20, color: "#6f8399" }}>Research only, not financial advice.</span>
         </div>
       </div>

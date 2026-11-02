@@ -12,6 +12,7 @@ For every verified, active account that hasn't switched the "weekly" email off:
       Alerts that fired     this week's alert_events, and each stock's move since that day
       Earnings next week    watchlist names reporting Monday to Friday
     Starter gets the first two and one line on what Pro adds, with the pricing link.
+    Non-founders also get a Founding 100 card while seats are on sale (services/founding_push.py).
 
 The shared parts (top picks, prices) load once per run; each account is claimed in
 the lifecycle email log (db.referrals.claim_email, kind "weekly_recap", ref the ISO
@@ -180,7 +181,7 @@ def _pct_html(v: Optional[float]) -> str:
 
 def compose(*, pro: bool, picks: Dict[str, Any], movers: List[Tuple[str, float]],
             alerts: List[Tuple[str, Optional[float]]], earnings: List[Tuple[str, str]],
-            monday: dt.date, base_url: str) -> tuple:
+            monday: dt.date, base_url: str, founding: Optional[Tuple[str, str]] = None) -> tuple:
     """(subject, text, html inner). Pure. The HTML is email_kit cards (the same look as the
     morning digest and evening wrap), with a logo next to each ticker."""
     from ui import email_kit as k
@@ -251,6 +252,9 @@ def compose(*, pro: bool, picks: Dict[str, Any], movers: List[Tuple[str, float]]
         T += [f"Pro adds your alerts recap and next week's earnings for your names: {base_url}/pricing", ""]
         H.append(k.card("⭐ More with Pro", k.note("Pro adds your alerts recap and next week's earnings for your names.")
                         + k.button(f"{base_url}/pricing", "See Pro")))
+    if founding:  # (text, html) from services.founding_push.weekly_card, for non-founders
+        T.append(founding[0])
+        H.append(founding[1])
     H.append(k.card("📈 Next week", k.note("Educational only, not financial advice.")
                     + k.button(f"{base_url}/today", "Open Today")))
     T.append(f"Open Today: {base_url}/today")
@@ -322,6 +326,12 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
         log.warning(json.dumps({"event": "weekly_recap_failed", "error": type(e).__name__}))
         return {"error": type(e).__name__}
     base = _base_url()
+    try:
+        from services import founding_push
+
+        founding_card = founding_push.weekly_card(base)
+    except Exception:
+        founding_push, founding_card = None, None
 
     # Who gets it, and their lists (before the price batch, so it's one batch).
     todo = []
@@ -389,8 +399,9 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
             movers, alerts, earnings = _account_parts(
                 email, pro=pro, closes=closes, monday=monday, friday=friday, watch=watch,
                 alert_rows=alerts_by_user.get(email, []), earnings_rows=earnings_rows)
+            card = founding_card if founding_card and founding_push and not founding_push.is_founder(email) else None
             subject, text, inner = compose(pro=pro, picks=picks, movers=movers, alerts=alerts,
-                                           earnings=earnings, monday=monday, base_url=base)
+                                           earnings=earnings, monday=monday, base_url=base, founding=card)
             if send_digest_email(email, subject, inner, text, unsubscribe_url=unsubscribe_url(email, "weekly"),
                                  title_line=f"Week in review · week of {monday:%b} {monday.day}",
                                  glance_html=recap_glance(picks, movers)):

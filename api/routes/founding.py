@@ -373,6 +373,36 @@ class BriefingSent(BaseModel):
     failed: int
 
 
+class PushBody(BaseModel):
+    campaign: Literal["launch", "reminder"] = Field(description="launch, or the one reminder a week later")
+    note: str = Field(default="", max_length=2000, description="Optional personal opening, in your words")
+
+
+class PushSendBody(PushBody):
+    confirm: bool = Field(description="Must be true: emails every eligible account")
+
+
+class PushPreview(BaseModel):
+    campaign: str
+    on_sale: bool
+    subject: str
+    html: str
+    text: str
+    recipients: int
+    skipped: Dict[str, int]
+    sent: int
+    first_sent_at: Optional[str] = None
+    launch_sent: int
+    launch_sent_at: Optional[str] = None
+
+
+class PushSent(BaseModel):
+    campaign: str
+    sent: int
+    failed: int
+    skipped: Dict[str, int]
+
+
 class BadgeBody(BaseModel):
     show: bool
 
@@ -597,6 +627,24 @@ def register(app: FastAPI) -> None:
         if not body.confirm:
             raise HTTPException(400, "Confirm the send first.")
         return svc.briefing_send(account, body.note)
+
+    @app.post("/v1/admin/founding/push/preview", response_model=PushPreview, responses=_ADMIN,
+              summary="Preview the Founding 100 launch or reminder email (admin)")
+    def push_preview(body: PushBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The email as it would go out and how many accounts it goes to. Sends nothing."""
+        require_admin(account)
+        return svc.push_preview(body.campaign, body.note)
+
+    @app.post("/v1/admin/founding/push/send", response_model=PushSent,
+              responses={**_ADMIN, 400: {"description": "Not confirmed"},
+                         409: {"description": "No seats on sale, or the reminder before the launch"}},
+              summary="Send the Founding 100 launch or reminder email (admin)")
+    def push_send(body: PushSendBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Each account gets each email at most once. Never sent automatically."""
+        require_admin(account)
+        if not body.confirm:
+            raise HTTPException(400, "Confirm the send first.")
+        return svc.push_send(account, body.campaign, body.note)
 
     @app.get("/v1/admin/founding/poll", response_model=AdminPoll, responses=_ADMIN,
              summary="Founder poll results (admin)")

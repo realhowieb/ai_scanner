@@ -116,7 +116,7 @@ describe("public founder pages", () => {
     expect(screen.getByText("Founder")).toBeInTheDocument();
     expect(screen.getByText("Bea")).toBeInTheDocument();
     expect(screen.getAllByText("Open")).toHaveLength(98);
-    expect(screen.getByRole("link", { name: "Claim a seat" })).toHaveAttribute("href", "/account/founder");
+    expect(screen.getByRole("link", { name: "Claim a seat" })).toHaveAttribute("href", "/founding-100");
   });
 
   it("formats months", () => {

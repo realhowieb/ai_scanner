@@ -1286,3 +1286,14 @@ a.chip { display: inline-flex; align-items: center; }
 .sched-form .field { flex: 1 1 200px; min-width: 0; }
 .sched-form .form-error, .sched-form .form-error + * { flex-basis: 100%; }
 .export-csv { margin-left: auto; }
+
+/* Public Founding 100 page (/founding-100) */
+.founding-seats { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.founding-seat { display: grid; grid-template-columns: auto auto; column-gap: var(--sp-2); align-items: baseline;
+  padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.founding-seat .cap { grid-column: 1 / -1; }
+.founding-seat-n { font-size: 1.5rem; font-weight: 700; justify-self: end; }
+.founding-faq { padding: var(--sp-2) var(--sp-3); }
+.founding-faq summary { cursor: pointer; }
+.founding-faq p { margin: var(--sp-2) 0 0; }
+.founding-switch { margin-top: var(--sp-2); }

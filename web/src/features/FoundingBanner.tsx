@@ -12,7 +12,10 @@ import { useOptionalMe } from "@/session/SessionProvider";
 
 type PublicFounding = Schemas["PublicFounding"];
 
+/** Checkout, for a signed-in account. */
 export const FOUNDER_HREF = "/account/founder";
+/** The public Founding 100 page: what you get, seats left and the FAQ, before signing in. */
+export const FOUNDING_PAGE = "/founding-100";
 
 export function usePublicFounding(): PublicFounding | null {
   const state = useApi<PublicFounding>("public-founding", (signal) => unwrap(publicApi.GET("/v1/public/founding", { signal })));
@@ -80,7 +83,7 @@ export function FoundingBanner({ surface }: { surface: string }) {
       {!soldOut && <FiveYearMath tiers={d.tiers} />}
       {!soldOut && (
         <div className="row-actions">
-          <Link href={FOUNDER_HREF} className="btn btn-primary" onClick={() => track("primary_cta_click", `founding_${surface}`)}>
+          <Link href={FOUNDING_PAGE} className="btn btn-primary" onClick={() => track("primary_cta_click", `founding_${surface}`)}>
             {onSale.length ? "See the Founding 100" : "Learn about the Founding 100"}
           </Link>
           <Link href="/founders" className="cap">See the Founders Wall</Link>
@@ -88,5 +91,44 @@ export function FoundingBanner({ surface }: { surface: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** A short Founding 100 strip for public pages (the weekly recap): seats left and a link. */
+export function FoundingStrip({ surface }: { surface: string }) {
+  const d = usePublicFounding();
+  if (!d || d.remaining <= 0 || !d.tiers.some((t) => t.on_sale)) return null;
+  return (
+    <section aria-labelledby="founding-strip-h" className="card stack-xs founding-banner">
+      <p className="eyebrow">Founding 100</p>
+      <h2 id="founding-strip-h" className="h3">{d.remaining} of 100 founding seats left</h2>
+      <p className="body-sm">One payment, five years of HSF, no renewals. {d.tiers.map((t) => `${t.label} ${dollars(t.price_cents)}`).join(" · ")}.</p>
+      <div className="row-actions">
+        <Link href={FOUNDING_PAGE} className="btn btn-primary btn-sm" onClick={() => track("primary_cta_click", `founding_${surface}`)}>See the Founding 100</Link>
+      </div>
+    </section>
+  );
+}
+
+/** For a monthly or yearly subscriber: how switching to a founding seat works, before
+ *  checkout refuses them (a seat can be bought once the subscription has fully ended). */
+export function FoundingSwitchNote({ endsAt }: { endsAt?: string | null }) {
+  const d = usePublicFounding();
+  const me = useOptionalMe();
+  if (!d || d.remaining <= 0 || !d.tiers.some((t) => t.on_sale) || me?.founder_tier) return null;
+  const ends = endsAt ? new Date(endsAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }) : null;
+  return (
+    <div className="card stack-xs founding-switch" role="note">
+      <p className="strong">Thinking about a Founding 100 seat? {d.remaining} of 100 left.</p>
+      {ends ? (
+        <p className="body-sm">Your plan ends {ends}. After that you can claim a seat: one payment for five years, nothing renews.</p>
+      ) : (
+        <ol className="steps body-sm">
+          <li>Cancel this plan with Manage subscription. You keep it until the end of the period you paid for.</li>
+          <li>Once it ends, claim your seat: one payment for five years, nothing renews.</li>
+        </ol>
+      )}
+      <p className="cap">You never pay twice for the same months. <Link href={FOUNDING_PAGE} onClick={() => track("primary_cta_click", "founding_switch")}>See the Founding 100</Link></p>
+    </div>
   );
 }
