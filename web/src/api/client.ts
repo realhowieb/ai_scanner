@@ -55,6 +55,12 @@ export function setSessionExpiredHandler(fn: () => void): void {
   expiring = false;
 }
 
+/** Sign-out is under way: a request that now fails with session_expired (its cookies were
+ * just cleared) must not send the browser to sign-in; sign-out picks where it lands. */
+export function sessionEndingOnPurpose(): void {
+  expiring = true;
+}
+
 export function newRequestId(): string {
   return `web-${crypto.randomUUID()}`;
 }

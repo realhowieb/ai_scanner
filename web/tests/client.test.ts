@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError, makeClient, setSessionExpiredHandler, unwrap } from "@/api/client";
+import { ApiError, makeClient, sessionEndingOnPurpose, setSessionExpiredHandler, unwrap } from "@/api/client";
 import { safeNext, withNext } from "@/lib/nextPath";
 import { parseRetryAfter } from "@/lib/retryAfter";
 import { freshness } from "@/lib/format";
@@ -40,6 +40,15 @@ describe("typed client", () => {
     const errs = await Promise.all([1, 2, 3].map(() => unwrap(c.GET("/v1/me")).catch((e) => e)));
     expect(errs.every((e) => e instanceof ApiError && e.code === "session_expired")).toBe(true);
     expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not redirect to sign-in for requests that fail while signing out", async () => {
+    const onExpired = vi.fn();
+    setSessionExpiredHandler(onExpired);
+    sessionEndingOnPurpose();
+    const c = makeClient((async () => jsonResponse({ detail: "ended", code: "session_expired" }, 401)) as unknown as typeof fetch);
+    await expect(unwrap(c.GET("/v1/me"))).rejects.toMatchObject({ code: "session_expired" });
+    expect(onExpired).not.toHaveBeenCalled();
   });
 
   it("reports a network failure as status 0", async () => {

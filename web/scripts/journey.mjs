@@ -33,7 +33,9 @@ const step = async (name, fn) => {
   try {
     await fn();
   } catch (e) {
-    check(name, false, String(e.message || e).split("\n")[0].slice(0, 200));
+    let where = "";
+    try { where = ` (at ${new URL(page.url()).pathname})`; } catch { /* page closed */ }
+    check(name, false, String(e.message || e).split("\n")[0].slice(0, 200) + where);
   }
 };
 
