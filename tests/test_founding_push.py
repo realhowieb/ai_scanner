@@ -1,6 +1,7 @@
 """Founding 100 push: the launch and reminder emails, the weekly recap card and the sale
 alert to the admins (services/founding_push.py)."""
 import datetime as dt
+import importlib.util as _ilu
 import unittest
 from unittest import mock
 
@@ -15,6 +16,8 @@ TIERS = [
 ]
 OPEN = {"open": True, "checkout_open": True, "remaining": 97, "tiers": TIERS}
 BASE = "https://app.hsfinest.com"
+# The API and billing webhook need fastapi; the core-only CI jobs skip those tests.
+_NEEDS_API = unittest.skipUnless(_ilu.find_spec("fastapi"), "needs fastapi")
 
 
 def sales_copy(text: str) -> str:
@@ -163,6 +166,7 @@ class SaleAlertTests(unittest.TestCase):
         with mock.patch("db.founding.membership", side_effect=RuntimeError("down")):
             self.assertFalse(push.sale_alert("buyer@x.com"))
 
+    @_NEEDS_API
     def test_webhook_sends_the_alert_after_the_confirmation(self):
         from billing_service import engine
 
@@ -184,6 +188,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@_NEEDS_API
 class AdminApiTests(unittest.TestCase):
     ADMIN = {"username": "admin@x.com"}
 
