@@ -14,6 +14,7 @@ import type { Schemas } from "@/api/client";
 import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { AnalyticsTab, ResearchTab } from "@/features/AdminAnalytics";
+import { MarketingTab } from "@/features/AdminMarketing";
 import { FounderBriefingCard, FounderPollCard, FoundingRefundsTab } from "@/features/AdminFoundingRefunds";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -24,7 +25,7 @@ type User = Schemas["AdminUser"];
 type Check = Schemas["AdminCheck"];
 const PLANS = ["basic", "pro", "premium"] as const;
 type Plan = (typeof PLANS)[number];
-const TABS = [["users", "Users"], ["analytics", "Analytics"], ["research", "Research"], ["health", "Health"], ["founding", "Founding"], ["tools", "Tools"]] as const;
+const TABS = [["users", "Users"], ["analytics", "Analytics"], ["marketing", "Marketing"], ["research", "Research"], ["health", "Health"], ["founding", "Founding"], ["tools", "Tools"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 const GOOD = new Set(["HEALTHY", "WAITING", "ok"]);
@@ -471,7 +472,7 @@ export function AdminView() {
           <button key={k} type="button" role="tab" tabIndex={tab === k ? 0 : -1} id={`admin-tab-${k}`} aria-controls="admin-panel" aria-selected={tab === k} className={`seg${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
-      <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "research" ? <ResearchTab />
+      <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0}>{tab === "users" ? <UsersTab self={me.email ?? ""} /> : tab === "analytics" ? <AnalyticsTab /> : tab === "marketing" ? <MarketingTab /> : tab === "research" ? <ResearchTab />
         : tab === "health" ? <HealthTab /> : tab === "founding" ? <div className="stack"><FoundingRefundsTab /><FounderBriefingCard /><FounderPollCard /></div> : <ToolsTab />}</div>
     </div>
   );

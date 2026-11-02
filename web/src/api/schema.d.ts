@@ -403,6 +403,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/marketing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where visitors, list sign-ups, accounts and sales come from */
+        get: operations["admin_marketing_v1_admin_marketing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/marketing/subscribers.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Confirmed email-list addresses as CSV (for a newsletter tool import) */
+        get: operations["admin_subscribers_csv_v1_admin_marketing_subscribers_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ml-readiness": {
         parameters: {
             query?: never;
@@ -2557,6 +2591,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the email list form is open */
+        get: operations["list_config_v1_public_list_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/stocks/{ticker}": {
         parameters: {
             query?: never;
@@ -2578,6 +2629,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join the weekly setups email list (double opt-in)
+         * @description Sends one confirm email; the address joins the list only after the link is opened.
+         *     Answers the same way whether or not the address was already on the list.
+         */
+        post: operations["subscribe_v1_public_subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/subscribe/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm or unsubscribe with an emailed link */
+        post: operations["list_action_v1_public_subscribe_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/subscribe/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Email list status behind a confirm or unsubscribe link
+         * @description Changes nothing (mail scanners open links); the page asks for a click.
+         */
+        get: operations["list_status_v1_public_subscribe_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/top-setups": {
         parameters: {
             query?: never;
@@ -2591,6 +2700,40 @@ export interface paths {
          *     day change) and how many more a free account sees. Everything else needs an account.
          */
         get: operations["public_top_setups_v1_public_top_setups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest weekly recap (public) */
+        get: operations["weekly_index_v1_public_weekly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/weekly/{week}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One week's recap (public) */
+        get: operations["weekly_v1_public_weekly__week__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3842,6 +3985,33 @@ export interface components {
             success: boolean;
             /** Username */
             username?: string | null;
+        };
+        /** AdminMarketing */
+        AdminMarketing: {
+            /**
+             * By Source
+             * @default []
+             */
+            by_source: components["schemas"]["MarketingSourceRow"][];
+            /**
+             * Campaigns
+             * @default []
+             */
+            campaigns: components["schemas"]["MarketingCampaign"][];
+            /** Days */
+            days: number;
+            /**
+             * Founder Revenue Cents
+             * @default 0
+             */
+            founder_revenue_cents: number;
+            list: components["schemas"]["MarketingList"];
+            totals: components["schemas"]["MarketingTotals"];
+            /**
+             * Unavailable
+             * @default []
+             */
+            unavailable: string[];
         };
         /** AdminMlGate */
         AdminMlGate: {
@@ -6558,6 +6728,66 @@ export interface components {
             /** Time */
             time?: string | null;
         };
+        /** ListAction */
+        ListAction: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "confirm" | "unsubscribe";
+            /** Token */
+            token: string;
+        };
+        /** ListConfig */
+        ListConfig: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** ListStatus */
+        ListStatus: {
+            /**
+             * Email
+             * @description Masked address
+             */
+            email: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "confirmed" | "unsubscribed";
+        };
+        /** ListSubscribe */
+        ListSubscribe: {
+            /**
+             * Attribution
+             * @description utm_* tags and referrer from the visitor's first page
+             */
+            attribution?: {
+                [key: string]: string;
+            };
+            /** Email */
+            email: string;
+            /**
+             * Surface
+             * @description Which page the form was on
+             */
+            surface?: string | null;
+            /**
+             * Website
+             * @description Leave empty (a trap for bots)
+             */
+            website?: string | null;
+        };
+        /** ListSubscribeResult */
+        ListSubscribeResult: {
+            /** Message */
+            message: string;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+        };
         /** LoginBody */
         LoginBody: {
             /** Client */
@@ -6601,6 +6831,94 @@ export interface components {
              * @description True when a scheduled full-market scan was missed, so the data is older than the schedule promises; null when unknown. Overnight, weekends and holidays alone are never stale.
              */
             stale?: boolean | null;
+        };
+        /** MarketingCampaign */
+        MarketingCampaign: {
+            /** Accounts */
+            accounts: number;
+            /** Campaign */
+            campaign: string;
+            /** Clicks */
+            clicks: number;
+            /** List Signups */
+            list_signups: number;
+            /** Utm Source */
+            utm_source: string;
+            /** Visits */
+            visits: number;
+        };
+        /** MarketingList */
+        MarketingList: {
+            /** Confirmed */
+            confirmed: number;
+            /** New In Period */
+            new_in_period: number;
+            /** Pending */
+            pending: number;
+            /**
+             * Sync Configured
+             * @description Confirmed addresses are copied to a Resend segment
+             */
+            sync_configured: boolean;
+            /** Unsubscribed */
+            unsubscribed: number;
+        };
+        /** MarketingSourceRow */
+        MarketingSourceRow: {
+            /** Accounts */
+            accounts: number;
+            /** Clicks */
+            clicks: number;
+            /** Founders */
+            founders: number;
+            /** List Confirmed */
+            list_confirmed: number;
+            /** List Signups */
+            list_signups: number;
+            /** Paid */
+            paid: number;
+            /** Source */
+            source: string;
+            /** Visits */
+            visits: number;
+        };
+        /** MarketingTotals */
+        MarketingTotals: {
+            /**
+             * Accounts
+             * @default 0
+             */
+            accounts: number;
+            /**
+             * Clicks
+             * @default 0
+             */
+            clicks: number;
+            /**
+             * Founders
+             * @default 0
+             */
+            founders: number;
+            /**
+             * List Confirmed
+             * @default 0
+             */
+            list_confirmed: number;
+            /**
+             * List Signups
+             * @default 0
+             */
+            list_signups: number;
+            /**
+             * Paid
+             * @default 0
+             */
+            paid: number;
+            /**
+             * Visits
+             * @default 0
+             */
+            visits: number;
         };
         /** Me */
         Me: {
@@ -8199,6 +8517,36 @@ export interface components {
             /** Tier */
             tier: string;
         };
+        /** PublicRecap */
+        PublicRecap: {
+            /** Built At */
+            built_at: string;
+            earnings?: components["schemas"]["RecapEarnings"] | null;
+            /** End */
+            end: string;
+            /**
+             * Ranked
+             * @default []
+             */
+            ranked: components["schemas"]["RecapName"][];
+            /** Ranked Names */
+            ranked_names: number;
+            /** Scan Days */
+            scan_days: number;
+            /** Start */
+            start: string;
+            /** Week */
+            week: string;
+        };
+        /** PublicRecapIndex */
+        PublicRecapIndex: {
+            latest?: components["schemas"]["PublicRecap"] | null;
+            /**
+             * Weeks
+             * @default []
+             */
+            weeks: components["schemas"]["RecapWeek"][];
+        };
         /** PublicStock */
         PublicStock: {
             /** Change Pct */
@@ -8417,6 +8765,64 @@ export interface components {
             standouts: components["schemas"]["Standout"][];
             /** Title */
             title: string;
+        };
+        /** RecapEarnings */
+        RecapEarnings: {
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["RecapEarningsDay"][];
+            /** End */
+            end: string;
+            /** Start */
+            start: string;
+        };
+        /** RecapEarningsDay */
+        RecapEarningsDay: {
+            /** Date */
+            date: string;
+            /**
+             * Names
+             * @default []
+             */
+            names: components["schemas"]["RecapEarningsName"][];
+            /** Total */
+            total: number;
+        };
+        /** RecapEarningsName */
+        RecapEarningsName: {
+            /** Ticker */
+            ticker: string;
+            /** Time */
+            time?: string | null;
+        };
+        /** RecapName */
+        RecapName: {
+            /** Best Score */
+            best_score: number;
+            /**
+             * Days
+             * @description Trading days the name was in the first scan's top 10
+             */
+            days: number;
+            /** First Day */
+            first_day: string;
+            /** Name */
+            name?: string | null;
+            /** Setup */
+            setup?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** RecapWeek */
+        RecapWeek: {
+            /** End */
+            end: string;
+            /** Start */
+            start: string;
+            /** Week */
+            week: string;
         };
         /** Referrals */
         Referrals: {
@@ -11380,6 +11786,96 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    admin_marketing_v1_admin_marketing_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMarketing"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_subscribers_csv_v1_admin_marketing_subscribers_csv_get: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
@@ -17284,6 +17780,35 @@ export interface operations {
             };
         };
     };
+    list_config_v1_public_list_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListConfig"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     public_stock_v1_public_stocks__ticker__get: {
         parameters: {
             query?: never;
@@ -17330,6 +17855,143 @@ export interface operations {
             };
         };
     };
+    subscribe_v1_public_subscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListSubscribe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSubscribeResult"];
+                };
+            };
+            /** @description Not an email address */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many sign-ups */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description List closed or unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_action_v1_public_subscribe_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListStatus"];
+                };
+            };
+            /** @description Invalid link */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_status_v1_public_subscribe_status_get: {
+        parameters: {
+            query: {
+                t: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListStatus"];
+                };
+            };
+            /** @description Invalid link */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     public_top_setups_v1_public_top_setups_get: {
         parameters: {
             query?: never;
@@ -17363,6 +18025,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    weekly_index_v1_public_weekly_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicRecapIndex"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    weekly_v1_public_weekly__week__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                week: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicRecap"];
+                };
+            };
+            /** @description No recap for that week */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };
