@@ -75,6 +75,7 @@ export function PublicHeader() {
         <Link href="/how-hsf-works">How it works</Link>
         <Link href="/demo">Demo</Link>
         <Link href="/pricing">Pricing</Link>
+        <a href={MUSIC_ORIGIN}>Music &amp; Shop</a>
         {signedIn ? <Link href="/today" className="btn btn-primary btn-sm">Open HSF</Link> : <>
           <Link href="/login">Sign in</Link>
           <SignupLink surface="header" className="btn btn-primary btn-sm">Create free account</SignupLink>
