@@ -203,7 +203,7 @@ def shell(html_inner: str, *, title_line: str = "", glance: str = "", footer_htm
     sub = f"<div style='color:{FAINT};font-size:13px;margin-top:2px'>{title_line}</div>" if title_line else ""
     radius = "12px 12px 0 0" if glance else "12px"
     head = (f"<tr><td style='background:{HEADER_BG};color:#ffffff;border-radius:{radius};padding:18px 22px'>"
-            f"<div style='font-size:18px;font-weight:700'>⚡ HSFinest.AI</div>{sub}</td></tr>")
+            f"<div style='font-size:18px;font-weight:700'>⚡ HSFinest.com</div>{sub}</td></tr>")
     if glance:
         head += (f"<tr><td style='background:{GLANCE_BG};color:#e2e8f0;border-radius:0 0 12px 12px;"
                  f"padding:14px 22px;font-size:14px;line-height:1.55'>{glance}</td></tr>")

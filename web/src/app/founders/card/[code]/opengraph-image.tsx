@@ -17,7 +17,7 @@ export default async function Image({ params }: { params: Promise<{ code: string
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between",
         background: elite ? "#1f2a38" : "#1c1810", color: "#e7edf5", padding: "60px 72px", fontFamily: "sans-serif" }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 34, fontWeight: 700 }}>
-          <div style={{ display: "flex" }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.AI</span></div>
+          <div style={{ display: "flex" }}><span>HSFinest</span><span style={{ color: "#4cc2ff" }}>.com</span></div>
           <div style={{ display: "flex", fontSize: 28, color: accent }}>Founding 100</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>

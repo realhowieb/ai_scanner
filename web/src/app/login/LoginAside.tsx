@@ -20,7 +20,7 @@ export function LoginAside() {
   const setups = top.data?.setups ?? [];
   return (
     <aside className="auth-aside" aria-labelledby="auth-aside-h">
-      <Link href="/" className="brand brand-lg" tabIndex={-1} aria-hidden="true">HSFinest<span>.AI</span></Link>
+      <Link href="/" className="brand brand-lg" tabIndex={-1} aria-hidden="true">HSFinest<span>.com</span></Link>
       <div className="stack-sm">
         <h2 id="auth-aside-h" className="auth-aside-h">Today&apos;s setups are ready.</h2>
         <p className="body-sm">Sign in for the full Scanner, your watchlists and your alerts.</p>

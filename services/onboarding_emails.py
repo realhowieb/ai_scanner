@@ -52,7 +52,7 @@ def tip_watchlist_content() -> tuple:
 
     url = f"{_base_url()}/watchlists"
     subject = "Tip: save the stocks you follow"
-    text = ("A quick tip for your first week on HSFinest.AI.\n\n"
+    text = ("A quick tip for your first week on HSFinest.com.\n\n"
             "Save the stocks you follow to a watchlist. Today then shows how they're doing, which ones "
             "the Scanner ranks, and who reports earnings this week.\n\n"
             "One tap saves today's top 5 setups as a starter list, or add your own tickers: " + url + "\n")

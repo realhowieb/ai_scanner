@@ -60,7 +60,7 @@ def _send(to: str, subject: str, title: str, lines: List[str], *, button: str = 
         fine = fine or f"Questions? Email {support}."
         intro = "".join(f"<p style='margin:0 0 8px'>{k.esc(line)}</p>" for line in lines)
         html = k.shell(k.card(k.esc(title), intro + k.button(url, button) + k.note(k.esc(fine))),
-                       footer_html="HSFinest.AI. Educational research, not financial advice.")
+                       footer_html="HSFinest.com. Educational research, not financial advice.")
         text = "\n\n".join([title, *lines, f"{button}: {url}", fine])
         return bool(_send_smtp(to, subject, text, html))
     except Exception as e:
@@ -247,7 +247,7 @@ def briefing_message(member: Dict[str, Any], parts: Dict[str, Any], month: str,
     cards.append(k.button(url, "Open your founder page"))
     fine = f"You get this monthly briefing as a founding member. Questions or ideas? Reply in the app or email {_support()}."
     html = k.shell("".join(cards) + k.note(k.esc(fine)), title_line=f"Founder Briefing · {badge}",
-                   footer_html="HSFinest.AI. Educational research, not financial advice.")
+                   footer_html="HSFinest.com. Educational research, not financial advice.")
     text += ["", f"Open your founder page: {url}", fine]
     return {"subject": subject, "text": "\n".join(text), "html": html}
 

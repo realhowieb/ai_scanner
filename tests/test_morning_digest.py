@@ -377,7 +377,7 @@ class RedesignTests(unittest.TestCase):
         from ui.email_kit import is_kit, shell
 
         out = shell("<p>hello</p>", title_line="Welcome", footer_html="f")
-        self.assertIn("HSFinest.AI", out)
+        self.assertIn("HSFinest.com", out)
         self.assertIn("Welcome", out)
         self.assertTrue(is_kit(out))
         self.assertNotIn("At a glance", out)

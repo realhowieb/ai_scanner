@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="shell">
       <a href="#main" className="skip">Skip to content</a>
       <aside className="sidebar">
-        <Link href="/today" className="brand side-brand">HSFinest<span>.AI</span></Link>
+        <Link href="/today" className="brand side-brand">HSFinest<span>.com</span></Link>
         <nav aria-label="Main" className="side-nav">
           {GROUPS.map((g) => (
             <div key={g} className="side-group">
@@ -145,7 +145,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="frame">
       <header className="topbar">
         <div className="topbar-in">
-          <Link href="/today" className="brand top-brand">HSFinest<span>.AI</span></Link>
+          <Link href="/today" className="brand top-brand">HSFinest<span>.com</span></Link>
           <StockSearch compact />
           <MarketStatus />
           {me && <span className={`plan-badge plan-${me.plan}`} aria-hidden="true">{me.plan_label}</span>}

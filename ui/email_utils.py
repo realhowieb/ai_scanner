@@ -70,16 +70,16 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
         return False
 
-    subject = "Reset your HSFinest.AI password"
+    subject = "Reset your HSFinest.com password"
     body_text = (
-        f"You requested a password reset for your HSFinest.AI account.\n\n"
+        f"You requested a password reset for your HSFinest.com account.\n\n"
         f"Click the link below to set a new password (valid for 30 minutes):\n\n"
         f"{reset_url}\n\n"
         f"If you did not request this, you can ignore this email.\n"
     )
     body_html = _branded_card(
         "Reset your password",
-        "<p style='margin:0 0 4px'>You asked to reset the password for your <strong>HSFinest.AI</strong> account.</p>",
+        "<p style='margin:0 0 4px'>You asked to reset the password for your <strong>HSFinest.com</strong> account.</p>",
         reset_url, "Reset my password",
         "This link expires in 30 minutes. If you didn't ask for this, you can ignore this email.",
     )
@@ -107,14 +107,14 @@ def send_password_reset_email(to_address: str, reset_url: str) -> bool:
 
 def send_sign_in_link_email(to_address: str, link_url: str, ttl_minutes: int = 15) -> bool:
     """Email a one-time sign-in link (sign in without a password). True when sent."""
-    subject = "Your HSFinest.AI sign-in link"
+    subject = "Your HSFinest.com sign-in link"
     body_text = (
-        "Use the link below to sign in to HSFinest.AI (valid for "
+        "Use the link below to sign in to HSFinest.com (valid for "
         f"{ttl_minutes} minutes, works once):\n\n{link_url}\n\n"
         "If you didn't ask for this, you can ignore this email. Nobody can sign in without the link.\n"
     )
     body_html = _branded_card(
-        "Sign in to HSFinest.AI",
+        "Sign in to HSFinest.com",
         "<p style='margin:0 0 4px'>Tap the button to sign in. No password needed.</p>",
         link_url, "Sign me in",
         f"This link works once and expires in {ttl_minutes} minutes. If you didn't ask for it, you can ignore this email.",
@@ -173,16 +173,16 @@ def send_verification_email(to_address: str, verify_url: str) -> bool:
     """Send an email address verification email."""
     return _send_smtp(
         to_address=to_address,
-        subject="Verify your HSFinest.AI email address",
+        subject="Verify your HSFinest.com email address",
         body_text=(
-            f"Welcome to HSFinest.AI — Know what matters in the market right now.\n\n"
+            f"Welcome to HSFinest.com — Know what matters in the market right now.\n\n"
             f"Please verify your email address by clicking the link below "
             f"(valid for 24 hours):\n\n{verify_url}\n\n"
             f"If you did not sign up, ignore this email.\n"
         ),
         body_html=_branded_card(
             "Verify your email",
-            "<p style='margin:0 0 4px'>Welcome to <strong>HSFinest.AI</strong>. "
+            "<p style='margin:0 0 4px'>Welcome to <strong>HSFinest.com</strong>. "
             "Know what matters in the market right now.</p>",
             verify_url, "Verify my email address",
             "This link expires in 24 hours. If you didn't sign up, ignore this email.",
@@ -255,8 +255,8 @@ def send_digest_email(to_address: str, subject: str, html_inner: str, text_inner
     footer = _footer(unsubscribe_url)
     return _send_smtp(
         to_address=to_address,
-        subject=f"HSFinest.AI — {subject}",
-        body_text=(f"HSFinest.AI\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"
+        subject=f"HSFinest.com — {subject}",
+        body_text=(f"HSFinest.com\n\n{text_inner}\n\n— Know what matters in the market right now.\n\n{disclaimer}"
                    f"{unsub_text}"),
         body_html=shell(html_inner, title_line=title_line, glance=glance_html, footer_html=footer),
         headers=headers,
@@ -269,9 +269,9 @@ def send_alert_email(to_address: str, subject: str, body: str,
     unsub_text, unsub_html, headers = _unsubscribe_parts(unsubscribe_url)
     return _send_smtp(
         to_address=to_address,
-        subject=f"HSFinest.AI — {subject}",
+        subject=f"HSFinest.com — {subject}",
         body_text=(
-            f"HSFinest.AI alert\n\n{body}\n\n— Know what matters in the market right now.\n\n"
+            f"HSFinest.com alert\n\n{body}\n\n— Know what matters in the market right now.\n\n"
             "Informational and educational purposes only — not financial, investment, "
             "or trading advice. Trading involves risk of loss; do your own research."
             f"{unsub_text}"

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Founders Wall",
-  description: "The Founding 100 of HSFinest.AI: every founder seat by number. Names appear only when a founder chooses.",
+  description: "The Founding 100 of HSFinest.com: every founder seat by number. Names appear only when a founder chooses.",
 };
 
 export default async function Page() {

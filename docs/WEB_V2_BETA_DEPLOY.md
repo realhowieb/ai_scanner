@@ -50,7 +50,7 @@ any API keys or `API_JWT_SECRET` here.
 **Cookies and HTTPS:** `npm start` runs in production mode, so session cookies are
 `__Host-hsf_at` and `__Host-hsf_rt`: `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`.
 Render serves `https://hsf-web-beta.onrender.com` with TLS, which `__Host-` cookies require.
-A custom domain for the beta (e.g. `beta.hsfinest.ai`) is optional; add it in Render, and
+A custom domain for the beta (e.g. `beta.hsfinest.com`) is optional; add it in Render, and
 nothing in the app changes.
 
 **Invite list caveat:** the list is checked at sign-in. Removing someone takes effect at
