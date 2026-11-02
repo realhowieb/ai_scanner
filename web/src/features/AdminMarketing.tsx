@@ -14,6 +14,9 @@ import { downloadText } from "@/lib/csv";
 import { siteOrigin } from "@/lib/seo";
 
 type Report = Schemas["AdminMarketing"];
+type Social = Schemas["AdminSocial"];
+const KIND_LABEL: Record<string, string> = { earnings: "Earnings this week", product: "What HSF does", founding: "Founding 100", recap: "Weekly recap" };
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET";
 const PERIODS = [[7, "7 days"], [30, "30 days"], [90, "90 days"], [365, "1 year"]] as const;
 const fmt = (n: number) => n.toLocaleString("en-US");
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -141,6 +144,59 @@ function Campaigns({ r }: { r: Report }) {
   );
 }
 
+
+/** Weekly social posts that go to Buffer as drafts (services/social_posts.py). */
+export function SocialCard() {
+  const s = useApi<Social>("admin-social", (signal) => unwrap(api.GET("/v1/admin/marketing/social", { signal })));
+  const act = useAction();
+  const [note, setNote] = useState<string | null>(null);
+  const send = (kind: string) => void act.run(async () => {
+    const r = await unwrap(api.POST("/v1/admin/marketing/social/{kind}", { params: { path: { kind } } }));
+    setNote(r.error ? `Couldn't send: ${r.error}` : r.skipped ? `Nothing sent (${r.skipped.replace(/_/g, " ")}${r.why ? `: ${r.why}` : ""}).`
+      : `Sent ${r.sent} draft${r.sent === 1 ? "" : "s"} to Buffer${r.already ? `, ${r.already} already there` : ""}.`);
+    s.reload();
+    return true;
+  });
+  const d = s.data;
+  return (
+    <Card title="Social drafts (Buffer)" id="social"
+      aside={!d ? null : !d.configured ? <Pill tone="warn">No Buffer key</Pill> : !d.enabled ? <Pill tone="warn">Paused</Pill>
+        : d.channel_error ? <Pill tone="warn">Buffer error</Pill> : <Pill tone="up">{d.channels.length} channel{d.channels.length === 1 ? "" : "s"}</Pill>}>
+      <p className="body-sm">Each post goes to every Buffer channel as a draft the evening before it&apos;s due. Approve it in Buffer and it publishes at the time shown.</p>
+      {s.error && !d ? <ErrorState error={s.error} onRetry={s.reload} what="the social drafts" /> : !d ? <Skeleton rows={4} label="Loading social drafts" /> : (
+        <>
+          {!d.configured && <p className="cap">Set BUFFER_API_KEY on the API (from publish.buffer.com/settings/api) to start.</p>}
+          {d.channel_error && <p className="cap">Buffer answered: {d.channel_error}</p>}
+          {d.channels.length > 0 && <p className="cap">Channels: {d.channels.map((c) => `${c.name} (${c.service})`).join(", ")}</p>}
+          <div className="table-wrap"><table className="table">
+            <thead><tr><th scope="col">Post</th><th scope="col">Goes out</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+            <tbody>{d.posts.map((p) => (
+              <tr key={p.kind}>
+                <th scope="row">{KIND_LABEL[p.kind] ?? p.kind}
+                  {p.preview && <details><summary className="cap">Preview</summary>
+                    <a href={p.preview.image_url} target="_blank" rel="noreferrer" className="cap">Image</a>
+                    <pre className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{p.preview.texts.threads}</pre>
+                    {p.preview.problem && <p className="cap">Would be refused: {p.preview.problem}</p>}
+                  </details>}
+                </th>
+                <td>{when(p.post_at)}</td>
+                <td>{p.drafted > 0 ? <Pill tone="up">{p.drafted} drafted</Pill> : p.failed > 0 ? <Pill tone="warn">{p.failed} failed</Pill>
+                  : p.preview ? <span className="cap">Not sent yet</span> : <span className="cap">Nothing to post</span>}</td>
+                <td><button type="button" className="btn" disabled={act.busy || !d.configured || !p.preview} onClick={() => send(p.kind)}>Send now</button></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+          {note && <p className="body-sm" role="status">{note}</p>}
+          <ErrorLine error={act.error} />
+          {d.recent.some((r) => r.status === "failed") && (
+            <p className="cap">Last failure: {d.recent.find((r) => r.status === "failed")?.error}</p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function MarketingTab() {
   const [days, setDays] = useState(30);
   const s = useApi<Report>(`admin-marketing:${days}`, (signal) => unwrap(api.GET("/v1/admin/marketing", { params: { query: { days } }, signal })));
@@ -154,6 +210,7 @@ export function MarketingTab() {
       {s.error && !s.data ? <ErrorState error={s.error} onRetry={s.reload} what="the marketing report" />
         : !s.data ? <Skeleton rows={5} label="Loading the marketing report" />
         : <><Sources r={s.data} /><Campaigns r={s.data} /><ListCard r={s.data} /></>}
+      <SocialCard />
       <LinkBuilder />
     </div>
   );

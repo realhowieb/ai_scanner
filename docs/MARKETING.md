@@ -44,6 +44,24 @@ Copy rules (finance): describe what the scanner ranked and why; never say a pick
 - Start free with X, Threads and LinkedIn (or Bluesky). Upgrade only if you post more than 10 a week per channel. Stocktwits isn't in Buffer: post there by hand.
 - Every post link should come from the Campaign link builder: pick the page (usually Weekly recap), the network and a campaign like `weekly-w45`. The Campaigns table then shows which posts brought visits, list sign-ups and accounts.
 
+### Automatic weekly drafts (services/social_posts.py)
+
+With `BUFFER_API_KEY` set on hsf-api-v1 (a personal key from publish.buffer.com/settings/api), HSF writes four posts a week and sends each one to every Buffer channel **as a draft**. Nothing publishes until you approve it in Buffer.
+
+| Post | Goes out (ET) | Drafted from |
+|---|---|---|
+| Earnings this week | Mon 8:30am | Sun 6pm |
+| What HSF does (4 rotating posts) | Wed noon | Tue 6pm |
+| Founding 100 seats left (skipped when closed) | Fri noon | Thu 6pm |
+| Weekly recap top 3 | Sat 10am | Sat 1am |
+
+- Each network gets its own text: Threads and LinkedIn get a link tagged with their utm_source; Instagram gets "link in bio" plus hashtags. Threads posts carry the topic Earnings or Stocks.
+- Every post has an image drawn at `/social/<kind>/<week>.png` from the same stored post.
+- Text with performance language (returns, wins, "beat", percentages) is refused, never sent.
+- A channel that fails is retried on the next pass, up to 3 times. Admin > Marketing > Social drafts shows each post, its preview and status, and has **Send now**.
+- `HSF_SOCIAL_DRAFTS_ENABLED=0` pauses it. `HSF_SOCIAL_CHANNELS=instagram,threads` limits it to those networks.
+- Set the Instagram profile link to `https://app.hsfinest.com/weekly?utm_source=instagram&utm_medium=social&utm_campaign=bio`.
+
 A simple weekly cadence:
 
 | Day | Post |

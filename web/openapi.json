@@ -2742,6 +2742,60 @@
     "title": "AdminSignals",
     "type": "object"
    },
+   "AdminSocial": {
+    "properties": {
+     "channel_error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Channel Error"
+     },
+     "channels": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SocialChannel"
+      },
+      "title": "Channels",
+      "type": "array"
+     },
+     "configured": {
+      "description": "BUFFER_API_KEY is set on the API",
+      "title": "Configured",
+      "type": "boolean"
+     },
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     },
+     "posts": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SocialPostStatus"
+      },
+      "title": "Posts",
+      "type": "array"
+     },
+     "recent": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/SocialDraftRow"
+      },
+      "title": "Recent",
+      "type": "array"
+     }
+    },
+    "required": [
+     "configured",
+     "enabled"
+    ],
+    "title": "AdminSocial",
+    "type": "object"
+   },
    "AdminStairStepper": {
     "properties": {
      "best_window": {
@@ -13551,6 +13605,31 @@
     "title": "PublicRecapIndex",
     "type": "object"
    },
+   "PublicSocialPost": {
+    "properties": {
+     "image": {
+      "additionalProperties": true,
+      "description": "What the post's image shows (kind-specific)",
+      "title": "Image",
+      "type": "object"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "week",
+     "image"
+    ],
+    "title": "PublicSocialPost",
+    "type": "object"
+   },
    "PublicStock": {
     "properties": {
      "change_pct": {
@@ -16211,6 +16290,241 @@
      "status"
     ],
     "title": "Snapshot",
+    "type": "object"
+   },
+   "SocialChannel": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "service": {
+      "title": "Service",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "service"
+    ],
+    "title": "SocialChannel",
+    "type": "object"
+   },
+   "SocialDraftRow": {
+    "properties": {
+     "attempts": {
+      "default": 0,
+      "title": "Attempts",
+      "type": "integer"
+     },
+     "channel_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Channel Name"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "service": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "week",
+     "status",
+     "updated_at"
+    ],
+    "title": "SocialDraftRow",
+    "type": "object"
+   },
+   "SocialPostStatus": {
+    "properties": {
+     "drafted": {
+      "default": 0,
+      "title": "Drafted",
+      "type": "integer"
+     },
+     "failed": {
+      "default": 0,
+      "title": "Failed",
+      "type": "integer"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "post_at": {
+      "title": "Post At",
+      "type": "string"
+     },
+     "preview": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SocialPreview"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "week",
+     "post_at"
+    ],
+    "title": "SocialPostStatus",
+    "type": "object"
+   },
+   "SocialPreview": {
+    "properties": {
+     "image_url": {
+      "title": "Image Url",
+      "type": "string"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "post_at": {
+      "title": "Post At",
+      "type": "string"
+     },
+     "problem": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Why it would be refused (a performance claim), if so",
+      "title": "Problem"
+     },
+     "texts": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Post text per network (threads, linkedin, instagram)",
+      "title": "Texts",
+      "type": "object"
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "week",
+     "post_at",
+     "image_url",
+     "texts"
+    ],
+    "title": "SocialPreview",
+    "type": "object"
+   },
+   "SocialSendResult": {
+    "properties": {
+     "already": {
+      "default": 0,
+      "title": "Already",
+      "type": "integer"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "failed": {
+      "default": 0,
+      "title": "Failed",
+      "type": "integer"
+     },
+     "gave_up": {
+      "default": 0,
+      "title": "Gave Up",
+      "type": "integer"
+     },
+     "sent": {
+      "default": 0,
+      "title": "Sent",
+      "type": "integer"
+     },
+     "skipped": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Skipped"
+     },
+     "why": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Why"
+     }
+    },
+    "title": "SocialSendResult",
     "type": "object"
    },
    "Sparklines": {
@@ -20314,6 +20628,105 @@
      }
     ],
     "summary": "Where visitors, list sign-ups, accounts and sales come from",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/marketing/social": {
+   "get": {
+    "operationId": "admin_social_v1_admin_marketing_social_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminSocial"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Weekly social drafts: Buffer setup, next posts and recent sends",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/marketing/social/{kind}": {
+   "post": {
+    "description": "Channels that already have this week's draft are skipped.",
+    "operationId": "admin_social_send_v1_admin_marketing_social__kind__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "kind",
+      "required": true,
+      "schema": {
+       "pattern": "^(earnings|product|founding|recap)$",
+       "title": "Kind",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SocialSendResult"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send the next post of one kind to Buffer as drafts now",
     "tags": [
      "admin (admins only)"
     ],
@@ -27871,6 +28284,60 @@
      }
     },
     "summary": "Whether the email list form is open"
+   }
+  },
+  "/v1/public/social/{kind}/{week}": {
+   "get": {
+    "description": "The stored post, or the next one of that kind (nothing else is composed on request).",
+    "operationId": "social_post_v1_public_social__kind___week__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "kind",
+      "required": true,
+      "schema": {
+       "pattern": "^(earnings|product|founding|recap)$",
+       "title": "Kind",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "pattern": "^\\d{4}-W\\d{2}$",
+       "title": "Week",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicSocialPost"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such post"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "What a weekly social post's image shows (public)"
    }
   },
   "/v1/public/stocks/{ticker}": {

@@ -119,3 +119,48 @@ def register(app: FastAPI) -> None:
         return Response(subscribers_csv(all_rows(), status=status), media_type="text/csv",
                         headers={"content-disposition": f'attachment; filename="hsf-email-list-{status}.csv"',
                                  "cache-control": "no-store"})
+
+    _KIND = r"^(earnings|product|founding|recap)$"
+
+    @app.get("/v1/public/social/{kind}/{week}", response_model=models.PublicSocialPost,
+             responses={404: {"description": "No such post"}}, summary="What a weekly social post's image shows (public)")
+    def social_post(kind: str = Path(pattern=_KIND), week: str = Path(pattern=r"^\d{4}-W\d{2}$")) -> Dict[str, Any]:
+        """The stored post, or the next one of that kind (nothing else is composed on request)."""
+        import datetime as dt
+
+        from api.public_recap import BadWeek
+        from db import social_posts as db
+        from services import social_posts as sp
+
+        post = db.stored_post(kind, week)
+        if not post:
+            try:
+                if week != sp.next_week_for(kind, dt.datetime.now(dt.timezone.utc)):
+                    raise HTTPException(404, "No such post.")
+                post = sp.post_for(kind, week)
+            except BadWeek:
+                raise HTTPException(404, "No such post.") from None
+        if not post:
+            raise HTTPException(404, "No such post.")
+        return {"kind": post["kind"], "week": post["week"], "image": post.get("image") or {}}
+
+    @app.get("/v1/admin/marketing/social", response_model=models.AdminSocial, responses=_ADMIN, tags=[_TAG],
+             openapi_extra=_EXTRA, summary="Weekly social drafts: Buffer setup, next posts and recent sends")
+    def admin_social(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from services.social_posts import status
+
+        return status()
+
+    @app.post("/v1/admin/marketing/social/{kind}", response_model=models.SocialSendResult, responses=_ADMIN,
+              tags=[_TAG], openapi_extra=_EXTRA, summary="Send the next post of one kind to Buffer as drafts now")
+    def admin_social_send(kind: str = Path(pattern=_KIND), _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        """Channels that already have this week's draft are skipped."""
+        import datetime as dt
+
+        from services import social_posts as sp
+
+        now = dt.datetime.now(dt.timezone.utc)
+        try:
+            return sp.send(kind, sp.next_week_for(kind, now), now=now)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"[:200]}

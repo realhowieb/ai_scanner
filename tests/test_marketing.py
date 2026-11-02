@@ -339,6 +339,19 @@ class MarketingApiTests(AccountApiTestCase):
     def test_admin_marketing_needs_admin(self):
         self.assertIn(self.client.get("/v1/admin/marketing").status_code, (401, 403))
         self.assertIn(self.client.get("/v1/admin/marketing/subscribers.csv").status_code, (401, 403))
+        self.assertIn(self.client.get("/v1/admin/marketing/social").status_code, (401, 403))
+        self.assertIn(self.client.post("/v1/admin/marketing/social/recap").status_code, (401, 403))
+
+    def test_public_social_post(self):
+        post = {"kind": "recap", "week": "2026-W45", "body": "b", "image": {"headline": "Ranked most this week."}}
+        with mock.patch("db.social_posts.stored_post", return_value=post):
+            r = self.client.get("/v1/public/social/recap/2026-W45")
+        self.assertEqual(r.json(), {"kind": "recap", "week": "2026-W45", "image": {"headline": "Ranked most this week."}})
+        with mock.patch("db.social_posts.stored_post", return_value=None), \
+                mock.patch("services.social_posts.compose") as compose:
+            self.assertEqual(self.client.get("/v1/public/social/recap/2020-W01").status_code, 404)
+            compose.assert_not_called()   # only the next week's post is composed on request
+        self.assertEqual(self.client.get("/v1/public/social/other/2026-W45").status_code, 422)
 
 
 if __name__ == "__main__":
