@@ -31,7 +31,7 @@ _BAD_NAME = re.compile(
 # Plain tickers, optionally with a one-letter share class (BRK.B). "$" marks preferreds.
 _SYMBOL = re.compile(r"[A-Z]{1,5}(\.[A-Z])?")
 _MIN_TICKERS = 1500
-_SENTINELS = ("JPM", "XOM", "WMT", "GME", "SNOW", "BRK-B")
+_SENTINELS = ("JPM", "XOM", "KO", "GME", "SNOW", "BRK-B")  # NYSE names (Walmart moved to Nasdaq in 2025)
 
 
 def parse_other_listed(text: str) -> list[str]:
