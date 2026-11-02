@@ -98,10 +98,9 @@ def sync_configured() -> bool:
 
 
 def _resend(method: str, path: str, body: Optional[Dict[str, Any]] = None, *, session=None) -> int:
-    import requests
-
-    http = session or requests
-    res = http.request(method, f"{RESEND_API}{path}", json=body, timeout=10,
+    if session is None:
+        import httpx as session  # in api/requirements.txt (requests isn't)
+    res = session.request(method, f"{RESEND_API}{path}", json=body, timeout=10,
                        headers={"Authorization": f"Bearer {resend_key()}", "Content-Type": "application/json"})
     return int(res.status_code)
 
