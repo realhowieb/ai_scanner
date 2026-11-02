@@ -414,9 +414,25 @@ def _nasdaq_universe() -> List[str]:
     return []
 
 
+def _other_listed_universe() -> List[str]:
+    """Common stocks on NYSE, NYSE American, NYSE Arca and Cboe from the bundled
+    other_listed.txt (scripts/refresh_other_listed.py; ETFs and funds left out).
+    Empty when the file isn't there yet, so the movers fall back to S&P 500 + NASDAQ."""
+    from pathlib import Path
+
+    try:
+        f = Path(__file__).resolve().parents[1] / "other_listed.txt"
+        if f.exists():
+            return _dedupe_syms(f.read_text(encoding="utf-8").splitlines())
+    except Exception:
+        pass
+    return []
+
+
 def _movers_universe() -> List[str]:
-    """S&P 500 + NASDAQ tickers (deduped), for the top-movers screen."""
-    return _dedupe_syms([*_sp500_universe(), *_nasdaq_universe()])
+    """Every U.S. common stock we list (S&P 500 + NASDAQ + NYSE and the other
+    exchanges, deduped), for the top-movers and pre-market gapper screens."""
+    return _dedupe_syms([*_sp500_universe(), *_nasdaq_universe(), *_other_listed_universe()])
 
 
 _MOVERS_MIN_DOLLAR_VOL = 1_000_000  # skip illiquid micro-caps you can't day-trade
@@ -444,9 +460,9 @@ def _is_stale(trade_ts, max_days: int = _MOVERS_MAX_STALE_DAYS) -> bool:
 
 def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> List[str]:
     """Names ranked by intraday day-trade momentum (no 20-day), over ``universe``
-    (defaults to S&P 500 + NASDAQ).
+    (defaults to every U.S. common stock: S&P 500 + NASDAQ + NYSE and the rest).
 
-    with_rvol=False on purpose — the universe can span the full NASDAQ composite
+    with_rvol=False on purpose — the universe can span the whole U.S. market
     (thousands of names), and RVOL needs a per-symbol daily-bar fetch that would
     be far too heavy here. The snapshot alone gives gap/change/VWAP (the momentum
     signals we lead with); a dollar-volume floor drops illiquid junk.
@@ -494,7 +510,7 @@ def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> L
 
 if st is not None:
 
-    @st.cache_data(ttl=120, show_spinner="Screening S&P 500 + NASDAQ for today's movers…")
+    @st.cache_data(ttl=120, show_spinner="Screening U.S. stocks for today's movers…")
     def _top_movers_cached() -> List[str]:
         return _top_movers_symbols()
 
@@ -513,7 +529,7 @@ else:  # pragma: no cover - headless fallback
 
 
 def _resolve_symbols(source: str, watch_tickers: List[str] | None) -> List[str]:
-    if source == "🔥 Top movers (S&P 500 + NASDAQ)":
+    if source == "🔥 Top movers (all U.S. stocks)":
         movers = _top_movers_cached()
         if movers:
             return movers
@@ -645,7 +661,7 @@ def render_day_trader_panel(
 
     source_options = [
         "⭐ Watchlist",
-        "🔥 Top movers (S&P 500 + NASDAQ)",
+        "🔥 Top movers (all U.S. stocks)",
         "🔥 Top movers (S&P 500)",
         "🔥 Top movers (NASDAQ)",
         "🌅 Premarket movers",

@@ -23,7 +23,6 @@ HSF_WEEKLY_RECAP_MAX_USERS (default 500) caps one run. Best effort: never raises
 from __future__ import annotations
 
 import datetime as dt
-import html
 import json
 import logging
 import os
@@ -170,19 +169,27 @@ def change_since(series: List[Tuple[str, float]], day: dt.date, *, before: bool)
 
 
 # ---- one account ------------------------------------------------------------------------------
+def _pct_html(v: Optional[float]) -> str:
+    """Colored '+3.1%' from a fraction (as _pct), a muted dash when missing."""
+    from ui import email_kit as k
+
+    if v is None:
+        return f"<span style='color:{k.FAINT}'>—</span>"
+    return f"<span style='color:{k.UP if v >= 0 else k.DOWN}'>{_pct(v)}</span>"
+
+
 def compose(*, pro: bool, picks: Dict[str, Any], movers: List[Tuple[str, float]],
             alerts: List[Tuple[str, Optional[float]]], earnings: List[Tuple[str, str]],
             monday: dt.date, base_url: str) -> tuple:
-    """(subject, text, html inner). Pure."""
-    from services.lifecycle_emails import _button
+    """(subject, text, html inner). Pure. The HTML is email_kit cards (the same look as the
+    morning digest and evening wrap), with a logo next to each ticker."""
+    from ui import email_kit as k
 
     week = f"{monday:%b} {monday.day}"
     subject = f"Your week in review (week of {week})"
     T: List[str] = []
-    H: List[str] = [f"<h2 style='font-size:20px;margin:16px 0 8px'>Your week in review</h2>"
-                    f"<p style='color:#555;margin:0 0 12px'>Week of {html.escape(week)}</p>"]
+    H: List[str] = []
 
-    H.append("<h3 style='margin:16px 0 6px'>🏆 Last week's top picks</h3>")
     T.append("Last week's top picks")
     if picks.get("n"):
         spy = f", SPY {_pct(picks['spy'])}" if picks.get("spy") is not None else ""
@@ -192,47 +199,78 @@ def compose(*, pro: bool, picks: Dict[str, Any], movers: List[Tuple[str, float]]
             line += f" {picks['beat']} of {picks['with_spy']} beat SPY."
         best = ", ".join(f"{p['ticker']} {_pct(p['ret'])}" for p in picks["best"])
         T += [line, f"Best: {best}", ""]
-        H.append(f"<p>{html.escape(line)}</p><p>Best: <strong>{html.escape(best)}</strong></p>")
+        stats = [("Picks", f"<b>{int(picks['n'])}</b>"), ("Avg next day", _pct_html(picks.get("avg")))]
+        if picks.get("spy") is not None:
+            stats.append(("SPY", _pct_html(picks["spy"])))
+        if picks.get("with_spy"):
+            stats.append(("Beat SPY", f"<b>{int(picks['beat'])} of {int(picks['with_spy'])}</b>"))
+        body = k.chips(stats)
+        if picks.get("best"):
+            body += k.group("Best next-day moves") + k.table(
+                ["", ""], [[k.ticker(p["ticker"]), _pct_html(p.get("ret"))] for p in picks["best"]], widths=(60, 40))
+        H.append(k.card("🏆 Last week's top picks", body,
+                        sub=f"The Scanner's top {TOP_PER_DAY} at each day's first scan, one trading day later."))
     else:
         T += ["No next-day results for last week's picks yet.", ""]
-        H.append("<p>No next-day results for last week's picks yet.</p>")
+        H.append(k.card("🏆 Last week's top picks", k.empty("No next-day results for last week's picks yet.")))
 
-    H.append("<h3 style='margin:16px 0 6px'>📋 Your watchlist this week</h3>")
     T.append("Your watchlist this week")
     if movers:
         T += [f"  {t}: {_pct(c)}" for t, c in movers] + [""]
-        H.append("<ul style='padding-left:20px'>" + "".join(
-            f"<li><strong>{html.escape(t)}</strong> {_pct(c)}</li>" for t, c in movers) + "</ul>")
+        H.append(k.card("📋 Your watchlist this week",
+                        k.table(["Ticker", "Week"], [[k.ticker(t), _pct_html(c)] for t, c in movers], widths=(60, 40)),
+                        sub="Your biggest movers, last Friday's close to this Friday's."))
     else:
         T += [f"Add stocks to a watchlist and this shows how they moved: {base_url}/watchlists", ""]
-        H.append(f"<p>Add stocks to a <a href='{base_url}/watchlists'>watchlist</a> and this shows how they moved.</p>")
+        H.append(k.card("📋 Your watchlist this week",
+                        k.empty("Add stocks to a watchlist and this shows how they moved.")
+                        + k.button(f"{base_url}/watchlists", "Open Watchlists")))
 
     if pro:
-        H.append("<h3 style='margin:16px 0 6px'>🔔 Alerts that fired</h3>")
         T.append("Alerts that fired")
         if alerts:
             items = [f"{t} ({_pct(c)} since)" if c is not None else t for t, c in alerts]
             T += ["  " + ", ".join(items), ""]
-            H.append(f"<p>{html.escape(', '.join(items))}</p>")
+            H.append(k.card("🔔 Alerts that fired",
+                            k.table(["Ticker", "Since it fired"], [[k.ticker(t), _pct_html(c)] for t, c in alerts],
+                                    widths=(60, 40))))
         else:
             T += ["None this week.", ""]
-            H.append("<p>None this week.</p>")
-        H.append("<h3 style='margin:16px 0 6px'>📅 Earnings next week (your watchlist)</h3>")
+            H.append(k.card("🔔 Alerts that fired", k.empty("None this week.")))
         T.append("Earnings next week (your watchlist)")
         if earnings:
             items = [f"{t} {d}" for t, d in earnings]
             T += ["  " + ", ".join(items), ""]
-            H.append(f"<p>{html.escape(', '.join(items))}</p>")
+            H.append(k.card("📅 Earnings next week",
+                            k.table(["Ticker", "Reports"], [[k.ticker(t), k.esc(d)] for t, d in earnings],
+                                    widths=(60, 40)), sub="Your watchlist names. Dates can move."))
         else:
             T += ["None of your names report next week.", ""]
-            H.append("<p>None of your names report next week.</p>")
+            H.append(k.card("📅 Earnings next week", k.empty("None of your names report next week.")))
     else:
         T += [f"Pro adds your alerts recap and next week's earnings for your names: {base_url}/pricing", ""]
-        H.append("<p style='color:#555'>Pro adds your alerts recap and next week's earnings for your names.</p>"
-                 + _button(f"{base_url}/pricing", "See Pro"))
-    H.append(_button(f"{base_url}/today", "Open Today"))
+        H.append(k.card("⭐ More with Pro", k.note("Pro adds your alerts recap and next week's earnings for your names.")
+                        + k.button(f"{base_url}/pricing", "See Pro")))
+    H.append(k.card("📈 Next week", k.note("Educational only, not financial advice.")
+                    + k.button(f"{base_url}/today", "Open Today")))
     T.append(f"Open Today: {base_url}/today")
     return subject, "\n".join(T), "".join(H)
+
+
+def recap_glance(picks: Dict[str, Any], movers: List[Tuple[str, float]]) -> str:
+    """The 'At a glance' band: how the picks did, and the reader's biggest watchlist move."""
+    from ui import email_kit as k
+
+    parts: List[str] = []
+    if picks.get("n"):
+        line = f"Top picks averaged <b style='color:#fff'>{k.esc(_pct(picks.get('avg')))}</b> the next day"
+        if picks.get("spy") is not None:
+            line += f" (SPY {k.esc(_pct(picks['spy']))})"
+        parts.append(line + ".")
+    if movers:
+        t, c = movers[0]
+        parts.append(f"Biggest watchlist move: <b style='color:#fff'>{k.esc(t)}</b> {k.esc(_pct(c))}.")
+    return k.glance_text(parts) if parts else ""
 
 
 def _account_parts(email: str, *, pro: bool, closes, monday: dt.date, friday: dt.date,
@@ -353,7 +391,9 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
                 alert_rows=alerts_by_user.get(email, []), earnings_rows=earnings_rows)
             subject, text, inner = compose(pro=pro, picks=picks, movers=movers, alerts=alerts,
                                            earnings=earnings, monday=monday, base_url=base)
-            if send_digest_email(email, subject, inner, text, unsubscribe_url=unsubscribe_url(email, "weekly")):
+            if send_digest_email(email, subject, inner, text, unsubscribe_url=unsubscribe_url(email, "weekly"),
+                                 title_line=f"Week in review · week of {monday:%b} {monday.day}",
+                                 glance_html=recap_glance(picks, movers)):
                 counts["sent"] += 1
             else:
                 store.release_email(email, KIND, week)

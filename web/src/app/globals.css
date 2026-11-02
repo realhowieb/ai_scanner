@@ -222,6 +222,19 @@ button, input, select { font: inherit; color: inherit; }
 a.tk:hover { color: var(--accent); }
 /* Ticker links are tap targets: at least 24px tall (WCAG 2.5.8), without changing row height. */
 a.tk { min-height: 24px; line-height: 24px; }
+/* Company logo before a ticker (components/TickerLogo): white logos get a dark chip, a
+   missing logo or a photo shows the first letter. The name stack sits beside the logo. */
+.tk.tk-with-logo { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.tk-logo { flex: none; border-radius: 5px; object-fit: contain; background: #fff; padding: 1px; border: 1px solid var(--line-soft); }
+.tk-logo.tk-logo-dark { background: #1e293b; }
+.tk-logo.tk-logo-pending { background: var(--raise-2); }
+.tk-letter { display: inline-flex; align-items: center; justify-content: center; background: var(--raise-2); color: var(--text-2);
+  font-family: var(--font-sans, inherit); font-weight: 700; line-height: 1; }
+.tk-stack { display: inline-flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.tk-sym { font-family: var(--font-mono); }
+.tk-name { font-family: var(--font-sans, inherit); font-weight: 400; font-size: var(--fs-xs, 12px); color: var(--text-3, var(--text-2));
+  max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.tk:hover .tk-name { color: var(--text-2); }
 .fresh { font-size: 13px; color: var(--muted); }
 .fresh.stale { color: var(--amber); }
 .rows { list-style: none; margin: 0; padding: 0; }

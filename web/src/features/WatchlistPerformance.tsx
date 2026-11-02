@@ -40,7 +40,7 @@ export function WatchlistPerformanceCard({ id, version = 0 }: { id: number; vers
           <tbody>
             {rows.map((r) => (
               <tr key={r.ticker}>
-                <td><TickerLink ticker={r.ticker} /></td>
+                <td><TickerLink ticker={r.ticker} named /></td>
                 <td className="hide-narrow cap">{r.base_date ? `${shortDate(r.base_date)}${r.since_first_bar ? " (oldest bar)" : ""}` : "—"}</td>
                 <td className="num mono hide-narrow">{price(r.base_price)}</td>
                 <td className="num mono">{price(r.last)}</td>

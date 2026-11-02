@@ -10,9 +10,11 @@ import type { Schemas } from "@/api/client";
 import { backLabel, usePreviousPage } from "@/components/AppShell";
 import { AIText } from "@/components/AIText";
 import { SectionNav } from "@/components/SectionNav";
+import { TickerLogo } from "@/components/TickerLogo";
 import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { useCompanyName } from "@/lib/companyNames";
 import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
 import { stateHorizon } from "@/lib/researchTime";
@@ -308,6 +310,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
   const ranked = s.in_latest_scan && s.has_setup;
   const [rulesVersion, setRulesVersion] = useState(0);
   const alertAdded = () => { setRulesVersion((v) => v + 1); onChanged?.(); };
+  const companyName = useCompanyName(s.ticker);
 
   return (
     <div className="stack">
@@ -315,10 +318,12 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
       <section className="page-head">
         <div className="stack-sm">
           <div className="title-row">
+            <TickerLogo ticker={s.ticker} size={36} />
             <h1 className="h1 mono">{s.ticker}</h1>
             {s.primary_setup && <Pill>{setupLabel(s.primary_setup)}</Pill>}
             {s.status && <Pill tone={s.status === "STRONG" ? "up" : s.status === "CAUTION" || s.status === "FADING" ? "warn" : undefined}>{s.status}</Pill>}
           </div>
+          {companyName && <p className="cap stock-company">{companyName}</p>}
           {s.price !== null && s.price !== undefined ? (
             <div className="quote">
               <span className="mono big">{price(s.price)}</span>

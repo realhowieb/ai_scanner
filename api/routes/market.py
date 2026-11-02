@@ -51,7 +51,7 @@ def register(app: FastAPI) -> None:
 
     @app.get("/v1/day-trader", response_model=models.DayTrader, responses=_DT, summary="Live Day Trader monitor (Pro)")
     def day_trader(account: Dict[str, Any] = Depends(current_account),
-                   source: Literal["watchlist", "movers", "movers_sp500", "movers_nasdaq", "premarket", "postmarket",
+                   source: Literal["watchlist", "movers", "movers_sp500", "movers_nasdaq", "movers_nyse", "premarket", "postmarket",
                                    "scan_picks", "megacaps", "custom"] = "watchlist",
                    symbols: Optional[str] = Query(None, max_length=2000, description="source=custom: comma-separated"),
                    watchlist_id: Optional[int] = Query(None, ge=1, description="source=watchlist; default: your default list")
@@ -72,7 +72,7 @@ def register(app: FastAPI) -> None:
              summary="Pre-market gappers (Pro)")
     def premarket_gappers(account: Dict[str, Any] = Depends(current_account),
                           limit: int = Query(25, ge=1, le=40)) -> Dict[str, Any]:
-        """S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs
+        """U.S. stocks (S&P 500, NASDAQ, NYSE and the rest; no ETFs) gapping before the open: latest pre-market trade vs
         yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min."""
         require_feature(account, "can_premarket")
         return json_safe(market.premarket_gappers(limit))

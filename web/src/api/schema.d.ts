@@ -2477,7 +2477,7 @@ export interface paths {
         };
         /**
          * Pre-market gappers (Pro)
-         * @description S&P 500 + NASDAQ names gapping before the open: today's latest pre-market trade vs
+         * @description U.S. stocks (S&P 500, NASDAQ, NYSE and the rest; no ETFs) gapping before the open: latest pre-market trade vs
          *     yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.
          */
         get: operations["premarket_gappers_v1_premarket_gappers_get"];
@@ -3003,6 +3003,27 @@ export interface paths {
          * @description The ticker's HSF Score in each recent full-market scan, with the Scanner's scores.
          */
         get: operations["stock_score_history_v1_stocks__ticker__score_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/symbols/names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Company Names
+         * @description Short company names for tickers (Alpaca's symbol directory, refreshed every 6 hours),
+         *     shown under tickers in tables. Unknown tickers are left out.
+         */
+        get: operations["company_names_v1_symbols_names_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5081,6 +5102,13 @@ export interface components {
             request_id?: string | null;
             /** Stack */
             stack?: string | null;
+        };
+        /** CompanyNames */
+        CompanyNames: {
+            /** Names */
+            names: {
+                [key: string]: string;
+            };
         };
         /** Coverage */
         Coverage: {
@@ -13810,7 +13838,7 @@ export interface operations {
     day_trader_v1_day_trader_get: {
         parameters: {
             query?: {
-                source?: "watchlist" | "movers" | "movers_sp500" | "movers_nasdaq" | "premarket" | "postmarket" | "scan_picks" | "megacaps" | "custom";
+                source?: "watchlist" | "movers" | "movers_sp500" | "movers_nasdaq" | "movers_nyse" | "premarket" | "postmarket" | "scan_picks" | "megacaps" | "custom";
                 /** @description source=custom: comma-separated */
                 symbols?: string | null;
                 /** @description source=watchlist; default: your default list */
@@ -18376,6 +18404,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScoreHistory"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    company_names_v1_symbols_names_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated; the first 200 are looked up */
+                tickers: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyNames"];
                 };
             };
             /** @description Not signed in */

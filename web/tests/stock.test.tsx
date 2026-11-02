@@ -15,7 +15,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 const fetchMock = vi.fn();
-const urls = () => fetchMock.mock.calls.map((c) => new URL((c[0] as Request).url));
+// Company-name lookups (lib/companyNames) are batched side requests, not part of what these tests count.
+const urls = () => fetchMock.mock.calls.map((c) => new URL((c[0] as Request).url)).filter((u) => !u.pathname.endsWith("/v1/symbols/names"));
 // The Historical card also asks /v1/outcomes/symbols/{ticker}, and the score history card
 // /v1/stocks/{ticker}/score-history; these tests are about the plan and AI note, so those calls are
 // answered here (404: an API without them) and never reach fetchMock. So are the Smart alerts

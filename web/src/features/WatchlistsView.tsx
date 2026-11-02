@@ -416,7 +416,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
               return (
                 <li key={it.ticker} className="wl-item">
                   <div className="wl-main">
-                    <TickerLink ticker={it.ticker} />
+                    <TickerLink ticker={it.ticker} named />
                     {s ? (
                       <>
                         <ScoreBadge score={s.score} />

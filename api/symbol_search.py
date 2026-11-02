@@ -30,6 +30,40 @@ def _rows() -> list[dict]:
         return list(_assets)
 
 
+# Trailing share-class wording in the directory's names ("Apple Inc. Common Stock").
+_NAME_TAIL = re.compile(
+    r"\s*[-,]?\s*(?:(?:New\s+)?(?:Class\s+[A-Z]\s+)?(?:Common|Ordinary|Capital)\s+(?:Stock|Shares?)"
+    r"|American\s+Depositary\s+(?:Shares?|Receipts?)|ADS|ADR|Units?|Shares?)"
+    r"(?:\s*\(.*\))?\s*$", re.I)
+
+
+def short_name(name: str) -> str:
+    """'Apple Inc. Common Stock' -> 'Apple Inc.'; the name unchanged when nothing matches."""
+    out = str(name or "").strip()
+    for _ in range(2):
+        trimmed = _NAME_TAIL.sub("", out).strip().rstrip(",-").strip()
+        if not trimmed or trimmed == out:
+            break
+        out = trimmed
+    return out or str(name or "").strip()
+
+
+def names(tickers: list[str]) -> dict[str, str]:
+    """{ticker: short company name} for the tickers in the symbol directory (dash or dot
+    class form both match, the caller's spelling is kept). Unknown tickers are left out."""
+    rows = _rows()
+    if not rows:
+        return {}
+    index = {a["ticker"].replace(".", "-"): a["name"] for a in rows}
+    out: dict[str, str] = {}
+    for t in tickers:
+        key = str(t or "").strip().upper()
+        name = index.get(key.replace(".", "-"))
+        if name and name.upper() != key:
+            out[key] = short_name(name)
+    return out
+
+
 def lookup(ticker: str) -> dict | None:
     """{ticker, name} for an active US-listed symbol, else None."""
     t = ticker.strip().upper()

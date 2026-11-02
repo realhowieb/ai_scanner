@@ -5,11 +5,13 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { useBillingInterval } from "@/components/BillingInterval";
+import { TickerLogo } from "@/components/TickerLogo";
 
 import { ApiError } from "@/api/client";
 import { freshness, etTime } from "@/lib/format";
 import { beginBilling } from "@/lib/billingReturn";
 import { captureUsage } from "@/lib/usageAnalytics";
+import { useCompanyName } from "@/lib/companyNames";
 import { readCachedMe } from "@/session/meCache";
 import { useOptionalMe } from "@/session/SessionProvider";
 import { checkout } from "@/lib/checkout";
@@ -189,8 +191,16 @@ export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?
   );
 }
 
-export function TickerLink({ ticker }: { ticker: string }) {
-  return <Link href={`/stocks/${encodeURIComponent(ticker)}`} className="tk">{ticker}</Link>;
+/** A ticker linking to its stock page, with the company logo. `named` adds the short
+ * company name under it (tables and lists); otherwise the name is the link's tooltip. */
+export function TickerLink({ ticker, named = false, logo = true }: { ticker: string; named?: boolean; logo?: boolean }) {
+  const name = useCompanyName(ticker);
+  return (
+    <Link href={`/stocks/${encodeURIComponent(ticker)}`} className={`tk${logo ? " tk-with-logo" : ""}`} title={name ?? undefined}>
+      {logo && <TickerLogo ticker={ticker} size={named ? 24 : 18} />}
+      {named ? <span className="tk-stack"><span className="tk-sym">{ticker}</span>{name && <span className="tk-name">{name}</span>}</span> : ticker}
+    </Link>
+  );
 }
 
 export function ResearchNotice({ compact = false }: { compact?: boolean }) {

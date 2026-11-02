@@ -54,7 +54,7 @@ function RankHead() { return useCtx().numbered ? "#" : <span className="sr-only"
 function RankCell({ row }: { row: { index: number } }) { const c = useCtx(); return c.numbered ? c.offset + row.index + 1 : ""; }
 function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
-  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
+  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
 }
 function SparkCell({ row }: { row: { original: Row } }) { const c = useCtx(); return <DailySpark points={c.series[row.original.ticker]} ticker={row.original.ticker} />; }
 
@@ -166,7 +166,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
             <div className="sc-top">
               {numbered && <span className="mono cap">#{offset + i + 1}</span>}
               {sparks && choose(r.ticker)}
-              <TickerLink ticker={r.ticker} />
+              <TickerLink ticker={r.ticker} named />
               {visible("setup") && <Pill>{setupLabel(r.primary_setup)}</Pill>}
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
