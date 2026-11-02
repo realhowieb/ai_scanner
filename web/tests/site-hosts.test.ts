@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { appHandoffUrl } from "@/components/MarketingHandoff";
@@ -78,5 +78,18 @@ describe("hand-off to the app", () => {
     const a = captureAttribution("https://app.hsfinest.com/signup?utm_source=threads&hsf_referrer=https%3A%2F%2Fwww.threads.net%2F", "");
     expect(a).toEqual({ utm_source: "threads", referrer: "https://www.threads.net/" });
     localStorage.clear();
+  });
+});
+
+describe("music site link", () => {
+  it("is in the public header menu", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { createElement } = await import("react");
+    const { PublicHeader } = await import("@/features/Landing");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
+    render(createElement(PublicHeader));
+    const link = screen.getByRole("link", { name: "Music & Shop" });
+    expect(link.getAttribute("href")).toBe("https://music.hsfinest.com");
+    vi.unstubAllGlobals();
   });
 });
