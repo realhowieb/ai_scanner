@@ -1027,7 +1027,8 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
   border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--raise); color: var(--text); text-decoration: none; }
 .ecal-tile:hover, .ecal-tile:focus-visible { border-color: var(--line-strong); background: var(--raise-2); }
 .ecal-tile.ecal-mine { border-color: var(--info-strong); }
-.ecal-logo { width: 32px; height: 32px; border-radius: var(--radius-md); object-fit: contain; background: #fff; }
+.ecal-logo { width: 32px; height: 32px; border-radius: var(--radius-md); object-fit: contain; background: #fff; padding: 2px; }
+.ecal-logo.ecal-logo-dark { background: #1e293b; }
 .ecal-letter { display: flex; align-items: center; justify-content: center; background: var(--raise-2); color: var(--text-2); font-weight: 700; }
 .ecal-ticker { font-weight: 700; font-size: var(--fs-sm); font-family: var(--font-mono); }
 .ecal-meta { display: flex; align-items: center; gap: 4px; font-size: var(--fs-xs); min-height: 18px; }

@@ -21,6 +21,7 @@ MIN_PRICE = 5.0
 DEFAULT_PER_DAY = 16
 MAX_PER_DAY = 40
 LOGO_URL = "https://financialmodelingprep.com/image-stock/{}.png"
+SCORE_MIN = 40   # lower HSF Scores (most screen-free scores of quiet names) read as noise on a tile
 
 
 def _key(ticker: Any) -> str:
@@ -100,9 +101,10 @@ def _scan_scores() -> Dict[str, Any]:
         return {"at": None, "ranks": {}}
 
 
-def build_base(today: dt.date, *, sizes=None, scores=None, calendar=None) -> Dict[str, Any]:
+def build_base(today: dt.date, *, sizes=None, scores=None, calendar=None, logos=None) -> Dict[str, Any]:
     """Every reporter on the next DAYS trading days with size, price and scan rank,
-    biggest first within each day. Injectable loaders keep it testable offline."""
+    biggest first within each day, plus logo checks for each day's top names.
+    Injectable loaders keep it testable offline."""
     days = week_days(today)
     start, end = days[0], days[-1]
     if calendar is None:
@@ -137,7 +139,16 @@ def build_base(today: dt.date, *, sizes=None, scores=None, calendar=None) -> Dic
         group = [r for r in rows if r["date"] == d]
         group.sort(key=lambda r: (-(r["dollar_volume"] or 0.0), r["ticker"]))
         out_days.append({"date": d, "rows": group})
-    return {"start": start, "end": end, "scan_at": sc.get("at"), "days": out_days}
+    top = [r["ticker"] for day in out_days for r in [x for x in day["rows"] if not _penny(x)][:DEFAULT_PER_DAY]]
+    try:
+        if logos is None:
+            from api.logo_check import logo_infos
+
+            logos = logo_infos
+        logo_map = logos(top) or {}
+    except Exception:
+        logo_map = {}
+    return {"start": start, "end": end, "scan_at": sc.get("at"), "days": out_days, "logos": logo_map}
 
 
 def cached_base(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
@@ -152,6 +163,16 @@ def _penny(r: Dict[str, Any]) -> bool:
     return r.get("last") is not None and r["last"] < MIN_PRICE
 
 
+def logo_kind(info: Optional[Dict[str, Any]]) -> Optional[str]:
+    """'standard' (light chip), 'light' (a white logo: dark chip), 'none' (letter tile) or
+    None (not checked: try the image, fall back to the letter)."""
+    if not info:
+        return None
+    if info.get("kind") != "logo":
+        return "none"
+    return "light" if info.get("light") else "standard"
+
+
 def for_plan(base: Dict[str, Any], *, per_day: int = DEFAULT_PER_DAY, cap: Optional[int] = None,
              auto: Optional[Dict[str, Dict[str, Any]]] = None, watched: Optional[set] = None,
              all_scores: bool = False) -> Dict[str, Any]:
@@ -161,6 +182,7 @@ def for_plan(base: Dict[str, Any], *, per_day: int = DEFAULT_PER_DAY, cap: Optio
     per_day = max(1, min(int(per_day), MAX_PER_DAY))
     watched_keys = {_key(t) for t in watched or ()}
     auto = auto or {}
+    logos = base.get("logos") or {}
     days = []
     for day in base["days"]:
         eligible = [r for r in day["rows"] if not _penny(r)]
@@ -175,9 +197,12 @@ def for_plan(base: Dict[str, Any], *, per_day: int = DEFAULT_PER_DAY, cap: Optio
                 score, source = r.get("scan_score"), "scan"
             elif k in auto and auto[k].get("score") is not None:
                 score, source = auto[k].get("score"), "auto"
+            if score is None or _f(score) is None or _f(score) < SCORE_MIN:
+                score, source = None, None
             names.append({"ticker": r["ticker"], "time": r["time"], "last": r.get("last"), "chg_pct": r.get("chg_pct"),
                           "dollar_volume": r.get("dollar_volume"), "score": score, "score_source": source,
-                          "on_watchlist": k in watched_keys, "logo_url": logo_url(r["ticker"])})
+                          "on_watchlist": k in watched_keys, "logo_url": logo_url(r["ticker"]),
+                          "logo": logo_kind(logos.get(r["ticker"]))})
         days.append({"date": day["date"].isoformat(), "total": len(day["rows"]), "shown": len(names), "names": names})
     return {"start": base["start"].isoformat(), "end": base["end"].isoformat(), "scan_at": base.get("scan_at"),
             "per_day": per_day, "days": days}
