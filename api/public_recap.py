@@ -25,6 +25,8 @@ from api.today import TTLCache
 from db.engine import schema_once
 
 TOP_PER_DAY = 10
+RANKED_MIN = 40  # same floor as "ranked" everywhere else (api/share.py)
+VERSION = 2      # bump to rebuild stored weeks when the ranking rules change
 SHOW = 12
 TEASER_PER_DAY = 3
 ARCHIVE = 12
@@ -82,7 +84,7 @@ def summarize_ranked(rows: Sequence[tuple], tz=None, *, top: int = TOP_PER_DAY, 
             first[d] = fired
     per_day: Dict[dt.date, List[tuple]] = {}
     for r in rows:
-        if r[2] is not None and first.get(r[1].astimezone(tz).date()) == r[1]:
+        if r[2] is not None and float(r[2]) >= RANKED_MIN and first.get(r[1].astimezone(tz).date()) == r[1]:
             per_day.setdefault(r[1].astimezone(tz).date(), []).append(r)
     names: Dict[str, Dict[str, Any]] = {}
     for d in sorted(per_day):
@@ -134,7 +136,7 @@ def build(key: str, now: dt.datetime) -> Dict[str, Any]:
     monday = week_monday(key)
     payload: Dict[str, Any] = {"week": key, "start": monday.isoformat(),
                                "end": (monday + dt.timedelta(days=4)).isoformat(),
-                               "built_at": now.astimezone(dt.timezone.utc).isoformat(), **load_ranked(monday)}
+                               "built_at": now.astimezone(dt.timezone.utc).isoformat(), "v": VERSION, **load_ranked(monday)}
     try:
         from api import symbol_search
 
@@ -198,7 +200,8 @@ def _store(payload: Dict[str, Any]) -> None:
     try:
         cur = conn.cursor()
         cur.execute("INSERT INTO hsf_public_recaps (week, payload, built_at) VALUES (%s, %s, %s) "
-                    "ON CONFLICT (week) DO NOTHING", (payload["week"], json.dumps(payload), payload["built_at"]))
+                    "ON CONFLICT (week) DO UPDATE SET payload = EXCLUDED.payload, built_at = EXCLUDED.built_at",
+                    (payload["week"], json.dumps(payload), payload["built_at"]))
         conn.commit()
         cur.close()
     finally:
@@ -239,7 +242,7 @@ def recap(key: Optional[str] = None, *, now: Optional[dt.datetime] = None) -> Op
             found = _stored(key)
         except Exception:
             found = None
-        if found:
+        if found and found.get("v") == VERSION:
             return found
         payload = build(key, now)
         if not payload["ranked"]:

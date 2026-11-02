@@ -186,7 +186,7 @@ class RecapTests(unittest.TestCase):
 
         db = FakeDB()
         pr._cache.clear()
-        payload = {"week": "2026-W44", "start": "2026-10-26", "end": "2026-10-30", "built_at": "x",
+        payload = {"week": "2026-W44", "start": "2026-10-26", "end": "2026-10-30", "built_at": "x", "v": pr.VERSION,
                    "scan_days": 5, "ranked_names": 1, "ranked": [{"ticker": "AAA"}], "earnings": None}
         now = dt.datetime(2026, 11, 2, tzinfo=UTC)
         with mock.patch("db.engine.get_neon_conn", return_value=db), \
@@ -197,6 +197,28 @@ class RecapTests(unittest.TestCase):
             self.assertEqual(build.call_count, 1)
             self.assertIsNone(pr.recap("2026-W45", now=now))        # not over yet
             self.assertEqual(pr.public_index(now)["weeks"][0]["week"], "2026-W44")
+
+    def test_scores_below_the_ranked_floor_are_left_out(self):
+        from api import public_recap as pr
+
+        mon = dt.datetime(2026, 11, 2, 14, 0, tzinfo=UTC)
+        out = pr.summarize_ranked([("AAA", mon, 58, "Momentum"), ("ETF", mon, 29, "Gapper")], UTC)
+        self.assertEqual([r["ticker"] for r in out["ranked"]], ["AAA"])
+        self.assertEqual(pr.summarize_ranked([("ETF", mon, 29, None)], UTC)["scan_days"], 0)
+
+    def test_a_week_stored_under_older_rules_is_rebuilt(self):
+        from api import public_recap as pr
+
+        db = FakeDB()
+        pr._cache.clear()
+        old = {"week": "2026-W44", "start": "2026-10-26", "end": "2026-10-30", "built_at": "a", "ranked": [{"ticker": "OLD"}]}
+        new = {**old, "built_at": "b", "v": pr.VERSION, "ranked": [{"ticker": "NEW"}]}
+        now = dt.datetime(2026, 11, 2, tzinfo=UTC)
+        with mock.patch("db.engine.get_neon_conn", return_value=db):
+            pr._store(old)
+            with mock.patch.object(pr, "build", return_value=new):
+                self.assertEqual(pr.recap("2026-W44", now=now)["ranked"], [{"ticker": "NEW"}])
+            self.assertEqual(pr._stored("2026-W44")["ranked"], [{"ticker": "NEW"}])
 
     def test_empty_week_is_not_stored(self):
         from api import public_recap as pr
