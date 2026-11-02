@@ -1266,3 +1266,12 @@ a.chip { display: inline-flex; align-items: center; }
   /* Three Scanner header buttons don't fit one row at 320px (phone or 400% zoom); wrap instead of overflowing. */
   .page-head .scanner-actions { flex-wrap: wrap; }
 }
+
+/* Weekly setups email list and the public weekly recap */
+.hp-field { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.email-signup .inline-form { align-items: stretch; }
+.email-signup .inline-form .field { flex: 1 1 240px; }
+.recap-days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.recap-days .tile { display: grid; gap: 6px; align-content: start; }
+.recap-days ul { list-style: none; margin: 0; padding: 0; }
+.recap-days li li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

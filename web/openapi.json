@@ -1544,6 +1544,56 @@
     "title": "AdminLoginAttempt",
     "type": "object"
    },
+   "AdminMarketing": {
+    "properties": {
+     "by_source": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/MarketingSourceRow"
+      },
+      "title": "By Source",
+      "type": "array"
+     },
+     "campaigns": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/MarketingCampaign"
+      },
+      "title": "Campaigns",
+      "type": "array"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "founder_revenue_cents": {
+      "default": 0,
+      "title": "Founder Revenue Cents",
+      "type": "integer"
+     },
+     "list": {
+      "$ref": "#/components/schemas/MarketingList"
+     },
+     "totals": {
+      "$ref": "#/components/schemas/MarketingTotals"
+     },
+     "unavailable": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Unavailable",
+      "type": "array"
+     }
+    },
+    "required": [
+     "days",
+     "totals",
+     "list"
+    ],
+    "title": "AdminMarketing",
+    "type": "object"
+   },
    "AdminMlGate": {
     "properties": {
      "gate": {
@@ -8853,6 +8903,135 @@
     "title": "LifecycleEvent",
     "type": "object"
    },
+   "ListAction": {
+    "properties": {
+     "action": {
+      "enum": [
+       "confirm",
+       "unsubscribe"
+      ],
+      "title": "Action",
+      "type": "string"
+     },
+     "token": {
+      "maxLength": 64,
+      "minLength": 10,
+      "title": "Token",
+      "type": "string"
+     }
+    },
+    "required": [
+     "token",
+     "action"
+    ],
+    "title": "ListAction",
+    "type": "object"
+   },
+   "ListConfig": {
+    "properties": {
+     "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "enabled"
+    ],
+    "title": "ListConfig",
+    "type": "object"
+   },
+   "ListStatus": {
+    "properties": {
+     "email": {
+      "description": "Masked address",
+      "title": "Email",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "pending",
+       "confirmed",
+       "unsubscribed"
+      ],
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "status"
+    ],
+    "title": "ListStatus",
+    "type": "object"
+   },
+   "ListSubscribe": {
+    "properties": {
+     "attribution": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "utm_* tags and referrer from the visitor's first page",
+      "maxProperties": 12,
+      "title": "Attribution",
+      "type": "object"
+     },
+     "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+     },
+     "surface": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Which page the form was on",
+      "title": "Surface"
+     },
+     "website": {
+      "anyOf": [
+       {
+        "maxLength": 200,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Leave empty (a trap for bots)",
+      "title": "Website"
+     }
+    },
+    "required": [
+     "email"
+    ],
+    "title": "ListSubscribe",
+    "type": "object"
+   },
+   "ListSubscribeResult": {
+    "properties": {
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "ok": {
+      "default": true,
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "message"
+    ],
+    "title": "ListSubscribeResult",
+    "type": "object"
+   },
    "LoginBody": {
     "properties": {
      "client": {
@@ -8979,6 +9158,167 @@
      "phase"
     ],
     "title": "Market",
+    "type": "object"
+   },
+   "MarketingCampaign": {
+    "properties": {
+     "accounts": {
+      "title": "Accounts",
+      "type": "integer"
+     },
+     "campaign": {
+      "title": "Campaign",
+      "type": "string"
+     },
+     "clicks": {
+      "title": "Clicks",
+      "type": "integer"
+     },
+     "list_signups": {
+      "title": "List Signups",
+      "type": "integer"
+     },
+     "utm_source": {
+      "title": "Utm Source",
+      "type": "string"
+     },
+     "visits": {
+      "title": "Visits",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "utm_source",
+     "campaign",
+     "visits",
+     "clicks",
+     "list_signups",
+     "accounts"
+    ],
+    "title": "MarketingCampaign",
+    "type": "object"
+   },
+   "MarketingList": {
+    "properties": {
+     "confirmed": {
+      "title": "Confirmed",
+      "type": "integer"
+     },
+     "new_in_period": {
+      "title": "New In Period",
+      "type": "integer"
+     },
+     "pending": {
+      "title": "Pending",
+      "type": "integer"
+     },
+     "sync_configured": {
+      "description": "Confirmed addresses are copied to a Resend segment",
+      "title": "Sync Configured",
+      "type": "boolean"
+     },
+     "unsubscribed": {
+      "title": "Unsubscribed",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "confirmed",
+     "pending",
+     "unsubscribed",
+     "new_in_period",
+     "sync_configured"
+    ],
+    "title": "MarketingList",
+    "type": "object"
+   },
+   "MarketingSourceRow": {
+    "properties": {
+     "accounts": {
+      "title": "Accounts",
+      "type": "integer"
+     },
+     "clicks": {
+      "title": "Clicks",
+      "type": "integer"
+     },
+     "founders": {
+      "title": "Founders",
+      "type": "integer"
+     },
+     "list_confirmed": {
+      "title": "List Confirmed",
+      "type": "integer"
+     },
+     "list_signups": {
+      "title": "List Signups",
+      "type": "integer"
+     },
+     "paid": {
+      "title": "Paid",
+      "type": "integer"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "visits": {
+      "title": "Visits",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "source",
+     "visits",
+     "clicks",
+     "list_signups",
+     "list_confirmed",
+     "accounts",
+     "paid",
+     "founders"
+    ],
+    "title": "MarketingSourceRow",
+    "type": "object"
+   },
+   "MarketingTotals": {
+    "properties": {
+     "accounts": {
+      "default": 0,
+      "title": "Accounts",
+      "type": "integer"
+     },
+     "clicks": {
+      "default": 0,
+      "title": "Clicks",
+      "type": "integer"
+     },
+     "founders": {
+      "default": 0,
+      "title": "Founders",
+      "type": "integer"
+     },
+     "list_confirmed": {
+      "default": 0,
+      "title": "List Confirmed",
+      "type": "integer"
+     },
+     "list_signups": {
+      "default": 0,
+      "title": "List Signups",
+      "type": "integer"
+     },
+     "paid": {
+      "default": 0,
+      "title": "Paid",
+      "type": "integer"
+     },
+     "visits": {
+      "default": 0,
+      "title": "Visits",
+      "type": "integer"
+     }
+    },
+    "title": "MarketingTotals",
     "type": "object"
    },
    "Me": {
@@ -13131,6 +13471,86 @@
     "title": "PublicFoundingTier",
     "type": "object"
    },
+   "PublicRecap": {
+    "properties": {
+     "built_at": {
+      "title": "Built At",
+      "type": "string"
+     },
+     "earnings": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecapEarnings"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "ranked": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapName"
+      },
+      "title": "Ranked",
+      "type": "array"
+     },
+     "ranked_names": {
+      "title": "Ranked Names",
+      "type": "integer"
+     },
+     "scan_days": {
+      "title": "Scan Days",
+      "type": "integer"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "week",
+     "start",
+     "end",
+     "built_at",
+     "scan_days",
+     "ranked_names"
+    ],
+    "title": "PublicRecap",
+    "type": "object"
+   },
+   "PublicRecapIndex": {
+    "properties": {
+     "latest": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PublicRecap"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "weeks": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapWeek"
+      },
+      "title": "Weeks",
+      "type": "array"
+     }
+    },
+    "title": "PublicRecapIndex",
+    "type": "object"
+   },
    "PublicStock": {
     "properties": {
      "change_pct": {
@@ -13629,6 +14049,156 @@
      "scans"
     ],
     "title": "Recap",
+    "type": "object"
+   },
+   "RecapEarnings": {
+    "properties": {
+     "days": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapEarningsDay"
+      },
+      "title": "Days",
+      "type": "array"
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "start",
+     "end"
+    ],
+    "title": "RecapEarnings",
+    "type": "object"
+   },
+   "RecapEarningsDay": {
+    "properties": {
+     "date": {
+      "title": "Date",
+      "type": "string"
+     },
+     "names": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapEarningsName"
+      },
+      "title": "Names",
+      "type": "array"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "date",
+     "total"
+    ],
+    "title": "RecapEarningsDay",
+    "type": "object"
+   },
+   "RecapEarningsName": {
+    "properties": {
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Time"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "RecapEarningsName",
+    "type": "object"
+   },
+   "RecapName": {
+    "properties": {
+     "best_score": {
+      "title": "Best Score",
+      "type": "integer"
+     },
+     "days": {
+      "description": "Trading days the name was in the first scan's top 10",
+      "title": "Days",
+      "type": "integer"
+     },
+     "first_day": {
+      "title": "First Day",
+      "type": "string"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "days",
+     "best_score",
+     "first_day"
+    ],
+    "title": "RecapName",
+    "type": "object"
+   },
+   "RecapWeek": {
+    "properties": {
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     },
+     "week": {
+      "title": "Week",
+      "type": "string"
+     }
+    },
+    "required": [
+     "week",
+     "start",
+     "end"
+    ],
+    "title": "RecapWeek",
     "type": "object"
    },
    "Referrals": {
@@ -19689,6 +20259,113 @@
      }
     ],
     "summary": "System health snapshot and email delivery",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/marketing": {
+   "get": {
+    "operationId": "admin_marketing_v1_admin_marketing_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminMarketing"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Where visitors, list sign-ups, accounts and sales come from",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/marketing/subscribers.csv": {
+   "get": {
+    "operationId": "admin_subscribers_csv_v1_admin_marketing_subscribers_csv_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "default": "confirmed",
+       "pattern": "^(confirmed|pending|unsubscribed|all)$",
+       "title": "Status",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/csv": {}
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Confirmed email-list addresses as CSV (for a newsletter tool import)",
     "tags": [
      "admin (admins only)"
     ],
@@ -27168,6 +27845,34 @@
     "summary": "The Founders Wall: every founder seat, with names members chose to show (public)"
    }
   },
+  "/v1/public/list": {
+   "get": {
+    "operationId": "list_config_v1_public_list_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListConfig"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "Whether the email list form is open"
+   }
+  },
   "/v1/public/stocks/{ticker}": {
    "get": {
     "description": "Name, price and day change; HSF Score, setup and the first reason only when the stock\nis in the latest scan's ranked setups. The rest of the stock page needs an account.",
@@ -27217,6 +27922,136 @@
     "summary": "A stock's public snapshot for shared links (signed out)"
    }
   },
+  "/v1/public/subscribe": {
+   "post": {
+    "description": "Sends one confirm email; the address joins the list only after the link is opened.\nAnswers the same way whether or not the address was already on the list.",
+    "operationId": "subscribe_v1_public_subscribe_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ListSubscribe"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListSubscribeResult"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "description": "Not an email address"
+     },
+     "429": {
+      "description": "Too many sign-ups"
+     },
+     "503": {
+      "description": "List closed or unavailable"
+     }
+    },
+    "summary": "Join the weekly setups email list (double opt-in)"
+   }
+  },
+  "/v1/public/subscribe/action": {
+   "post": {
+    "operationId": "list_action_v1_public_subscribe_action_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ListAction"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many attempts"
+     }
+    },
+    "summary": "Confirm or unsubscribe with an emailed link"
+   }
+  },
+  "/v1/public/subscribe/status": {
+   "get": {
+    "description": "Changes nothing (mail scanners open links); the page asks for a click.",
+    "operationId": "list_status_v1_public_subscribe_status_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "t",
+      "required": true,
+      "schema": {
+       "maxLength": 64,
+       "minLength": 10,
+       "title": "T",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListStatus"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "description": "Invalid link"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many attempts"
+     }
+    },
+    "summary": "Email list status behind a confirm or unsubscribe link"
+   }
+  },
   "/v1/public/top-setups": {
    "get": {
     "description": "The top three ranked setups of the latest market scan (ticker, HSF Score, setup type,\nday change) and how many more a free account sees. Everything else needs an account.",
@@ -27247,6 +28082,77 @@
      }
     },
     "summary": "The latest scan's top setups, for the landing page (signed out)"
+   }
+  },
+  "/v1/public/weekly": {
+   "get": {
+    "operationId": "weekly_index_v1_public_weekly_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicRecapIndex"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "The latest weekly recap (public)"
+   }
+  },
+  "/v1/public/weekly/{week}": {
+   "get": {
+    "operationId": "weekly_v1_public_weekly__week__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "pattern": "^\\d{4}-W\\d{2}$",
+       "title": "Week",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicRecap"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No recap for that week"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "summary": "One week's recap (public)"
    }
   },
   "/v1/quotes": {
