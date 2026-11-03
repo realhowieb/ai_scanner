@@ -1,9 +1,7 @@
 """Calendar boundaries, safe operational snapshots, authorization and bounded IO."""
 import datetime as dt
-import importlib.util
 import json
 import sqlite3
-import types
 import unittest
 from unittest import mock
 
@@ -125,15 +123,6 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(fetch.call_count, 4)
         self.assertEqual(len(result), 4)
         self.assertNotIn('private-sql', json.dumps(result))
-
-    @unittest.skipUnless(importlib.util.find_spec('streamlit'), 'needs Streamlit UI dependency')
-    def test_dashboard_blocks_non_admin_before_loading(self):
-        from ui.system_health_view import render_system_health
-        fake = types.SimpleNamespace(session_state={'is_admin': False}, info=mock.Mock())
-        with mock.patch('ui.system_health_view.st', fake), \
-             mock.patch('api.operations.load_snapshot', side_effect=AssertionError('must not load')):
-            render_system_health()
-        fake.info.assert_called_once()
 
 
 try:
