@@ -1,0 +1,8 @@
+# ML v4 challenger models (research, GitHub workflows only).
+#
+# NOT installed by the API, web or any Render service: CatBoost alone is ~270 MB
+# installed and the API runs in 512 MB. Used by .github/workflows/ml-v4-train.yml
+# and the ML v4 smoke job. Install with:  -r requirements-ml-v4.txt -c requirements.lock
+-r requirements-ml.txt
+lightgbm==4.7.0
+catboost==1.2.10
