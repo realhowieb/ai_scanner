@@ -268,3 +268,66 @@ def test_evaluate_script_writes_reports_only(monkeypatch, tmp_path):
     assert "head-to-head with AI Confidence" in md and "Secondary targets" in md
     with pytest.raises(SystemExit):
         mod.main(["--out", str(out)])
+
+
+# ----------------------------------------------------------------------------- ensembles
+from analytics import ml_v4_ensemble as EN  # noqa: E402
+
+
+def test_ensemble_methods_combine_correctly():
+    rng = np.random.default_rng(4)
+    y = rng.integers(0, 2, 300)
+    good = np.clip(0.5 + (y - 0.5) * 0.3 + rng.normal(0, 0.1, 300), 0.01, 0.99)
+    noise = rng.uniform(0.01, 0.99, 300)
+    probs = {"good": good, "noise": noise}
+    eq = EN.fit("equal", ["good", "noise"], y, probs)
+    np.testing.assert_allclose(EN.predict(eq, probs), (np.clip(good, 1e-6, 1) + noise) / 2, atol=1e-9)
+    best = EN.fit("best", ["good", "noise"], y, probs)
+    assert best["selected"] == "good" and best["weights"] == [1.0, 0.0]
+    w = EN.fit("weighted", ["good", "noise"], y, probs)
+    assert abs(sum(w["weights"]) - 1) < 1e-6 and w["weights"][0] > w["weights"][1]
+    st = EN.fit("stacking", ["good", "noise"], y, probs)
+    p = EN.predict(st, probs)
+    assert np.all((p > 0) & (p < 1)) and EN.is_finite_spec(st)
+
+
+def test_fitted_ensembles_fall_back_to_equal_without_enough_earlier_rows():
+    spec = EN.fit("stacking", ["a", "b"], [0, 1] * 20, {"a": [0.4] * 40, "b": [0.6] * 40})
+    assert spec["method"] == "equal" and "fallback" in spec
+    with pytest.raises(ValueError):
+        EN.fit("equal", ["a"], [], {"a": []})
+    with pytest.raises(ValueError):
+        EN.fit("median", ["a", "b"], [], {})
+
+
+def test_disagreement_is_reported_with_its_caveat():
+    d = EN.disagreement(["a", "b"], {"a": [0.2, 0.5], "b": [0.4, 0.5]})
+    assert d["mean_range"] == pytest.approx(0.1) and "not independent" in d["note"]
+
+
+def test_ensembles_in_evaluation_use_earlier_folds_and_compare_with_best_member(rows):
+    data = A.eligible(rows, 5, P.PRIMARY_TARGET.label)
+    models = E.default_models(feature_sets=("production",), params=SMALL)
+    ens = E.default_ensembles(feature_sets=("production",))
+    assert set(ens) == {f"ensemble_{m}_production" for m in EN.METHODS}
+    res = E.evaluate(data, models, ensembles=ens, fold_kw=FOLD_KW, holdout_kw=HOLD_KW)
+    n = res["models"]["xgboost_production"]["walk_forward_raw"]["n"]
+    for name in ens:
+        m = res["models"][name]
+        assert m["walk_forward_raw"]["n"] == n  # identical rows
+        per = m["ensemble"]["per_fold"]
+        assert per[0]["method"] == "equal"  # nothing earlier to fit on in the first fold
+        assert m["ensemble"]["holdout_weights"] is not None and "holdout" in m
+        assert m["vs_best_member"]["best_member"] in m["ensemble"]["members"]
+        assert m["ensemble"]["disagreement"]["rows"] == n
+    md = E.render_markdown(res)
+    assert "Ensembles vs their best single member" in md
+
+
+def test_ensemble_row_record_captures_versions_and_target():
+    spec = EN.fit("equal", ["a", "b"], [], {"a": [], "b": []})
+    rec = EN.row_record(spec, {"a": 0.3, "b": 0.5}, 0.4, target={"label": "F_clean_path_5d", "horizon_days": 5},
+                        model_versions={"a": "ml-v4-a", "b": "ml-v4-b"}, calibration_version="cal-1",
+                        feature_version="fs-1", inferred_at="2026-11-03T00:00:00Z")
+    assert rec["disagreement_range"] == pytest.approx(0.2) and rec["target"]["horizon_days"] == 5
+    assert set(rec["model_versions"]) == {"a", "b"} and rec["calibration_version"] == "cal-1"

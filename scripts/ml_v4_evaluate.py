@@ -122,10 +122,12 @@ def main(argv=None) -> int:
     data = A.eligible(rows, target.horizon, target.label)
     common = dict(cost_bps=args.cost_bps, regime_by_day=regime)
     T._log(f"evaluating {target.label}@{target.horizon}d on {len(data)} eligible signal-days")
-    primary = E.evaluate(data, E.default_models(providers=providers, feature_sets=feature_sets), **common)
+    ensembles = E.default_ensembles(providers=providers, feature_sets=feature_sets)
+    primary = E.evaluate(data, E.default_models(providers=providers, feature_sets=feature_sets),
+                         ensembles=ensembles, **common)
     T._log("head-to-head with AI Confidence as served")
     h2h = E.evaluate(data, E.default_models(providers=providers, feature_sets=feature_sets, include_champion=True),
-                     reference="ai_confidence_as_served", **common)
+                     reference="ai_confidence_as_served", ensembles=ensembles, **common)
     T._log("secondary targets by horizon")
     secondary = E.evaluate_targets(rows, P.SECONDARY_TARGETS,
                                    E.default_models(providers=providers, feature_sets=feature_sets), **common)
