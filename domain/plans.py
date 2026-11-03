@@ -24,6 +24,7 @@ FEATURE_MIN_TIER: dict[str, str] = {
     "can_scan_alerts": "pro",  # saved scanner filters that alert on new matches (SCAN_MATCH rules)
     "can_insider_alerts": "pro",  # SEC Form 4 insider-buy alerts (INSIDER_BUY rules)
     "can_earnings_autoscore": "premium",  # Earnings tab scores every reporter on load (db.earnings_autoscore)
+    "can_watchlist_autoscore": "premium",  # unranked watchlist stocks scored each scan (db.watchlist_autoscore)
     "can_scheduled_scans": "premium",  # saved custom scans that run on a schedule and email results (services.scheduled_scans)
     "can_export_research": "premium",  # CSV of watchlists, Track record, journal and scan history (web, client-side)
     "can_diagnostics": "admin",

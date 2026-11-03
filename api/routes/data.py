@@ -276,8 +276,20 @@ def register(app: FastAPI) -> None:
 
         out = user_data.get_watchlist(_user(account), watchlist_id)
         state = watchlist_scan_state([i["ticker"] for i in out["items"]], entitlements_for(account)["entitlements"])
+        ent = entitlements_for(account)["entitlements"]
         out = {**out, "scan_at": state["scan_at"], "scan_total": state.get("total"), "stale": state["stale"],
                "items": [{**i, "latest": state["rows"].get(str(i["ticker"]).upper())} for i in out["items"]]}
+        # Premium: unranked stocks get the scheduled scan's auto-score pass (items[].auto).
+        if ent.get("can_watchlist_autoscore") and any(i["latest"] is None for i in out["items"]):
+            try:
+                from api.scans import _iso, _ticker_key, watchlist_autoscore
+
+                auto = watchlist_autoscore(ent)
+                out["items"] = [i if i["latest"] is not None else {**i, "auto": auto["rows"].get(_ticker_key(i["ticker"]))}
+                                for i in out["items"]]
+                out["auto_scored_at"] = _iso(auto["at"]) if any(i.get("auto") for i in out["items"]) else None
+            except Exception as e:  # never fail the watchlist over the auto-score
+                log.warning(json.dumps({"event": "watchlist_autoscore_failed", "error": type(e).__name__}))
         return json_safe(out)
 
     @app.patch("/v1/watchlists/{watchlist_id}", response_model=models.WatchlistDetail,

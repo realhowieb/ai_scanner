@@ -213,7 +213,7 @@ export function ScannerView() {
       </div>}
 
       {watchlist ? (
-        <WatchlistResults state={wl} premium={premium} prefs={preferences} sort={sort} onSort={(next) => set({ sort: next })}
+        <WatchlistResults state={wl} premium={premium} autoScore={can("can_watchlist_autoscore")} prefs={preferences} sort={sort} onSort={(next) => set({ sort: next })}
           onCreated={(id) => set({ wl: id })} />
       ) : earnings ? (
         <EarningsResults f={ef} pro={pro} autoScore={can("can_earnings_autoscore")} res={earn} onClear={() => set({ all: 1 })} />

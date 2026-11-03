@@ -418,6 +418,34 @@ class ScanAndStockApiTests(DataApiBase):
             self.assertIsNone(pro["auto_scored_at"])
             self.assertEqual(ld.call_count, 1)
 
+    def test_premium_watchlist_unranked_stocks_are_auto_scored(self):
+        top = [s["ticker"] for s in self.client.get("/v1/scans/latest", headers=self.h).json()["setups"]]
+        stamp = {"id": 9, "created_at": dt.datetime(2026, 11, 3, 18, 40, tzinfo=UTC), "session": "regular"}
+        auto = [{"ticker": "ZZZQ", "score": 58, "primary_setup": "Breakout", "rvol": 1.4,
+                 "signals": ["breakout", "prebreakout"], "prob": 0.3},
+                {"ticker": top[0], "score": 1, "signals": []}]
+        self.accounts["prem@example.com"] = {**self.accounts["pro@example.com"], "username": "prem@example.com",
+                                             "tier": "premium"}
+        prem = self.auth(self.login("prem@example.com").json()["access_token"])
+        lists = {}
+        for who, h in (("prem", prem), ("pro", self.h)):
+            wid = self.client.post("/v1/watchlists", json={"name": "Mine"}, headers=h).json()["id"]
+            self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": [top[0], "ZZZQ", "NOPE"]}, headers=h)
+            lists[who] = wid
+        with mock.patch("db.watchlist_autoscore.latest_stamp", return_value=stamp), \
+                mock.patch("db.watchlist_autoscore.load_setups", return_value=auto) as ld:
+            out = self.client.get(f"/v1/watchlists/{lists['prem']}", headers=prem).json()
+            items = {i["ticker"]: i for i in out["items"]}
+            self.assertIsNotNone(items[top[0]]["latest"])
+            self.assertIsNone(items[top[0]].get("auto"))                 # ranked rows keep the market scan's row
+            self.assertEqual((items["ZZZQ"]["auto"]["score"], items["ZZZQ"]["auto"]["rvol"]), (58, 1.4))
+            self.assertIsNone(items["NOPE"]["auto"])                      # not in the pass
+            self.assertEqual(out["auto_scored_at"], "2026-11-03T18:40:00+00:00")
+            pro = self.client.get(f"/v1/watchlists/{lists['pro']}", headers=self.h).json()
+            self.assertTrue(all(i.get("auto") is None for i in pro["items"]))   # Pro: no auto scores
+            self.assertIsNone(pro.get("auto_scored_at"))
+            self.assertEqual(ld.call_count, 1)
+
     def test_latest_scan_counts_the_whole_scan_beside_the_filtered_total(self):
         whole = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual(whole["scan_total"], whole["total"])

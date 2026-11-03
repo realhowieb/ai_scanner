@@ -3,7 +3,8 @@
 // The Scanner's Watchlist tab: one of the user's watchlists in the Scanner table. Tickers
 // ranked in the latest scan carry that scan's row (GET /v1/watchlists/{id} items[].latest,
 // not capped by plan: they are the user's own stocks); the rest show their latest trade
-// (GET /v1/quotes) and "Not ranked". Sorting happens here, since the list is small.
+// (GET /v1/quotes) and "Not ranked", unless Premium's auto-score pass scored them
+// (items[].auto, tagged Auto). Sorting happens here, since the list is small.
 import Link from "@/components/Link";
 import { useMemo } from "react";
 
@@ -29,16 +30,18 @@ export function useScannerWatchlists(asked: number, enabled: boolean) {
   return { lists, all, chosen };
 }
 
-/** Ranked first (by the chosen sort), then unranked ones, each group high to low with blanks last. */
-export function sortWatchlistRows(rows: Row[], ranks: Record<string, number | null>, sort: ServerSort): Row[] {
+/** On HSF Score: ranked first, then auto-scored, then unscored; other sorts mix them. Each
+ * group high to low with blanks last. */
+export function sortWatchlistRows(rows: Row[], ranks: Record<string, number | null>, sort: ServerSort, auto: Set<string> = new Set()): Row[] {
   const key = SORT_KEY[sort];
+  const group = (r: Row) => ranks[r.ticker] != null ? 0 : auto.has(r.ticker) ? 1 : 2;
   const val = (r: Row) => {
-    if (sort === "score" && ranks[r.ticker] == null) return null;
+    if (sort === "score" && group(r) === 2) return null;
     const v = r[key];
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
   return [...rows].sort((a, b) => {
-    const ua = ranks[a.ticker] == null ? 1 : 0, ub = ranks[b.ticker] == null ? 1 : 0;
+    const ua = group(a), ub = group(b);
     if (sort === "score" && ua !== ub) return ua - ub;
     const va = val(a), vb = val(b);
     if (va == null || vb == null) return va == null && vb == null ? a.ticker.localeCompare(b.ticker) : va == null ? 1 : -1;
@@ -67,8 +70,10 @@ export function WatchlistControls({ all, chosenId, sort, sorts, onPick, onSort }
   );
 }
 
-export function WatchlistResults({ state, premium, prefs, sort, onSort, onCreated }: {
-  state: ReturnType<typeof useScannerWatchlists>; premium: boolean; prefs: ReturnType<typeof useWorkspace>;
+export function WatchlistResults({ state, premium, autoScore, prefs, sort, onSort, onCreated }: {
+  state: ReturnType<typeof useScannerWatchlists>; premium: boolean;
+  /** Premium auto-score: unranked stocks carry items[].auto. Others see a line about it. */
+  autoScore: boolean; prefs: ReturnType<typeof useWorkspace>;
   sort: ServerSort; onSort: (sort: ServerSort) => void; onCreated: (id: number) => void;
 }) {
   const { lists, chosen } = state;
@@ -76,11 +81,13 @@ export function WatchlistResults({ state, premium, prefs, sort, onSort, onCreate
   const chosenId = chosen?.id;
   const items = useMemo(() => (detail.data && detail.data.id === chosenId ? detail.data.items : []), [detail.data, chosenId]);
   const unranked = useMemo(() => items.filter((i) => !i.latest).map((i) => i.ticker).sort(), [items]);
+  // Auto-scored rows carry the pass's scan price; live quotes still fill Last / Chg / Gap.
   const quotes = useApi(unranked.length ? `wl-quotes:${unranked.join(",")}` : null, (signal) => watchlistQuotes(unranked, signal));
 
-  const { rows, ranks } = useMemo(() => {
+  const { rows, ranks, auto } = useMemo(() => {
     const q = quotes.data?.quotes ?? {};
     const ranks: Record<string, number | null> = {};
+    const auto = new Set<string>();
     const rows: Row[] = items.map((i) => {
       if (i.latest) {
         const { rank, ...row } = i.latest;
@@ -89,11 +96,16 @@ export function WatchlistResults({ state, premium, prefs, sort, onSort, onCreate
       }
       ranks[i.ticker] = null;
       const p = q[i.ticker];
-      return { ticker: i.ticker, score: 0, fading: false, signals: [], last: p?.last ?? null, chg_pct: p?.chg_pct ?? null, gap_pct: p?.gap_pct ?? null };
+      const live = p ? { last: p.last ?? null, chg_pct: p.chg_pct ?? null, gap_pct: p.gap_pct ?? null } : {};
+      if (i.auto) {
+        auto.add(i.ticker);
+        return { ...i.auto, ticker: i.ticker, ...live } as Row;
+      }
+      return { ticker: i.ticker, score: 0, fading: false, signals: [], last: null, chg_pct: null, gap_pct: null, ...live };
     });
-    return { rows, ranks };
+    return { rows, ranks, auto };
   }, [items, quotes.data]);
-  const sorted = useMemo(() => sortWatchlistRows(rows, ranks, sort), [rows, ranks, sort]);
+  const sorted = useMemo(() => sortWatchlistRows(rows, ranks, sort, auto), [rows, ranks, sort, auto]);
 
   if (lists.error && !lists.data) return <ErrorState error={lists.error} onRetry={lists.reload} what="your watchlists" />;
   if (!lists.data || (chosen && !detail.data && !detail.error) || (detail.loading && detail.data?.id !== chosen?.id)) {
@@ -112,15 +124,20 @@ export function WatchlistResults({ state, premium, prefs, sort, onSort, onCreate
     </Empty></Card>
   );
   const rankedCount = items.length - unranked.length;
+  const unscored = unranked.length - auto.size;
   return (
     <>
       <p className="cap" data-testid="watchlist-scan-summary">
         {chosen.name}: {items.length} stock{items.length === 1 ? "" : "s"} · {rankedCount} ranked in the latest scan
         {detail.data?.scan_total ? ` of ${detail.data.scan_total}` : ""}. Rank is the stock&apos;s place in the whole scan.
-        {unranked.length > 0 && " Stocks that didn't rank show their latest price."}
+        {auto.size > 0 && ` ${auto.size} more scored automatically after the scan (Auto).`}
+        {unscored > 0 && (autoScore ? " Stocks that didn't rank show their latest price until the next scan scores them." : " Stocks that didn't rank show their latest price.")}
       </p>
+      {!autoScore && unranked.length > 0 && <p className="cap">
+        <Link href="/pricing">Premium</Link> scores every watchlist stock after each scan, including the {unranked.length} that didn&apos;t rank.
+      </p>}
       <section className={`card flush${detail.loading || quotes.loading ? " dim" : ""}`} aria-busy={detail.loading || quotes.loading}>
-        <SetupTable rows={sorted} premium={premium} sparks displayControls={false} prefs={prefs} ranks={ranks} sort={sort} onSort={onSort} />
+        <SetupTable rows={sorted} premium={premium} sparks displayControls={false} prefs={prefs} ranks={ranks} auto={auto} sort={sort} onSort={onSort} />
       </section>
     </>
   );
