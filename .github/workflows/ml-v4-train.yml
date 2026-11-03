@@ -1,0 +1,68 @@
+name: ML v4 Train
+
+# Manual only. Milestone 2 dry run: trains XGBoost, LightGBM and CatBoost on an
+# existing finalized research dataset version (SELECT only), for the
+# pre-declared target "+4% before -2% within 5 trading days", stopping before
+# the reserved holdout. Writes nothing to the database and never touches
+# production AI Confidence or PreBreakout. Model files + manifest are uploaded
+# as this run's artifact (30 days).
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_version:
+        description: "Finalized research dataset version (blank = newest)"
+        required: false
+        default: ""
+      providers:
+        description: "Comma-separated providers"
+        required: true
+        default: "xgboost,lightgbm,catboost"
+      feature_sets:
+        description: "Comma-separated feature sets"
+        required: true
+        default: "production,leakage_safe"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-v4-train
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-core.txt
+            requirements-ml.txt
+            requirements-ml-v4.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml-v4.txt -c requirements.lock
+      - name: Train (dry run, no database writes)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ML_V4_DATASET_VERSION: ${{ inputs.dataset_version }}
+          ML_V4_PROVIDERS: ${{ inputs.providers }}
+          ML_V4_FEATURE_SETS: ${{ inputs.feature_sets }}
+        run: python scripts/ml_v4_train.py --out "$RUNNER_TEMP/ml_v4"
+      - name: Upload models and manifest
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ml-v4-train-${{ github.run_id }}
+          path: ${{ runner.temp }}/ml_v4
+          retention-days: 30
+          if-no-files-found: warn
