@@ -37,3 +37,6 @@ did.bin
 *.model
 
 .streamlit/secrets.toml
+
+# ML v4 training runs (artifacts + manifests; uploaded by the workflow, never committed)
+ml/artifacts/

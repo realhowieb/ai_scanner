@@ -9504,6 +9504,72 @@
     "title": "Message",
     "type": "object"
    },
+   "MlRollback": {
+    "properties": {
+     "approve": {
+      "default": false,
+      "description": "Must be true: rollback changes the registry champion",
+      "title": "Approve",
+      "type": "boolean"
+     },
+     "horizon_days": {
+      "maximum": 5.0,
+      "minimum": 1.0,
+      "title": "Horizon Days",
+      "type": "integer"
+     },
+     "reason": {
+      "maxLength": 500,
+      "minLength": 3,
+      "title": "Reason",
+      "type": "string"
+     },
+     "target_label": {
+      "pattern": "^[A-Za-z0-9_]{1,40}$",
+      "title": "Target Label",
+      "type": "string"
+     }
+    },
+    "required": [
+     "target_label",
+     "horizon_days",
+     "reason"
+    ],
+    "title": "MlRollback",
+    "type": "object"
+   },
+   "MlTransition": {
+    "properties": {
+     "approve": {
+      "default": false,
+      "description": "Required (true) to make a model champion",
+      "title": "Approve",
+      "type": "boolean"
+     },
+     "reason": {
+      "maxLength": 500,
+      "minLength": 3,
+      "title": "Reason",
+      "type": "string"
+     },
+     "to_status": {
+      "enum": [
+       "validated",
+       "shadow",
+       "champion",
+       "retired"
+      ],
+      "title": "To Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "to_status",
+     "reason"
+    ],
+    "title": "MlTransition",
+    "type": "object"
+   },
    "Mover": {
     "properties": {
      "last": {
@@ -21212,6 +21278,429 @@
     "tags": [
      "admin (admins only)"
     ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/models": {
+   "get": {
+    "operationId": "ml_models_v1_admin_ml_models_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "candidate",
+          "validated",
+          "shadow",
+          "champion",
+          "retired"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "in": "query",
+      "name": "target_label",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9_]{1,40}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Target Label"
+      }
+     },
+     {
+      "in": "query",
+      "name": "horizon_days",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Horizon Days"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Models V1 Admin Ml Models Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] ML v4 registry models",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/models/{model_id}": {
+   "get": {
+    "operationId": "ml_model_v1_admin_ml_models__model_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "model_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Model Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 90,
+       "maximum": 180,
+       "minimum": 1,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Model V1 Admin Ml Models  Model Id  Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "404": {
+      "description": "No such model"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] One ML v4 model: history, shadow results and promotion gates",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/models/{model_id}/transition": {
+   "post": {
+    "operationId": "ml_transition_v1_admin_ml_models__model_id__transition_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "model_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Model Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MlTransition"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Transition V1 Admin Ml Models  Model Id  Transition Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "404": {
+      "description": "No such model"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Move an ML v4 model to its next lifecycle stage",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/monitoring": {
+   "get": {
+    "operationId": "ml_monitoring_v1_admin_ml_monitoring_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Monitoring V1 Admin Ml Monitoring Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] ML v4 monitoring: shadow scoring freshness, labels, drift, calibration",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/rollback": {
+   "post": {
+    "operationId": "ml_rollback_v1_admin_ml_rollback_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MlRollback"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Rollback V1 Admin Ml Rollback Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Restore the previous ML v4 registry champion",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/shadow": {
+   "get": {
+    "operationId": "ml_shadow_v1_admin_ml_shadow_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "target_label",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9_]{1,40}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Target Label"
+      }
+     },
+     {
+      "in": "query",
+      "name": "horizon_days",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maximum": 5,
+         "minimum": 1,
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Horizon Days"
+      }
+     },
+     {
+      "in": "query",
+      "name": "days",
+      "required": false,
+      "schema": {
+       "default": 30,
+       "maximum": 180,
+       "minimum": 1,
+       "title": "Days",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Shadow V1 Admin Ml Shadow Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Forward shadow results for shadow and champion models",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
     "x-internal": true
    }
   },
