@@ -80,15 +80,26 @@ describe("Stock detail: trade plan and AI note", () => {
 
   it("Premium: writes an AI note on request, and shows the daily limit message", async () => {
     fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ticker: "AAA", run_id: 1, snapshot_time: null, text: null }))
       .mockResolvedValueOnce(jsonResponse({ ticker: "AAA", run_id: 1, snapshot_time: null, text: "AAA leads on volume." }))
       .mockResolvedValueOnce(jsonResponse({ detail: "You've used today's AI notes." }, 429));
     const u = userEvent.setup();
     render(<StockView s={stockDetail({ in_latest_scan: true, has_setup: false })} premium aiNotes />);
+    await waitFor(() => expect(urls()).toHaveLength(1));   // the saved-note check on load
     await u.click(screen.getByRole("button", { name: "Write AI note" }));
     expect(await screen.findByText("AAA leads on volume.")).toBeInTheDocument();
-    expect(urls()[0]!.pathname).toBe("/api/hsf/v1/ai/notes/AAA");
+    expect(urls()[1]!.pathname).toBe("/api/hsf/v1/ai/notes/AAA");
     await u.click(screen.getByRole("button", { name: "Write it again" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("You've used today's AI notes.");
+  });
+
+  it("Premium: shows a note HSF already wrote without a click", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ticker: "AAA", run_id: 1, snapshot_time: null, text: "Saved note.",
+      auto: true, written_at: "2026-11-03T14:00:00+00:00" }));
+    render(<StockView s={stockDetail({ in_latest_scan: true, has_setup: false })} premium aiNotes />);
+    expect(await screen.findByText("Saved note.")).toBeInTheDocument();
+    expect(screen.getByTestId("auto-written")).toHaveTextContent("Already written for the latest scan");
+    expect(screen.getByRole("button", { name: "Write it again" })).toBeInTheDocument();
   });
 
   it("goes back to where the user came from", () => {

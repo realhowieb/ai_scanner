@@ -835,7 +835,8 @@ export interface paths {
         };
         /**
          * AI Market Brief narrative (Premium)
-         * @description A 2-3 sentence brief written from the Market Brief's facts only.
+         * @description A 2-3 sentence brief written from the Market Brief's facts only. HSF writes it
+         *     automatically after each market scan on trading days, so it's usually ready.
          */
         get: operations["ai_brief_narrative_v1_ai_brief_narrative_get"];
         put?: never;
@@ -874,7 +875,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Saved AI journal coaching (Premium)
+         * @description The last coaching note (from the Friday email or "Coach me"); text is null when there
+         *     isn't one. Never calls the AI.
+         */
+        get: operations["ai_journal_coach_saved_v1_ai_journal_coach_get"];
         put?: never;
         /**
          * AI journal coach (Premium)
@@ -895,7 +901,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Saved AI setup note for a ticker (Premium)
+         * @description The note already written for this ticker in the latest market scan (HSF writes one
+         *     automatically when a stock on a Premium watchlist newly ranks); text is null when there
+         *     isn't one yet. Never calls the AI.
+         */
+        get: operations["ai_note_saved_v1_ai_notes__ticker__get"];
         put?: never;
         /**
          * AI setup note for a ticker (Premium)
@@ -958,7 +970,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Saved AI rundown of a watchlist (Premium)
+         * @description The last rundown written for this list (by the morning or Sunday email, or a refresh);
+         *     text is null when there isn't one. Never calls the AI.
+         */
+        get: operations["ai_watchlist_note_saved_v1_ai_watchlists__watchlist_id__note_get"];
         put?: never;
         /**
          * AI rundown of a watchlist (Premium)
@@ -3738,6 +3755,12 @@ export interface components {
         /** AIJournalCoach */
         AIJournalCoach: {
             /**
+             * Auto
+             * @description A saved note (from the Friday email or an earlier request)
+             * @default false
+             */
+            auto: boolean;
+            /**
              * Closed
              * @description Closed trades in the journal
              */
@@ -3752,6 +3775,11 @@ export interface components {
              * @description Markdown bullets; null below min_trades
              */
             text?: string | null;
+            /**
+             * Written At
+             * @description When the saved note was written (UTC)
+             */
+            written_at?: string | null;
         };
         /** AIScanBuilder */
         AIScanBuilder: {
@@ -3841,6 +3869,12 @@ export interface components {
         /** AIText */
         AIText: {
             /**
+             * Auto
+             * @description Already written (by a Premium automation or an earlier request); no AI call was made
+             * @default false
+             */
+            auto: boolean;
+            /**
              * Run Id
              * @description The scan the text is about
              */
@@ -3854,6 +3888,11 @@ export interface components {
             text?: string | null;
             /** Ticker */
             ticker?: string | null;
+            /**
+             * Written At
+             * @description When a saved answer was written (UTC)
+             */
+            written_at?: string | null;
         };
         /** AcceptedPolicy */
         AcceptedPolicy: {
@@ -6791,6 +6830,13 @@ export interface components {
         };
         /** JournalTrade */
         JournalTrade: {
+            /**
+             * Auto Alerts
+             * @description Premium: the stop and target price alerts HSF added for this open trade
+             */
+            auto_alerts?: {
+                [key: string]: number;
+            } | null;
             /** Closed At */
             closed_at?: string | null;
             /** Entered At */
@@ -13559,7 +13605,10 @@ export interface operations {
     };
     ai_brief_narrative_v1_ai_brief_narrative_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only return the summary HSF already wrote for this snapshot (text null when none); never calls the AI */
+                saved?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13703,6 +13752,77 @@ export interface operations {
             };
         };
     };
+    ai_journal_coach_saved_v1_ai_journal_coach_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIJournalCoach"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ai_journal_coach_v1_ai_journal_coach_post: {
         parameters: {
             query?: never;
@@ -13719,6 +13839,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIJournalCoach"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ai_note_saved_v1_ai_notes__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIText"];
                 };
             };
             /** @description Not signed in */
@@ -13935,6 +14129,79 @@ export interface operations {
                 "application/json": components["schemas"]["AISummaryBody"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIText"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Premium feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scan not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Daily AI limit or hourly request limit reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI call failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ai_watchlist_note_saved_v1_ai_watchlists__watchlist_id__note_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -26,6 +26,9 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
                         answer, the admins get the count and the oldest one's age.
     scheduled scans     every pass on trading days: Premium customers' scheduled custom
                         scans whose window is open (services.scheduled_scans).
+    premium automations every pass (services.premium_auto): the Brief's AI summary and AI
+                        notes for newly ranked watchlist stocks after each market scan, the
+                        Sunday watchlist rundown email and the Friday journal coach email.
 
 Env (all default on; set to 0 to stop one):
     HSF_OPS_JOBS_ENABLED          the whole thread
@@ -38,6 +41,7 @@ Env (all default on; set to 0 to stop one):
     HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
     HSF_SOCIAL_DRAFTS_ENABLED     social drafts to Buffer
     HSF_SCHEDULED_SCANS_ENABLED   scheduled custom scans (services.scheduled_scans)
+    HSF_PREMIUM_AUTO_ENABLED      premium automations (each also has its own switch there)
 
 Nothing here raises into the API.
 """
@@ -350,6 +354,20 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
                 log.info(json.dumps({"event": "scheduled_scans_pass", "result": result}, default=str))
         except Exception as e:
             log.warning(json.dumps({"event": "scheduled_scans_error", "error": type(e).__name__}))
+    if _on("HSF_PREMIUM_AUTO_ENABLED"):
+        _premium_auto(now)
+
+
+def _premium_auto(now: dt.datetime) -> None:
+    try:
+        from services import premium_auto
+
+        result = premium_auto.run_pass(now)
+        busy = {k: v for k, v in result.items() if isinstance(v, dict) and not isinstance(v.get("skipped"), str)}
+        if busy:
+            log.info(json.dumps({"event": "premium_auto_pass", "result": busy}, default=str))
+    except Exception as e:
+        log.warning(json.dumps({"event": "premium_auto_error", "error": type(e).__name__}))
 
 
 def start() -> None:

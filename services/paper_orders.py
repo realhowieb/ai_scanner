@@ -85,6 +85,12 @@ def _record(user, intent, result):
         ):
             reconcile_paper_fill(user, result["order_id"], intent["ticker"], price, int(filled), intent["context"])
             synced = True
+            try:
+                from api import trade_alerts
+
+                trade_alerts.add_for_trade(user, intent["ticker"], price)   # Premium: stop and target alerts
+            except Exception:
+                pass
         terminal = result.get("status") in {"filled", "canceled", "expired", "rejected"}
         if terminal and (synced or filled == 0):
             saved = store.save(user, cid, state="synced", result=result)

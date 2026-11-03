@@ -79,7 +79,10 @@ function Row({ t, pro, onChanged }: { t: Trade; pro: boolean; onChanged: () => v
   const del = useAction();
   return (
     <tr>
-      <td><TickerLink ticker={t.ticker} /> {t.open ? <Pill tone="up">Open</Pill> : <Pill>Closed</Pill>}</td>
+      <td><TickerLink ticker={t.ticker} /> {t.open ? <Pill tone="up">Open</Pill> : <Pill>Closed</Pill>}
+        {t.open && t.auto_alerts && <div className="cap" data-testid="trade-auto-alerts"
+          title="Price alerts HSF added from the Trade plan. They're removed when the trade closes.">
+          🔔 Alerts at {price(t.auto_alerts.stop)} and {price(t.auto_alerts.target)}</div>}</td>
       <td className="num mono">{t.shares ?? "—"}</td>
       <td className="num mono">{price(t.entry_price)}</td>
       <td className="num mono">{t.open ? price(t.mark) : price(t.exit_price)}</td>
