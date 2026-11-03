@@ -10903,6 +10903,11 @@ export interface components {
         };
         /** WatchlistDetail */
         WatchlistDetail: {
+            /**
+             * Auto Scored At
+             * @description GET only, Premium: when the auto-score pass behind items[].auto ran
+             */
+            auto_scored_at?: string | null;
             /** Id */
             id: number;
             /** Is Default */
@@ -11095,6 +11100,8 @@ export interface components {
         WatchlistItemDetail: {
             /** Added At */
             added_at?: string | null;
+            /** @description GET only, Premium (can_watchlist_autoscore): when latest is null, the ticker's row from the scheduled scan's auto-score pass over unranked watchlist stocks (auto_scored_at); null if not scored */
+            auto?: components["schemas"]["ScanSetup"] | null;
             /** @description GET /v1/watchlists/{id} only: the ticker's row in the latest market scan; null when it isn't a ranked setup there (or the scan couldn't be read) */
             latest?: components["schemas"]["WatchlistScanState"] | null;
             /** Note */

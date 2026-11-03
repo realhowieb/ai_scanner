@@ -1050,6 +1050,16 @@ def main():
         print(f"[cron] earnings auto-score failed: {_redact(e)}")
         _capture(e)
 
+    # Score every watchlist stock the scan didn't rank (Premium auto-score on the
+    # Scanner's Watchlist tab and the Watchlists page).
+    try:
+        from scheduler.watchlist_autoscore import run_watchlist_autoscore
+
+        run_watchlist_autoscore(session)
+    except Exception as e:
+        print(f"[cron] watchlist auto-score failed: {_redact(e)}")
+        _capture(e)
+
     # Recompute the signal track record once per day (forward returns of past
     # snapshot candidates). Best-effort; never fail the scan run.
     try:
