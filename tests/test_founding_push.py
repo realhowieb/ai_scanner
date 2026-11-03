@@ -57,7 +57,8 @@ class ComposeTests(unittest.TestCase):
     def test_launch_email(self):
         m = push.compose("launch", push.offer(OPEN), base=BASE, note="Hi, it's Howard.\n\nThanks for trying HSF.")
         self.assertIn("Founding 100 is open", m["subject"])
-        for s in ("Founder Pro: $499 once, 73 of 75 seats left.", "Five years paying monthly would be $1,500.",
+        for s in ("Founder Pro: $499 once, 73 of 75 seats left.", "Five years of Pro paying monthly would be $1,500.",
+                  "Five years of Premium (what Elite includes) paying monthly would be $2,400.",
                   "Founder Elite: $999 once, 24 of 25 seats left.", "14-day full refund guarantee",
                   "Hi, it's Howard.", "Thanks for trying HSF.", "utm_campaign=founding-launch"):
             self.assertIn(s, m["text"])
