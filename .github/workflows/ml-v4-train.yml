@@ -141,7 +141,7 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "ML v4 candidate models (run $GITHUB_RUN_ID)" \
             --notes "Candidate models from ML v4 training run $GITHUB_RUN_ID. Not used by production scoring." \
-            *.joblib *.json
+            ./*.joblib ./*.json
       - name: Register candidates
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
