@@ -77,13 +77,19 @@ def is_founder(email: str) -> bool:
     return m.get("status") in ("active", "pending")
 
 
+# The plan each founder tier includes, named in the five-year comparison.
+PLAN_OF = {"founder_pro": "Pro", "founder_elite": "Premium (what Elite includes)"}
+
+
 def tier_lines(o: Dict[str, Any]) -> List[str]:
     out = []
     for t in o["tiers"]:
         five = t.get("five_year") or {}
         line = f"{t['label']}: {_money(t['price_cents'])} once, {int(t['remaining'])} of {int(t['capacity'])} seats left."
         if five.get("five_years_monthly_cents"):
-            line += f" Five years paying monthly would be {_money(five['five_years_monthly_cents'])}."
+            plan = PLAN_OF.get(t.get("tier"))
+            of = f" of {plan}" if plan else ""
+            line += f" Five years{of} paying monthly would be {_money(five['five_years_monthly_cents'])}."
         out.append(line)
     return out
 
