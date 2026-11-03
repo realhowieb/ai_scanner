@@ -282,13 +282,18 @@ function TradePlan({ s }: { s: Stock }) {
 /** Premium: an AI note on this name's latest scan result, generated on request. */
 function AINote({ s }: { s: Stock }) {
   const act = useAction();
-  const [note, setNote] = useState<Schemas["AIText"] | null>(null);
+  const [fresh, setNote] = useState<Schemas["AIText"] | null>(null);
+  // A note HSF already wrote for this scan (newly ranked watchlist stocks get one automatically).
+  const saved = useApi(`ai-note-saved:${s.ticker}`, (signal) =>
+    unwrap(api.GET("/v1/ai/notes/{ticker}", { params: { path: { ticker: s.ticker } }, signal })));
+  const note = fresh ?? (saved.data?.text ? saved.data : null);
   const run = () => void act.run(async () => {
     setNote(await unwrap(api.POST("/v1/ai/notes/{ticker}", { params: { path: { ticker: s.ticker } } })));
     return true;
   });
   return (
     <div className="stack-sm">
+      {!fresh && note?.auto && <p className="cap" data-testid="auto-written">Already written for the latest scan{note.written_at ? ` (${etTime(note.written_at)})` : ""}.</p>}
       {note ? (note.text ? <AIText text={note.text} /> : <p className="cap">Nothing to explain: {s.ticker} isn&apos;t in the latest scan.</p>)
         : <p className="cap">A short research note on why {s.ticker} ranks where it does, written by Claude from the scan&apos;s data.</p>}
       <ErrorLine error={act.error} />

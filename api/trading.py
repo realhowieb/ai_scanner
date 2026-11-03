@@ -54,6 +54,9 @@ def journal(username: str, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
     page = list_trades(username, limit=limit + 1, offset=offset)
     trades = page[:limit]
     live = _quotes([t["ticker"] for t in trades if not t.get("closed_at")])
+    from api import trade_alerts
+
+    auto = trade_alerts.for_journal(username) if any(not t.get("closed_at") for t in trades) else {}
     out = []
     for t in trades:
         entry = float(t.get("entry_price") or 0)
@@ -62,7 +65,8 @@ def journal(username: str, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
         mark = live.get(t["ticker"]) if is_open else (float(t["exit_price"]) if t.get("exit_price") is not None else None)
         pnl = (mark - entry) * shares if mark is not None and entry else None
         pct = (mark - entry) / entry * 100.0 if mark is not None and entry else None
-        out.append({**t, "open": is_open, "mark": mark, "pnl": pnl, "pnl_pct": pct})
+        out.append({**t, "open": is_open, "mark": mark, "pnl": pnl, "pnl_pct": pct,
+                    "auto_alerts": auto.get(str(t["ticker"]).upper()) if is_open else None})
     stats = journal_stats(username)
     open_trades = [t for t in out if t.get("open")]
     closed = [t for t in out if not t.get("open")]
@@ -97,6 +101,9 @@ def log(username: str, ticker: str, entry_price: float, shares: int) -> None:
     from db.trades import log_trade
 
     log_trade(username, ticker, float(entry_price), int(shares), source="api", hsf_score=_entry_score(ticker))
+    from api import trade_alerts
+
+    trade_alerts.add_for_trade(username, ticker, float(entry_price))   # Premium: stop and target alerts
 
 
 def close(username: str, trade_id: int, exit_price: float) -> bool:
@@ -108,15 +115,22 @@ def close(username: str, trade_id: int, exit_price: float) -> bool:
     if t.get("closed_at"):
         raise TradeClosed("This trade is already closed.")
     close_trade(int(trade_id), username, float(exit_price))
+    from api import trade_alerts
+
+    trade_alerts.remove_if_flat(username, str(t.get("ticker") or ""))
     return True
 
 
 def delete(username: str, trade_id: int) -> bool:
     from db.trades import delete_trade
 
-    if _owned_trade(username, trade_id) is None:
+    t = _owned_trade(username, trade_id)
+    if t is None:
         return False
     delete_trade(int(trade_id), username)
+    from api import trade_alerts
+
+    trade_alerts.remove_if_flat(username, str(t.get("ticker") or ""))
     return True
 
 

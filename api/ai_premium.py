@@ -298,7 +298,36 @@ def journal_coach(username: str) -> Dict[str, Any]:
                     max_tokens=450, username=username, feature="journal_coach")
 
     text = _shared(("coach", username, hash(facts)), make)
+    from api.ai import store
+
+    store(username, "journal_coach", "latest", text, closed=closed, trades_hash=journal_trades_hash(username))
     return {"closed": closed, "min_trades": COACH_MIN_TRADES, "text": text}
+
+
+def _trades_hash(trades: List[Dict[str, Any]]) -> str:
+    import hashlib
+
+    key = "|".join(f"{t.get('id')}:{t.get('exit_price')}" for t in trades)
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+
+def journal_trades_hash(username: str) -> str:
+    """A fingerprint of the closed trades, so the weekly email skips a journal that hasn't
+    changed since the last note."""
+    from db.trades import closed_trades
+
+    return _trades_hash(closed_trades(username))
+
+
+def latest_journal_coach(username: str) -> Dict[str, Any]:
+    """The last coaching note (from "Coach me" or the Friday email), without an AI call."""
+    from api.ai import stored
+
+    saved = stored(username, "journal_coach", "latest")
+    if not saved:
+        return {"closed": 0, "min_trades": COACH_MIN_TRADES, "text": None}
+    return {"closed": int(saved.get("closed") or 0), "min_trades": COACH_MIN_TRADES, "text": saved["text"],
+            "auto": True, "written_at": saved.get("written_at")}
 
 
 # ---- scan builder -----------------------------------------------------------------------------------

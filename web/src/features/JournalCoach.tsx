@@ -10,13 +10,19 @@ import type { Schemas } from "@/api/client";
 import { AIText } from "@/components/AIText";
 import { Card, ErrorLine, Locked } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
+import { useApi } from "@/hooks/useApi";
+import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 export function JournalCoach() {
   const { can } = useSession();
   const act = useAction();
-  const [out, setOut] = useState<Schemas["AIJournalCoach"] | null>(null);
-  if (!can("can_ai_notes")) {
+  const [fresh, setOut] = useState<Schemas["AIJournalCoach"] | null>(null);
+  const allowed = can("can_ai_notes");
+  // The last note (from the Friday email or an earlier "Coach me") shows on load.
+  const saved = useApi(allowed ? "journal-coach-saved" : null, (signal) => unwrap(api.GET("/v1/ai/journal-coach", { signal })));
+  const out = fresh ?? (saved.data?.text ? saved.data : null);
+  if (!allowed) {
     return (
       <Card title="AI journal coach" id="coach" source="ai">
         <Locked title="The AI journal coach is part of Premium" plan="premium">
@@ -31,6 +37,7 @@ export function JournalCoach() {
   });
   return (
     <Card title="AI journal coach" id="coach" source="ai" aside="Premium">
+      {!fresh && out?.auto && <p className="cap" data-testid="auto-written">Written automatically{out.written_at ? ` ${etTime(out.written_at)}` : ""}. A fresh note arrives by email every Friday after new trades close.</p>}
       {out?.text ? <AIText text={out.text} />
         : out ? <p className="cap">Close at least {out.min_trades} trades for coaching (you have {out.closed}).</p>
         : <p className="cap">Claude reads your closed trades and points out patterns worth reviewing, from your journal&apos;s numbers only.</p>}

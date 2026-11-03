@@ -1197,6 +1197,8 @@ class AIText(BaseModel):
     ticker: Optional[str] = None
     snapshot_time: Optional[str] = None
     text: Optional[str] = Field(default=None, description="Markdown; null when there is nothing to explain")
+    auto: bool = Field(default=False, description="Already written (by a Premium automation or an earlier request); no AI call was made")
+    written_at: Optional[str] = Field(default=None, description="When a saved answer was written (UTC)")
 
 
 class AIChatAnswer(BaseModel):
@@ -1208,6 +1210,8 @@ class AIJournalCoach(BaseModel):
     closed: int = Field(description="Closed trades in the journal")
     min_trades: int = Field(description="Closed trades needed before coaching")
     text: Optional[str] = Field(default=None, description="Markdown bullets; null below min_trades")
+    auto: bool = Field(default=False, description="A saved note (from the Friday email or an earlier request)")
+    written_at: Optional[str] = Field(default=None, description="When the saved note was written (UTC)")
 
 
 class AIScanView(BaseModel):
@@ -1245,6 +1249,8 @@ class JournalTrade(BaseModel):
     mark: Optional[float] = Field(default=None, description="Live price for open trades, exit price for closed")
     pnl: Optional[float] = None
     pnl_pct: Optional[float] = None
+    auto_alerts: Optional[Dict[str, float]] = Field(
+        default=None, description="Premium: the stop and target price alerts HSF added for this open trade")
 
 
 class Journal(BaseModel):

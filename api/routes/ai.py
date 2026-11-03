@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Path
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from api import models, ratelimit, user_data
@@ -47,6 +47,11 @@ def register(app: FastAPI) -> None:
         ratelimit.check("ai", user)
         return user
 
+    def _premium_read(account: Dict[str, Any]) -> str:
+        """Reading a saved answer: Premium, but no AI call, so no AI rate limit."""
+        require_feature(account, "can_ai_notes")
+        return _user(account)
+
     @app.post("/v1/ai/summary", response_model=models.AIText, responses=_AI, summary="AI scan summary (Premium)")
     def ai_summary(body: AISummaryBody, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """Claude summarizes the top results in HSF Score order (the web's AI Scan Summary).
@@ -77,6 +82,15 @@ def register(app: FastAPI) -> None:
         user = _premium(account)
         return ai.ticker_note(user, ticker.strip().upper())
 
+    @app.get("/v1/ai/notes/{ticker}", response_model=models.AIText, responses=_AI,
+             summary="Saved AI setup note for a ticker (Premium)")
+    def ai_note_saved(ticker: str = TICKER, account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The note already written for this ticker in the latest market scan (HSF writes one
+        automatically when a stock on a Premium watchlist newly ranks); text is null when there
+        isn't one yet. Never calls the AI."""
+        _premium_read(account)
+        return ai.ticker_note(None, ticker.strip().upper(), stored_only=True)
+
     @app.post("/v1/ai/watchlists/{watchlist_id}/note", response_model=models.AIText, responses=_AI,
               summary="AI rundown of a watchlist (Premium)")
     def ai_watchlist_note(watchlist_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
@@ -88,10 +102,26 @@ def register(app: FastAPI) -> None:
         wl = user_data.get_watchlist(user, watchlist_id)
         return json_safe(ai.watchlist_note(user, wl, entitlements_for(account)["entitlements"]))
 
+    @app.get("/v1/ai/watchlists/{watchlist_id}/note", response_model=models.AIText, responses=_AI,
+             summary="Saved AI rundown of a watchlist (Premium)")
+    def ai_watchlist_note_saved(watchlist_id: int = Path(ge=1), account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The last rundown written for this list (by the morning or Sunday email, or a refresh);
+        text is null when there isn't one. Never calls the AI."""
+        user = _premium_read(account)
+        user_data.get_watchlist(user, watchlist_id)  # 404 when it isn't yours
+        return json_safe(ai.latest_watchlist_note(user, watchlist_id))
+
     @app.get("/v1/ai/brief-narrative", response_model=models.AIText, responses=_AI,
              summary="AI Market Brief narrative (Premium)")
-    def ai_brief_narrative(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        """A 2-3 sentence brief written from the Market Brief's facts only."""
+    def ai_brief_narrative(account: Dict[str, Any] = Depends(current_account),
+                           saved: bool = Query(False, description="Only return the summary HSF already wrote for "
+                                                                  "this snapshot (text null when none); never calls the AI")
+                           ) -> Dict[str, Any]:
+        """A 2-3 sentence brief written from the Market Brief's facts only. HSF writes it
+        automatically after each market scan on trading days, so it's usually ready."""
+        if saved:
+            _premium_read(account)
+            return json_safe(ai.brief_narrative(None, stored_only=True))
         user = _premium(account)
         return json_safe(ai.brief_narrative(user))
 
@@ -116,6 +146,15 @@ def register(app: FastAPI) -> None:
 
         user = _premium(account)
         return json_safe(ai_premium.journal_coach(user))
+
+    @app.get("/v1/ai/journal-coach", response_model=models.AIJournalCoach, responses=_AI,
+             summary="Saved AI journal coaching (Premium)")
+    def ai_journal_coach_saved(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """The last coaching note (from the Friday email or "Coach me"); text is null when there
+        isn't one. Never calls the AI."""
+        from api import ai_premium
+
+        return json_safe(ai_premium.latest_journal_coach(_premium_read(account)))
 
     @app.post("/v1/ai/scan-builder", response_model=models.AIScanBuilder, responses=_AI,
               summary="Describe a scan in plain English (Premium)")
