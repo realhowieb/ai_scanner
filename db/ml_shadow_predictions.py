@@ -5,7 +5,8 @@ One additive table, written only by the scheduled shadow workflow
 
   ml_shadow_predictions  one row per (model, observation): raw + calibrated
                          probability, target + horizon, feature schema version,
-                         when it was scored, and the label once the outcome
+                         when it was scored and how long scoring took per
+                         prediction, and the label once the outcome
                          matured (filled later by the same workflow).
 
 Size: about one row per shadow model per signal-day (~30-160/day), kept 180
@@ -21,7 +22,8 @@ from db.engine import get_neon_conn, schema_once
 RETENTION_DAYS = 180
 _conn_factory: Optional[Callable[[], Any]] = None
 COLUMNS = ("model_id", "model_version", "observation_id", "ticker", "entry_day", "observed_at", "target_label",
-           "horizon_days", "raw_probability", "calibrated_probability", "feature_schema_version", "scored_at")
+           "horizon_days", "raw_probability", "calibrated_probability", "feature_schema_version", "scored_at",
+           "scoring_ms")
 
 
 class ShadowUnavailable(RuntimeError):
@@ -71,6 +73,7 @@ def ensure_schema(conn) -> None:
             calibrated_probability DOUBLE PRECISION,
             feature_schema_version TEXT,
             scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            scoring_ms DOUBLE PRECISION,
             label SMALLINT,
             label_filled_at TIMESTAMPTZ,
             UNIQUE (model_id, observation_id)
@@ -181,7 +184,8 @@ def predictions(model_ids: Sequence[int], *, since: dt.datetime, with_served: bo
     if not model_ids:
         return []
     base = ("SELECT p.model_id, p.model_version, p.observation_id, p.ticker, p.entry_day, p.observed_at, "
-            "p.target_label, p.horizon_days, p.raw_probability, p.calibrated_probability, p.scored_at, p.label")
+            "p.target_label, p.horizon_days, p.raw_probability, p.calibrated_probability, p.scored_at, p.label, "
+            "p.scoring_ms")
     where = " WHERE p.model_id = ANY(%s) AND p.scored_at >= %s ORDER BY p.scored_at, p.id"
     params = ([int(m) for m in model_ids], since)
     if with_served:

@@ -82,6 +82,7 @@ class ScoringTest(unittest.TestCase):
         cal = {"method": "sigmoid", "a": 1.0, "b": 1.0}
         preds = S.score({**MODEL, "calibration": cal}, FakeEstimator(), self.rows[:3], scored_at="x")
         self.assertGreater(preds[0]["calibrated_probability"], preds[0]["raw_probability"])
+        self.assertGreaterEqual(preds[0]["scoring_ms"], 0)
         self.assertEqual(S.score(MODEL, FakeEstimator(), [], scored_at="x"), [])
 
 
@@ -94,7 +95,7 @@ def _preds(n, *, model_id=7, edge=0.3, served_edge=0.1, days=25, seed=1):
         s = float(np.clip(0.4 + (served_edge if y else -served_edge) * 0.5 + rng.normal(0, 0.15), 0.01, 0.99))
         out.append({"model_id": model_id, "observation_id": i, "entry_day": f"2026-11-{i % days + 1:02d}",
                     "scored_at": f"2026-11-{i % days + 1:02d}T21:40:00", "raw_probability": p,
-                    "calibrated_probability": None, "label": y, "ai_confidence": s * 100})
+                    "calibrated_probability": None, "label": y, "ai_confidence": s * 100, "scoring_ms": 0.2})
     return out
 
 
@@ -117,7 +118,8 @@ class SummaryAndGatesTest(unittest.TestCase):
         self.assertEqual(S.disagreement({7: _preds(5)})["rows"], 0)
 
     def _model(self, **kw):
-        return {**MODEL, "metrics": {"evaluation_version": "hsf-ml-v4-eval-1", "holdout": {"raw": {"n": 120}}}, **kw}
+        return {**MODEL, "metrics": {"evaluation_version": "hsf-ml-v4-eval-1", "holdout": {"raw": {"n": 120}},
+                                     "fold_auc": {"folds": 4, "worst": 0.55}}, **kw}
 
     def test_gates_pass_only_when_every_check_passes(self):
         g = S.evaluate_gates(self._model(), S.summarize_model(_preds(300)), gates={"max_ece": 1.0})
@@ -132,6 +134,12 @@ class SummaryAndGatesTest(unittest.TestCase):
         self.assertFalse(no_eval["passed"])
         self.assertFalse(S.evaluate_gates(self._model(status="validated"), S.summarize_model(_preds(300)),
                                           gates={"max_ece": 1.0})["passed"])
+        unstable = self._model(metrics={**self._model()["metrics"], "fold_auc": {"folds": 4, "worst": 0.45}})
+        bad = S.evaluate_gates(unstable, S.summarize_model(_preds(300)), gates={"max_ece": 1.0})
+        self.assertEqual([c["gate"] for c in bad["checks"] if not c["passed"]], ["worst_fold_auc"])
+        slow = [{**p, "scoring_ms": 500.0} for p in _preds(300)]
+        bad = S.evaluate_gates(self._model(), S.summarize_model(slow), gates={"max_ece": 1.0})
+        self.assertEqual([c["gate"] for c in bad["checks"] if not c["passed"]], ["scoring_latency_p95_ms"])
 
     def test_evaluation_evidence(self):
         self.assertIsNone(S.evaluation_evidence(MODEL))
@@ -202,6 +210,20 @@ class ShadowScriptTest(unittest.TestCase):
         with mock.patch.object(self.script, "scored_models", return_value=[]):
             self.assertEqual(self.script.main([]), 0)
         self.assertEqual(self.inserted, [])
+
+    def test_switches(self):
+        script = self.script
+        mock.patch.stopall()
+        models = [MODEL, {**MODEL, "id": 8, "provider": "catboost", "model_version": "ml-v4-catboost-x"}]
+        with mock.patch("db.ml_model_registry.list_models", side_effect=lambda status: models if status == "shadow" else []):
+            with mock.patch.dict("os.environ", {"HSF_ML_V4_SHADOW_ENABLED": "", "HSF_ML_V4_SHADOW_DISABLED": ""}):
+                self.assertEqual(len(script.scored_models()), 2)
+            with mock.patch.dict("os.environ", {"HSF_ML_V4_SHADOW_DISABLED": "CatBoost"}):
+                self.assertEqual([m["id"] for m in script.scored_models()], [7])
+            with mock.patch.dict("os.environ", {"HSF_ML_V4_SHADOW_DISABLED": "7, ml-v4-catboost-x"}):
+                self.assertEqual(script.scored_models(), [])
+            with mock.patch.dict("os.environ", {"HSF_ML_V4_SHADOW_ENABLED": "0"}):
+                self.assertEqual(script.scored_models(), [])
 
     def test_release_uri_is_validated(self):
         with self.assertRaises(ValueError):

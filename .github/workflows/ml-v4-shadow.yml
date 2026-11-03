@@ -6,6 +6,9 @@ name: ML v4 Shadow
 # Never changes AI Confidence, PreBreakout, alerts, the registry or any model.
 # Until a model is put in shadow it only counts registry rows (about a minute)
 # and skips installing the ML libraries.
+# Switches (repository variables, unset = on): HSF_ML_V4_SHADOW_ENABLED=0 stops
+# all shadow scoring; HSF_ML_V4_SHADOW_DISABLED="catboost,<model version>,<id>"
+# skips those models.
 on:
   schedule:
     - cron: "40 21 * * 1-5"  # weekdays after the close (21:40 UTC)
@@ -31,6 +34,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
       AI_SCANNER_SQLITE_FALLBACK: "false"
+      HSF_ML_V4_SHADOW_ENABLED: ${{ vars.HSF_ML_V4_SHADOW_ENABLED }}
+      HSF_ML_V4_SHADOW_DISABLED: ${{ vars.HSF_ML_V4_SHADOW_DISABLED }}
     steps:
       - uses: actions/checkout@v7
         with:

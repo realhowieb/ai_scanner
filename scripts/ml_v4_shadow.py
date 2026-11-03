@@ -16,6 +16,11 @@ older than 180 days.
 Writes only ml_shadow_predictions. Never changes AI Confidence, PreBreakout,
 alerts, the registry or any model. ``--count`` prints how many models need
 scoring (the workflow skips installing the ML libraries when it is 0).
+
+Switches (GitHub repository variables in the workflow; unset = on):
+  HSF_ML_V4_SHADOW_ENABLED=0     stop all shadow scoring
+  HSF_ML_V4_SHADOW_DISABLED=...  comma list of model versions, ids or providers
+                                 (e.g. "catboost" or "ml-v4-lightgbm-...") to skip
 """
 from __future__ import annotations
 
@@ -39,12 +44,27 @@ def _log(msg: str) -> None:
     print(f"[ml-v4-shadow] {msg}", flush=True)
 
 
+def shadow_enabled() -> bool:
+    return os.environ.get("HSF_ML_V4_SHADOW_ENABLED", "1").strip() != "0"
+
+
+def disabled_keys() -> set:
+    return {k.strip().lower() for k in os.environ.get("HSF_ML_V4_SHADOW_DISABLED", "").split(",") if k.strip()}
+
+
 def scored_models() -> list:
+    """Shadow + champion models, minus anything switched off."""
     from db import ml_model_registry as R
 
+    if not shadow_enabled():
+        return []
+    off = disabled_keys()
     out = []
     for status in SCORED_STATUSES:
-        out.extend(m for m in R.list_models(status=status) if m.get("kind", "model") == "model")
+        for m in R.list_models(status=status):
+            keys = {str(m.get("id")), str(m.get("model_version", "")).lower(), str(m.get("provider", "")).lower()}
+            if m.get("kind", "model") == "model" and not (keys & off):
+                out.append(m)
     return out
 
 
@@ -108,7 +128,8 @@ def main(argv=None) -> int:
         print(len(models))
         return 0
     if not models:
-        _log("no shadow or champion models in the registry; nothing to score")
+        _log("shadow scoring is switched off (HSF_ML_V4_SHADOW_ENABLED=0)" if not shadow_enabled()
+             else "no shadow or champion models to score (registry empty or all switched off)")
         return 0
 
     from analytics import ml_v3_audit as A

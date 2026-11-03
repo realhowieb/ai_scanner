@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import time
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
@@ -22,7 +23,7 @@ import numpy as np
 
 from analytics import ml_v4_calibration as C
 
-GATES_VERSION = "hsf-ml-v4-gates-1"
+GATES_VERSION = "hsf-ml-v4-gates-2"
 GATES: Dict[str, Any] = {
     "min_labeled_rows": 200,        # matured forward shadow predictions
     "min_entry_days": 20,           # distinct trading days among them
@@ -30,6 +31,9 @@ GATES: Dict[str, Any] = {
     "max_brier_vs_served": 0.0,      # shadow Brier - AI Confidence Brier (lower is better)
     "max_ece": 0.10,                 # calibration error of the probability it would serve
     "min_served_overlap": 100,       # rows with AI Confidence as served, for the comparison
+    "min_walk_forward_folds": 3,     # stable across several chronological periods ...
+    "min_worst_fold_auc": 0.5,       # ... with no fold worse than chance
+    "max_scoring_ms_p95": 100.0,     # per-prediction scoring time (batch time / rows), 95th percentile
 }
 
 
@@ -70,8 +74,10 @@ def score(model: Mapping[str, Any], estimator: Any, rows: Sequence[Any], *, scor
     """One prediction per audit row for one registry model (``estimator`` has ``predict``)."""
     if not rows:
         return []
+    t0 = time.perf_counter()
     raw = np.asarray(estimator.predict(list(rows)), dtype=float)
     cal = served_probability(model, raw)
+    per_row_ms = (time.perf_counter() - t0) * 1000.0 / len(rows)
     has_cal = isinstance(model.get("calibration"), Mapping) and bool(model["calibration"].get("method"))
     out = []
     for r, a, b in zip(rows, raw, cal):
@@ -82,6 +88,7 @@ def score(model: Mapping[str, Any], estimator: Any, rows: Sequence[Any], *, scor
             "horizon_days": int(model["horizon_days"]), "raw_probability": _r(a, 6),
             "calibrated_probability": _r(b, 6) if has_cal else None,
             "feature_schema_version": model.get("feature_schema_version"), "scored_at": scored_at,
+            "scoring_ms": _r(per_row_ms, 4),
         })
     return out
 
@@ -112,6 +119,8 @@ def summarize_model(preds: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "last_scored_at": max((str(p["scored_at"]) for p in preds), default=None),
         "mean_probability": _r(np.mean([_prob(p) for p in preds if _prob(p) is not None])) if preds else None,
     }
+    ms = [float(p["scoring_ms"]) for p in preds if p.get("scoring_ms") is not None]
+    out["scoring_ms_p95"] = _r(np.percentile(ms, 95), 4) if ms else None
     if not labeled:
         out["note"] = "no matured shadow predictions yet"
         return out
@@ -185,6 +194,14 @@ def evaluate_gates(model: Mapping[str, Any], summary: Mapping[str, Any],
           b is not None and b <= g["max_brier_vs_served"], "same matured rows")
     e = summary.get("ece")
     check("calibration_ece", e, f"<= {g['max_ece']}", e is not None and e <= g["max_ece"])
+    fa = metrics.get("fold_auc") or {}
+    check("walk_forward_folds", fa.get("folds"), f">= {g['min_walk_forward_folds']}",
+          (fa.get("folds") or 0) >= g["min_walk_forward_folds"], "chronological evaluation periods")
+    check("worst_fold_auc", fa.get("worst"), f">= {g['min_worst_fold_auc']}",
+          fa.get("worst") is not None and fa["worst"] >= g["min_worst_fold_auc"], "no period worse than chance")
+    lat = summary.get("scoring_ms_p95")
+    check("scoring_latency_p95_ms", lat, f"<= {g['max_scoring_ms_p95']}",
+          lat is not None and lat <= g["max_scoring_ms_p95"], "per prediction, in the shadow job")
     return {"gates_version": GATES_VERSION, "passed": all(c["passed"] for c in checks), "checks": checks,
             "thresholds": g}
 

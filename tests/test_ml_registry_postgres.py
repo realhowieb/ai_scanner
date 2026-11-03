@@ -180,7 +180,8 @@ class ShadowPredictionsPostgresTest(unittest.TestCase):
         return {"model_id": model_id, "model_version": f"v{model_id}", "observation_id": oid, "ticker": "AAA",
                 "entry_day": "2026-11-03", "observed_at": "2026-11-03T15:00:00+00:00",
                 "target_label": "F_clean_path_5d", "horizon_days": 5, "raw_probability": p,
-                "calibrated_probability": None, "feature_schema_version": "fs1", "scored_at": scored_at}
+                "calibrated_probability": None, "feature_schema_version": "fs1", "scored_at": scored_at,
+                "scoring_ms": 0.3}
 
     def test_reads_before_table_exists(self):
         import datetime as dt
@@ -218,3 +219,44 @@ class ShadowPredictionsPostgresTest(unittest.TestCase):
         conn.close()
         rows = self.D.predictions([1], since=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
         self.assertEqual(rows[0]["ai_confidence"], 62.5)
+
+
+@unittest.skipUnless(URL and DRIVER, "set HSF_TEST_BILLING_PG_URL to a throwaway Postgres")
+class ReadinessAuditPostgresTest(unittest.TestCase):
+    def setUp(self):
+        self.schema = "hsf_ml_audit_test_" + uuid.uuid4().hex
+        conn = _connect("public")
+        conn.autocommit = True
+        conn.cursor().execute(f'CREATE SCHEMA "{self.schema}"')
+        conn.close()
+        self.addCleanup(self._drop)
+        os.environ["AI_SCANNER_SCHEMA_ONCE"] = "0"
+        self.addCleanup(lambda: os.environ.pop("AI_SCANNER_SCHEMA_ONCE", None))
+
+    def _drop(self):
+        conn = _connect("public")
+        conn.autocommit = True
+        conn.cursor().execute(f'DROP SCHEMA IF EXISTS "{self.schema}" CASCADE')
+        conn.close()
+
+    def test_reports_missing_tables_without_creating_them_then_counts(self):
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import ml_v4_readiness_audit as audit
+
+        from db import ml_model_registry as R
+
+        conn = _connect(self.schema)
+        empty = audit.collect(conn)
+        self.assertEqual(set(empty["tables"].values()), {False})
+        self.assertNotIn("registry", empty)
+        R.set_connection_factory(lambda: _connect(self.schema))
+        self.addCleanup(lambda: R.set_connection_factory(None))
+        R.register_model(_manifest(1), actor="ci")
+        conn.rollback()
+        out = audit.collect(conn)
+        conn.close()
+        self.assertEqual(out["registry"], {"by_status": {"candidate": 1}, "champions": [], "events": 1})
+        self.assertTrue(out["tables"]["ml_models"])
