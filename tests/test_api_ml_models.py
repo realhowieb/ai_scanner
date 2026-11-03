@@ -116,12 +116,21 @@ class MlModelsApiTests(ApiTestCase):
         self.models = {1: _model(1)}
         self.assertEqual(self.client.get("/v1/admin/ml/shadow", headers=self.boss).json()["models"], [])
 
+    def test_monitoring(self):
+        r = self.client.get("/v1/admin/ml/monitoring", headers=self.boss)
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertEqual([m["model_id"] for m in out["models"]], [2])
+        self.assertIn("feature_schema", [c["check"] for c in out["models"][0]["checks"]])
+        pro = self.auth(self.login().json()["access_token"])
+        self.assertEqual(self.client.get("/v1/admin/ml/monitoring", headers=pro).status_code, 403)
+
     def test_api_never_imports_training_libraries(self):
         import subprocess
         import sys
 
         code = ("import sys; import api.routes.ml_models, analytics.ml_v4_shadow, db.ml_model_registry, "
-                "db.ml_shadow_predictions; "
+                "db.ml_shadow_predictions, analytics.ml_v4_monitoring, analytics.ml_v4_providers; "
                 "print(','.join(m for m in ('lightgbm','catboost','xgboost','sklearn') if m in sys.modules))")
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(out.stdout.strip(), "")

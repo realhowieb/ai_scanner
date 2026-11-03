@@ -3,6 +3,7 @@ the shadow script. No database, no network, no training libraries."""
 import datetime as dt
 import random
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -16,12 +17,15 @@ from research_fixtures import opp, scan  # noqa: E402
 
 from analytics import market_calendar as mc  # noqa: E402
 from analytics import ml_v3_audit as A  # noqa: E402
+from analytics import ml_v4_monitoring as M  # noqa: E402
+from analytics import ml_v4_providers as P  # noqa: E402
 from analytics import ml_v4_shadow as S  # noqa: E402
 from analytics import research_dataset as rd  # noqa: E402
 
 UTC = dt.timezone.utc
 MODEL = {"id": 7, "model_version": "ml-v4-xgboost-production-f5d-aaaaaaaaaaaa", "target_label": "F_clean_path_5d",
-         "horizon_days": 5, "feature_schema_version": "fs1", "status": "shadow", "calibration": None,
+         "horizon_days": 5, "feature_schema_version": P.feature_schema_version(P.FEATURE_SETS["production"]),
+         "feature_set": "production", "status": "shadow", "calibration": None,
          "artifact_uri": "github-release://ml-v4-models-1/x.joblib", "artifact_sha256": "a" * 64}
 
 
@@ -158,6 +162,7 @@ class ShadowScriptTest(unittest.TestCase):
         p("db.ml_shadow_predictions.fill_labels",
           side_effect=lambda label, h, labels: self.filled.extend(labels) or len(labels)).start()
         p("db.ml_shadow_predictions.prune", return_value=0).start()
+        p("db.ml_shadow_predictions.predictions", side_effect=lambda ids, since: list(self.inserted)).start()
         self.addCleanup(mock.patch.stopall)
         self.start = start
 
@@ -172,6 +177,21 @@ class ShadowScriptTest(unittest.TestCase):
         self.assertTrue(all(p["observed_at"] >= self.start for p in self.inserted))
         expect = {r.observation_id for r, _ in A.eligible(self.rows, 5, "F_clean_path_5d")}
         self.assertEqual({oid for oid, _ in self.filled}, expect)
+
+    def test_feature_schema_change_refuses_to_score(self):
+        with mock.patch.object(self.script, "scored_models",
+                               return_value=[{**MODEL, "feature_schema_version": "research-v0/old"}]):
+            self.assertEqual(self.script.main([]), 1)
+        self.assertEqual(self.inserted, [])
+
+    def test_step_summary_lists_monitoring(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "summary.md"
+            with mock.patch.dict("os.environ", {"GITHUB_STEP_SUMMARY": str(out)}):
+                self.assertEqual(self.script.main([]), 0)
+            text = out.read_text()
+        self.assertIn("ML v4 shadow scoring", text)
+        self.assertIn("scoring_fresh", text)
 
     def test_broken_model_is_reported_not_fatal(self):
         with mock.patch.object(self.script, "load_estimator", side_effect=ValueError("sha256 mismatch")):
@@ -203,3 +223,69 @@ class RegisterEvaluationTest(unittest.TestCase):
         self.assertEqual(R.evaluation_for(report, {**man, "dataset_version": "other"}), (None, None))
         self.assertEqual(R.evaluation_for(report, {**man, "provider": "catboost"}), (None, None))
         self.assertEqual(R.evaluation_for(None, man), (None, None))
+
+
+NOW = dt.datetime(2026, 12, 10, 23, 0, tzinfo=UTC)  # a Thursday evening
+
+
+def _series(n, *, start=dt.date(2026, 9, 1), shift=0.0, label_from=None, seed=4):
+    rng = np.random.default_rng(seed)
+    out, d = [], start
+    while len(out) < n:
+        if mc.is_trading_day(d):
+            for _ in range(5):
+                y = int(rng.random() < 0.4)
+                p = float(np.clip(0.35 + 0.15 * y + shift + rng.normal(0, 0.1), 0.01, 0.99))
+                out.append({"observation_id": len(out), "entry_day": d.isoformat(),
+                            "scored_at": f"{d.isoformat()}T21:40:00+00:00", "raw_probability": p,
+                            "calibrated_probability": None, "label": y, "ai_confidence": p * 100})
+        d += dt.timedelta(days=1)
+    return out[:n]
+
+
+class MonitoringTest(unittest.TestCase):
+    def _checks(self, res):
+        return {c["check"]: c for c in res["checks"]}
+
+    def test_waiting_when_new_and_warning_when_stale(self):
+        m = {**MODEL, "status_changed_at": NOW - dt.timedelta(hours=2)}
+        res = M.monitor_model(m, [], now=NOW)
+        self.assertEqual(res["status"], "WAITING")
+        old = {**MODEL, "status_changed_at": dt.datetime(2026, 11, 2, tzinfo=UTC)}
+        self.assertEqual(self._checks(M.monitor_model(old, [], now=NOW))["scoring_fresh"]["status"], "WARNING")
+        preds = _series(40, start=dt.date(2026, 12, 1))  # last scored Dec 8 or so
+        c = self._checks(M.monitor_model(old, preds, now=dt.datetime(2026, 12, 21, 23, 0, tzinfo=UTC)))
+        self.assertEqual(c["scoring_fresh"]["status"], "WARNING")
+
+    def test_overdue_labels_and_schema_mismatch(self):
+        preds = _series(400, start=dt.date(2026, 9, 1))
+        preds[0] = {**preds[0], "label": None}
+        res = M.monitor_model(MODEL, preds, now=NOW, current_feature_schema="research-v9/other")
+        c = self._checks(res)
+        self.assertEqual((c["labels_filling"]["status"], c["labels_filling"]["value"]), ("WARNING", 1))
+        self.assertEqual(c["feature_schema"]["status"], "WARNING")
+        self.assertEqual(res["status"], "WARNING")
+
+    def test_drift_detected_and_calm_series_ok(self):
+        base = _series(300, start=dt.date(2026, 9, 1))
+        recent = [{**p, "observation_id": 10000 + i, "scored_at": (NOW - dt.timedelta(days=2)).isoformat()}
+                  for i, p in enumerate(_series(150, start=dt.date(2026, 11, 20), seed=9))]
+        calm = self._checks(M.monitor_model(MODEL, base + recent, now=NOW))
+        self.assertIn(calm["probability_drift"]["status"], ("OK", "WATCH"))  # sampling noise, never a warning
+        shifted = [{**p, "raw_probability": min(0.99, p["raw_probability"] + 0.3)} for p in recent]
+        drift = self._checks(M.monitor_model(MODEL, base + shifted, now=NOW))
+        self.assertEqual(drift["probability_drift"]["status"], "WARNING")
+        self.assertIn(drift["calibration_recent"]["status"], ("WATCH", "WARNING"))
+
+    def test_psi(self):
+        rng = np.random.default_rng(1)
+        a = rng.normal(0.4, 0.1, 2000)
+        self.assertLess(M.psi(a, rng.normal(0.4, 0.1, 2000)), 0.05)
+        self.assertGreater(M.psi(a, rng.normal(0.6, 0.1, 2000)), 0.25)
+        self.assertIsNone(M.psi([], [0.1]))
+        self.assertEqual(M.psi([0.2] * 10, [0.3] * 10), 0.0)
+
+    def test_monitor_rolls_up_worst_status(self):
+        res = M.monitor([{**MODEL, "status_changed_at": NOW}], {}, now=NOW)
+        self.assertEqual(res["status"], "WAITING")
+        self.assertEqual(res["monitoring_version"], M.MONITORING_VERSION)

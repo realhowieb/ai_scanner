@@ -112,8 +112,12 @@ def main(argv=None) -> int:
         return 0
 
     from analytics import ml_v3_audit as A
+    from analytics import ml_v4_monitoring as M
+    from analytics import ml_v4_providers as P
     from analytics import ml_v4_shadow as S
     from db import ml_shadow_predictions as D
+
+    schemas = {name: P.feature_schema_version(fs) for name, fs in P.FEATURE_SETS.items()}
 
     rows = recent_rows(args.lookback_days)
     now = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -122,6 +126,12 @@ def main(argv=None) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         for m in models:
             targets.add((m["target_label"], int(m["horizon_days"])))
+            if m.get("feature_schema_version") != schemas.get(str(m.get("feature_set"))):
+                # Features changed since training: scores would be silently wrong, so refuse.
+                failures.append({"model_version": m["model_version"], "error": "feature schema changed since training"})
+                _log(f"SKIPPED {m['model_version']}: feature schema {m.get('feature_schema_version')} != "
+                     f"{schemas.get(str(m.get('feature_set')))}")
+                continue
             start = shadow_start(int(m["id"]))
             todo = S.forward_rows(rows, start)
             if not todo:
@@ -145,10 +155,35 @@ def main(argv=None) -> int:
         matured = [(r.observation_id, y) for r, y in A.eligible([by_id[i] for i in waiting if i in by_id], h, label)]
         filled += D.fill_labels(label, h, matured)
     pruned = D.prune()
+    now_dt = dt.datetime.now(dt.timezone.utc)
+    preds = D.predictions([int(m["id"]) for m in models], since=now_dt - dt.timedelta(days=D.RETENTION_DAYS))
+    by_model: dict = {}
+    for p in preds:
+        by_model.setdefault(int(p["model_id"]), []).append(p)
+    health = M.monitor(models, by_model, now=now_dt, feature_schemas=schemas)
     summary = {"models": len(models), "inserted": inserted, "labels_filled": filled, "pruned": pruned,
-               "failures": failures}
+               "failures": failures, "monitoring_status": health["status"]}
     _log(json.dumps(summary))
+    write_step_summary(summary, health)
     return 1 if failures else 0
+
+
+def write_step_summary(summary: dict, health: dict) -> None:
+    """Markdown for the GitHub run page (no-op outside Actions)."""
+    path = os.getenv("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    lines = ["# ML v4 shadow scoring", "",
+             f"Models {summary['models']} · new predictions {summary['inserted']} · labels filled "
+             f"{summary['labels_filled']} · pruned {summary['pruned']} · monitoring **{health['status']}**", "",
+             "| Model | Status | Check | Value | Detail |", "|---|---|---|---|---|"]
+    for m in health["models"]:
+        for c in m["checks"]:
+            lines.append(f"| {m['model_version']} | {m['status']} | {c['check']} | {c['value']} | {c['detail']} |")
+    for f in summary["failures"]:
+        lines.append(f"\n**Failed:** {f['model_version']}: {f['error']}")
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":

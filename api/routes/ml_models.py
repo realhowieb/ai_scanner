@@ -143,6 +143,17 @@ def register(app: FastAPI) -> None:
         res = _call(lambda: R.rollback(body.target_label, body.horizon_days, actor=_user(a), reason=body.reason))
         return json_safe({**res, "note": "Registry only: AI Confidence and alerts are unchanged."})
 
+    @get("/v1/admin/ml/monitoring", "ML v4 monitoring: shadow scoring freshness, labels, drift, calibration")
+    def ml_monitoring(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from analytics import ml_v4_monitoring as M
+        from analytics import ml_v4_providers as P
+
+        models = [m for st in ("shadow", "champion") for m in _call(lambda st=st: R.list_models(status=st))]
+        now = dt.datetime.now(dt.timezone.utc)
+        sh = _call(lambda: _shadow(models, 180)) if models else {"by_model": {}}
+        schemas = {name: P.feature_schema_version(fs) for name, fs in P.FEATURE_SETS.items()}
+        return json_safe(M.monitor(models, sh["by_model"], now=now, feature_schemas=schemas))
+
     @get("/v1/admin/ml/shadow", "Forward shadow results for shadow and champion models")
     def ml_shadow(target_label: Optional[str] = Query(None, pattern=_LABEL),
                   horizon_days: Optional[int] = Query(None, ge=1, le=5), days: int = Query(30, ge=1, le=180),

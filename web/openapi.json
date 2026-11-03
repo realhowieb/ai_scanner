@@ -21519,6 +21519,48 @@
     "x-internal": true
    }
   },
+  "/v1/admin/ml/monitoring": {
+   "get": {
+    "operationId": "ml_monitoring_v1_admin_ml_monitoring_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Monitoring V1 Admin Ml Monitoring Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] ML v4 monitoring: shadow scoring freshness, labels, drift, calibration",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
   "/v1/admin/ml/rollback": {
    "post": {
     "operationId": "ml_rollback_v1_admin_ml_rollback_post",
