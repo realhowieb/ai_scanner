@@ -34,6 +34,7 @@ import numpy as np
 
 from analytics import ml_v3_audit as A
 from analytics import ml_v4_calibration as C
+from analytics import ml_v4_ensemble as EN
 from analytics import ml_v4_providers as P
 
 EVALUATION_VERSION = "hsf-ml-v4-eval-1"
@@ -98,6 +99,15 @@ def default_models(*, providers: Sequence[str] = P.PROVIDERS, feature_sets: Sequ
         for p in providers:
             models[f"{p}_{fs}"] = (lambda p=p, fs=fs: P.ProviderModel(p, fs, params.get(p)))
     return models
+
+
+def default_ensembles(*, providers: Sequence[str] = P.PROVIDERS,
+                      feature_sets: Sequence[str] = P.DEFAULT_FEATURE_SETS,
+                      methods: Sequence[str] = EN.METHODS) -> Dict[str, Tuple[str, List[str]]]:
+    """One ensemble per method x feature set over that feature set's providers."""
+    if len(providers) < 2:
+        return {}
+    return {f"ensemble_{m}_{fs}": (m, [f"{p}_{fs}" for p in providers]) for fs in feature_sets for m in methods}
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -215,8 +225,10 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
              target: P.Target = P.PRIMARY_TARGET, fold_kw: Optional[Mapping[str, Any]] = None,
              holdout_kw: Optional[Mapping[str, Any]] = None, cost_bps: float = DEFAULT_COST_BPS,
              regime_by_day: Optional[Mapping[_dt.date, Mapping[str, Any]]] = None,
-             reference: Optional[str] = None, detail: bool = True) -> Dict[str, Any]:
-    """Walk-forward + holdout evaluation of ``models`` on the common scorable sample of ``data``."""
+             reference: Optional[str] = None, detail: bool = True,
+             ensembles: Optional[Mapping[str, Tuple[str, Sequence[str]]]] = None) -> Dict[str, Any]:
+    """Walk-forward + holdout evaluation of ``models`` (and ``ensembles`` of them, as
+    name -> (method, member names)) on the common scorable sample of ``data``."""
     h = target.horizon
     nb = None if detail else 0  # compact runs skip bootstrap CIs
     fk = dict(FOLD_KW if fold_kw is None else fold_kw)
@@ -248,23 +260,22 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
     by_id = {r.observation_id: (r, y) for r, y in common}
     pooled_ids: Optional[List[int]] = None
     oof: Dict[str, Dict[str, Any]] = {}
+    raw_by_model: Dict[str, Dict[str, Any]] = {}  # per-fold raw predictions, reused by ensembles
 
-    for name, factory in models.items():
+    def finish(name: str, fold_preds, holdout_pred, *, calibrate: bool, extra: Optional[Dict[str, Any]] = None):
+        """Calibration (earlier folds only), pooled metrics, breakdowns and holdout for one model."""
+        nonlocal pooled_ids
         chunks: List[Tuple[List[int], List[float]]] = []
         rec = {"y": [], "raw": [], "cal": [], "ids": [], "days": [], "fold": []}
         fold_rows, cal_meta = [], []
-        for f in folds:
-            tr = [by_id[i] for i in f.train_ids]
-            va = [by_id[i] for i in f.val_ids]
-            m = factory().fit([r for r, _ in tr], np.array([y for _, y in tr], dtype=int))
-            raw = np.asarray(m.predict([r for r, _ in va]), dtype=float)
-            yva = np.array([y for _, y in va], dtype=int)
-            cal = C.choose_and_fit(chunks) if getattr(m, "kind", "") != "served_probability" else None
+        for fold_no, va, yva, raw in fold_preds:
+            cal = C.choose_and_fit(chunks) if calibrate else None
             calp = C.apply(cal, raw) if cal else np.full(len(raw), np.nan)
-            cal_meta.append({"fold": f.fold, "method": cal["method"] if cal else None,
-                             "selection": cal["selection"]["rule"] if cal else "not fitted (needs earlier folds)"})
-            fold_rows.append({"fold": f.fold, "n": len(va), "roc_auc": _r(_auc(yva, raw)),
-                              "brier_raw": _r(C.brier(yva, raw)),
+            cal_meta.append({"fold": fold_no, "method": cal["method"] if cal else None,
+                             "selection": cal["selection"]["rule"] if cal else (
+                                 "not fitted (needs earlier folds)" if calibrate else "never recalibrated (as served)")})
+            fold_rows.append({"fold": fold_no, "n": len(va), "roc_auc": _r(_auc(yva, raw)),
+                              "brier_raw": _r(C.brier(yva, raw)) if len(va) else None,
                               "brier_calibrated": _r(C.brier(yva, calp)) if cal else None})
             chunks.append((yva.tolist(), raw.tolist()))
             for (r, y), a, b in zip(va, raw, calp):
@@ -273,7 +284,7 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
                 rec["cal"].append(float(b))
                 rec["ids"].append(r.observation_id)
                 rec["days"].append(r.entry_day.isoformat())
-                rec["fold"].append(f.fold)
+                rec["fold"].append(fold_no)
         if pooled_ids is None:
             pooled_ids = rec["ids"]
         elif rec["ids"] != pooled_ids:  # identical samples are the point of the comparison
@@ -285,6 +296,8 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
         has_cal = ~np.isnan(calp)
         mres: Dict[str, Any] = {"folds": fold_rows, "calibration_per_fold": cal_meta,
                                 "fold_auc": A.summarize([fr["roc_auc"] for fr in fold_rows])}
+        if extra:
+            mres.update(extra)
         mres["walk_forward_raw"] = _metrics_block(y, raw, rec["days"], nb)
         if has_cal.any():
             d = [rec["days"][i] for i in np.flatnonzero(has_cal)]
@@ -314,23 +327,80 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
                 mres["by_regime"] = _group_metrics(
                     y, score, [(regime_by_day.get(r.entry_day) or {}).get("trend") for r in rows])
         # Final holdout: evaluated once.
-        if hold.get("valid"):
-            kept, _, _ = A.purge_train([r for r, _ in wf], hstart, h, fk.get("embargo", 1))
-            tr = [by_id[r.observation_id] for r in kept]
-            ho = [by_id[i] for i in hold["ids"]]
-            ytr = np.array([y for _, y in tr], dtype=int)
-            if len(tr) and 0 < ytr.sum() < len(ytr):
-                m = factory().fit([r for r, _ in tr], ytr)
-                hraw = np.asarray(m.predict([r for r, _ in ho]), dtype=float)
-                yh = np.array([y for _, y in ho], dtype=int)
-                hd = [r.entry_day.isoformat() for r, _ in ho]
-                cal = C.choose_and_fit(chunks) if getattr(m, "kind", "") != "served_probability" else None
-                mres["holdout"] = {"train_n": len(tr), "raw": _metrics_block(yh, hraw, hd, nb),
-                                   "calibrator": ({k: cal[k] for k in ("method", "n", "selection")} if cal else None)}
-                if cal:
-                    mres["holdout"]["calibrated"] = _metrics_block(yh, C.apply(cal, hraw), hd, nb)
-                oof[name]["holdout"] = {"y": yh.tolist(), "raw": hraw.tolist(), "days": hd}
+        if holdout_pred is not None:
+            train_n, yh, hraw, hd = holdout_pred
+            cal = C.choose_and_fit(chunks) if calibrate else None
+            mres["holdout"] = {"train_n": train_n, "raw": _metrics_block(yh, hraw, hd, nb),
+                               "calibrator": ({k: cal[k] for k in ("method", "n", "selection")} if cal else None)}
+            if cal:
+                mres["holdout"]["calibrated"] = _metrics_block(yh, C.apply(cal, hraw), hd, nb)
+            oof[name]["holdout"] = {"y": yh.tolist(), "raw": hraw.tolist(), "days": hd}
         out["models"][name] = mres
+
+    ho_rows = [by_id[i] for i in hold["ids"]] if hold.get("valid") else []
+    ho_train = []
+    if hold.get("valid"):
+        kept, _, _ = A.purge_train([r for r, _ in wf], hstart, h, fk.get("embargo", 1))
+        ho_train = [by_id[r.observation_id] for r in kept]
+    for name, factory in models.items():
+        fold_preds = []
+        for f in folds:
+            tr = [by_id[i] for i in f.train_ids]
+            va = [by_id[i] for i in f.val_ids]
+            m = factory().fit([r for r, _ in tr], np.array([y for _, y in tr], dtype=int))
+            raw = np.asarray(m.predict([r for r, _ in va]), dtype=float)
+            fold_preds.append((f.fold, va, np.array([y for _, y in va], dtype=int), raw))
+        holdout_pred = None
+        ytr = np.array([y for _, y in ho_train], dtype=int)
+        if ho_rows and len(ho_train) and 0 < ytr.sum() < len(ytr):
+            m = factory().fit([r for r, _ in ho_train], ytr)
+            holdout_pred = (len(ho_train), np.array([y for _, y in ho_rows], dtype=int),
+                            np.asarray(m.predict([r for r, _ in ho_rows]), dtype=float),
+                            [r.entry_day.isoformat() for r, _ in ho_rows])
+        calibrate = getattr(probes[name], "kind", "") != "served_probability"
+        raw_by_model[name] = {"folds": fold_preds, "holdout": holdout_pred}
+        finish(name, fold_preds, holdout_pred, calibrate=calibrate)
+
+    # Ensembles: member predictions per fold, combined with weights fitted on EARLIER folds only.
+    for ens_name, (method, members) in (ensembles or {}).items():
+        members = [m for m in members if m in raw_by_model]
+        if len(members) < 2:
+            continue
+        fold_preds, specs = [], []
+        for k, (fold_no, va, yva, _) in enumerate(raw_by_model[members[0]]["folds"]):
+            y_e = np.concatenate([raw_by_model[members[0]]["folds"][j][2] for j in range(k)]) if k else np.zeros(0)
+            p_e = {m: (np.concatenate([raw_by_model[m]["folds"][j][3] for j in range(k)]) if k else np.zeros(0))
+                   for m in members}
+            spec = EN.fit(method, members, y_e, p_e)
+            p_now = {m: raw_by_model[m]["folds"][k][3] for m in members}
+            fold_preds.append((fold_no, va, yva, EN.predict(spec, p_now) if len(va) else np.zeros(0)))
+            specs.append({"fold": fold_no, **{k2: v for k2, v in spec.items() if k2 != "members"}})
+        all_y = np.concatenate([fp[2] for fp in raw_by_model[members[0]]["folds"]]) if fold_preds else np.zeros(0)
+        all_p = {m: (np.concatenate([fp[3] for fp in raw_by_model[m]["folds"]]) if fold_preds else np.zeros(0))
+                 for m in members}
+        holdout_pred, holdout_spec = None, None
+        if all(raw_by_model[m]["holdout"] is not None for m in members):
+            holdout_spec = EN.fit(method, members, all_y, all_p)
+            h0 = raw_by_model[members[0]]["holdout"]
+            hp = EN.predict(holdout_spec, {m: raw_by_model[m]["holdout"][2] for m in members})
+            holdout_pred = (h0[0], h0[1], hp, h0[3])
+        extra = {"ensemble": {"method": method, "members": members, "per_fold": specs,
+                              "holdout_weights": holdout_spec,
+                              "disagreement": EN.disagreement(members, all_p) if len(all_y) else {"rows": 0}}}
+        finish(ens_name, fold_preds, holdout_pred, calibrate=True, extra=extra)
+        # Compare with the best single member (chosen on the same pooled out-of-fold log loss,
+        # which flatters the member: a conservative bar for the ensemble).
+        if len(all_y) and detail:
+            best = min(members, key=lambda m: EN.log_loss(all_y, all_p[m]))
+            cmp_ = {"best_member": best,
+                    "walk_forward": paired_delta_auc(oof[ens_name]["y"], oof[ens_name]["raw"], oof[best]["raw"],
+                                                     oof[ens_name]["days"]),
+                    "log_loss_ensemble": _r(EN.log_loss(all_y, oof[ens_name]["raw"])),
+                    "log_loss_best_member": _r(EN.log_loss(all_y, all_p[best]))}
+            if "holdout" in oof[ens_name] and "holdout" in oof[best]:
+                hr = oof[ens_name]["holdout"]
+                cmp_["holdout"] = paired_delta_auc(hr["y"], hr["raw"], oof[best]["holdout"]["raw"], hr["days"])
+            out["models"][ens_name]["vs_best_member"] = cmp_
 
     # Paired comparisons on identical rows.
     ref = reference if reference in oof else next((n for n in ("ai_confidence_as_served", "xgboost_production")
@@ -442,6 +512,17 @@ def render_markdown(result: Mapping[str, Any], *, title: str = "ML v4 walk-forwa
             wci, hci = wf.get("ci95"), ho.get("ci95")
             lines.append(f"| {name} | {_f(wf.get('delta'))} | {_ci(wci, ' to ')} | "
                          f"{_f(ho.get('delta'))} | {_ci(hci, ' to ')} |")
+    ens = {n: m["vs_best_member"] for n, m in result["models"].items() if m.get("vs_best_member")}
+    if ens:
+        lines += ["", "## Ensembles vs their best single member (paired, same rows)", "",
+                  "| Ensemble | Best member | AUC delta | 95% CI | Log loss ens. | Log loss member | Holdout delta |",
+                  "|---|---|---|---|---|---|---|"]
+        for name, c in ens.items():
+            wf, ho = c.get("walk_forward") or {}, c.get("holdout") or {}
+            lines.append(f"| {name} | {c['best_member']} | {_f(wf.get('delta'))} | {_ci(wf.get('ci95'), ' to ')} | "
+                         f"{_f(c.get('log_loss_ensemble'))} | {_f(c.get('log_loss_best_member'))} | {_f(ho.get('delta'))} |")
+        lines += ["", "An ensemble is promotable only with a meaningful out-of-sample gain over its best member. "
+                      "Members share data and features, so their agreement is not independent confirmation."]
     lines += ["", f"Returns: entry at the frozen observation price, exit at the horizon close, minus "
                   f"{result['cost_bps_round_trip']:.0f} bps round trip. AUC is not evidence of profitability. "
                   "Probabilities are for the target event above, not a probability of profit.", ""]

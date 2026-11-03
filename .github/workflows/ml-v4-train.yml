@@ -10,6 +10,11 @@ name: ML v4 Train & Evaluate
 #   mode=evaluate (Milestone 3) walk-forward evaluation + calibration of every
 # model on identical rows, a final holdout evaluated once, head-to-head with AI
 # Confidence as served, and secondary targets by horizon. Reports only.
+#   register=true (Milestone 4, mode=train only) is the one step that writes:
+# a separate job uploads the model files to a new GitHub Release
+# (ml-v4-models-<run id>, never overwriting) and inserts one "candidate" row per
+# model into the ML v4 registry tables (ml_models / ml_model_events). It never
+# promotes a model and never touches production AI Confidence or PreBreakout.
 on:
   workflow_dispatch:
     inputs:
@@ -37,6 +42,11 @@ on:
         description: "Round-trip cost in basis points for the returns table (evaluate)"
         required: true
         default: "20"
+      register:
+        description: "mode=train only: upload model files to a GitHub Release and register them as candidates (database write)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -94,3 +104,49 @@ jobs:
           path: ${{ runner.temp }}/ml_v4
           retention-days: 30
           if-no-files-found: warn
+
+  register:
+    # Opt-in database write: candidates only. Needs contents: write for the Release.
+    needs: train
+    if: ${{ inputs.mode == 'train' && inputs.register && needs.train.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-core.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - uses: actions/download-artifact@v7
+        with:
+          name: ml-v4-train-${{ github.run_id }}
+          path: ${{ runner.temp }}/ml_v4
+      - name: Check files (dry run)
+        run: python scripts/ml_v4_register.py --dir "$RUNNER_TEMP/ml_v4" --dry-run
+      - name: Upload model files to a new GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ml-v4-models-${{ github.run_id }}
+        run: |
+          cd "$RUNNER_TEMP/ml_v4"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "ML v4 candidate models (run $GITHUB_RUN_ID)" \
+            --notes "Candidate models from ML v4 training run $GITHUB_RUN_ID. Not used by production scoring." \
+            *.joblib *.json
+      - name: Register candidates
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ML_V4_RELEASE_TAG: ml-v4-models-${{ github.run_id }}
+          ML_V4_ACTOR: ${{ github.actor }}
+        run: python scripts/ml_v4_register.py --dir "$RUNNER_TEMP/ml_v4"
