@@ -335,6 +335,9 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
             if cal:
                 mres["holdout"]["calibrated"] = _metrics_block(yh, C.apply(cal, hraw), hd, nb)
             oof[name]["holdout"] = {"y": yh.tolist(), "raw": hraw.tolist(), "days": hd}
+        # What serving would use: the same chronological rule, fitted on every walk-forward fold.
+        if calibrate:
+            mres["serving_calibrator"] = C.choose_and_fit(chunks)
         out["models"][name] = mres
 
     ho_rows = [by_id[i] for i in hold["ids"]] if hold.get("valid") else []

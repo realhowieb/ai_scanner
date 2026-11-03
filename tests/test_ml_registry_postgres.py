@@ -151,3 +151,70 @@ class RegistryPostgresTest(unittest.TestCase):
             self.R.rollback("F_clean_path_5d", 5, actor="howard", reason="x")
         with self.assertRaises(L.LifecycleError):
             self.R.rollback("C_excess_gt_0", 1, actor="howard", reason="x")
+
+
+@unittest.skipUnless(URL and DRIVER, "set HSF_TEST_BILLING_PG_URL to a throwaway Postgres")
+class ShadowPredictionsPostgresTest(unittest.TestCase):
+    def setUp(self):
+        from db import ml_shadow_predictions as D
+
+        self.D = D
+        self.schema = "hsf_ml_shadow_test_" + uuid.uuid4().hex
+        conn = _connect("public")
+        conn.autocommit = True
+        conn.cursor().execute(f'CREATE SCHEMA "{self.schema}"')
+        conn.close()
+        self.addCleanup(self._drop)
+        os.environ["AI_SCANNER_SCHEMA_ONCE"] = "0"
+        self.addCleanup(lambda: os.environ.pop("AI_SCANNER_SCHEMA_ONCE", None))
+        D.set_connection_factory(lambda: _connect(self.schema))
+        self.addCleanup(lambda: D.set_connection_factory(None))
+
+    def _drop(self):
+        conn = _connect("public")
+        conn.autocommit = True
+        conn.cursor().execute(f'DROP SCHEMA IF EXISTS "{self.schema}" CASCADE')
+        conn.close()
+
+    def _pred(self, model_id, oid, p=0.4, scored_at="2026-11-03T21:40:00+00:00"):
+        return {"model_id": model_id, "model_version": f"v{model_id}", "observation_id": oid, "ticker": "AAA",
+                "entry_day": "2026-11-03", "observed_at": "2026-11-03T15:00:00+00:00",
+                "target_label": "F_clean_path_5d", "horizon_days": 5, "raw_probability": p,
+                "calibrated_probability": None, "feature_schema_version": "fs1", "scored_at": scored_at}
+
+    def test_reads_before_table_exists(self):
+        import datetime as dt
+
+        self.assertEqual(self.D.predictions([1], since=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)), [])
+        self.assertEqual(self.D.unlabeled("F_clean_path_5d", 5), [])
+
+    def test_insert_is_idempotent_labels_fill_once_and_prune(self):
+        import datetime as dt
+
+        self.assertEqual(self.D.insert_predictions([self._pred(1, 10), self._pred(2, 10), self._pred(1, 11)]), 3)
+        self.assertEqual(self.D.insert_predictions([self._pred(1, 10, p=0.9)]), 0)  # never overwritten
+        self.assertEqual(sorted(self.D.unlabeled("F_clean_path_5d", 5)), [10, 11])
+        self.assertEqual(self.D.fill_labels("F_clean_path_5d", 5, [(10, 1)]), 2)  # both models
+        self.assertEqual(self.D.fill_labels("F_clean_path_5d", 5, [(10, 0)]), 0)  # filled once
+        self.assertEqual(self.D.unlabeled("F_clean_path_5d", 5), [11])
+        since = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        rows = self.D.predictions([1], since=since)  # no signal_outcomes here: served column falls back
+        self.assertEqual([(r["observation_id"], r["label"], r["raw_probability"]) for r in rows],
+                         [(10, 1, 0.4), (11, None, 0.4)])
+        self.assertIsNone(rows[0]["ai_confidence"])
+        self.D.insert_predictions([self._pred(3, 12, scored_at="2026-01-01T00:00:00+00:00")])
+        self.assertEqual(self.D.prune(days=30), 1)
+        self.assertEqual(self.D.predictions([3], since=dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc)), [])
+
+    def test_served_ai_confidence_is_joined(self):
+        import datetime as dt
+
+        self.D.insert_predictions([self._pred(1, 10)])
+        conn = _connect(self.schema)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE signal_outcomes (id BIGINT PRIMARY KEY, ai_confidence DOUBLE PRECISION)")
+        cur.execute("INSERT INTO signal_outcomes VALUES (10, 62.5)")
+        conn.commit()
+        conn.close()
+        rows = self.D.predictions([1], since=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+        self.assertEqual(rows[0]["ai_confidence"], 62.5)

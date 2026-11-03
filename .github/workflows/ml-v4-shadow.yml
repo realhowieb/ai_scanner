@@ -1,0 +1,61 @@
+name: ML v4 Shadow
+
+# Milestone 5. Scores new observations with every ML v4 registry model in
+# "shadow" (and the registry champion), stores the predictions in
+# ml_shadow_predictions, fills labels once outcomes mature and keeps 180 days.
+# Never changes AI Confidence, PreBreakout, alerts, the registry or any model.
+# Until a model is put in shadow it only counts registry rows (about a minute)
+# and skips installing the ML libraries.
+on:
+  schedule:
+    - cron: "40 21 * * 1-5"  # weekdays after the close (21:40 UTC)
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Days of recent observations to look at"
+        required: true
+        default: "21"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-v4-shadow
+  cancel-in-progress: false
+
+jobs:
+  shadow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      AI_SCANNER_SQLITE_FALLBACK: "false"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-core.txt
+            requirements-ml.txt
+            requirements-ml-v4.txt
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Count models to score
+        id: count
+        run: echo "models=$(python scripts/ml_v4_shadow.py --count | tail -n 1)" >> "$GITHUB_OUTPUT"
+      - name: Install ML libraries
+        if: steps.count.outputs.models != '0'
+        run: python -m pip install --prefer-binary -r requirements-ml-v4.txt -c requirements.lock
+      - name: Score (writes ml_shadow_predictions only)
+        if: steps.count.outputs.models != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ML_V4_SHADOW_LOOKBACK_DAYS: ${{ inputs.lookback_days || '21' }}
+        run: python scripts/ml_v4_shadow.py

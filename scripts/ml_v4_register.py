@@ -15,6 +15,11 @@ asks for it. It never changes a model's status beyond ``candidate``, never
 touches ``ai_confidence_models`` / ``prebreakout_models``, and is idempotent:
 re-registering the same model_version returns the existing row unchanged.
 ``--dry-run`` checks the files and prints what would be registered.
+
+``--evaluation <ml_v4_evaluation.json>`` (from ``scripts/ml_v4_evaluate.py`` on
+the same dataset version) stores each model's walk-forward + holdout metrics
+and its serving calibrator on the row, matched by provider + feature set. A
+model needs that evaluation before it can be marked "validated".
 """
 from __future__ import annotations
 
@@ -58,12 +63,36 @@ def load_manifests(folder: Path) -> list:
     return out
 
 
+def evaluation_for(report: dict, manifest: dict):
+    """(metrics, calibration) for one manifest from an evaluation report, or (None, None)."""
+    if not report:
+        return None, None
+    ds = (report.get("dataset") or {}).get("dataset_version")
+    if ds != manifest.get("dataset_version"):
+        return None, None
+    name = f"{manifest.get('provider')}_{manifest.get('feature_set')}"
+    res = ((report.get("primary") or {}).get("models") or {}).get(name)
+    if not res:
+        return None, None
+    h2h = ((report.get("head_to_head_ai_confidence") or {}).get("comparisons") or {}).get(name)
+    metrics = {"evaluation_version": report.get("evaluation_version"), "dataset_version": ds,
+               "dataset_fingerprint": (report.get("dataset") or {}).get("dataset_fingerprint"),
+               "evaluated_as": name, "evaluated_at": report.get("generated_at"),
+               "matched_by": "provider + feature set + dataset version",
+               **{k: res.get(k) for k in ("fold_auc", "walk_forward_raw", "walk_forward_calibrated", "holdout")
+                  if k in res},
+               "vs_ai_confidence_as_served": h2h,
+               "calibration_note": "serving calibrator fitted on every walk-forward fold's out-of-fold predictions"}
+    return metrics, res.get("serving_calibrator")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dir", required=True, help="folder a training run wrote (models + manifests)")
     ap.add_argument("--release", default=os.getenv("ML_V4_RELEASE_TAG") or None,
                     help="GitHub Release tag the model files were uploaded to")
     ap.add_argument("--actor", default=os.getenv("ML_V4_ACTOR") or os.getenv("GITHUB_ACTOR") or None)
+    ap.add_argument("--evaluation", default=None, help="ml_v4_evaluation.json from the same dataset version")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
 
@@ -76,16 +105,22 @@ def main(argv=None) -> int:
     if not args.dry_run and not args.actor:
         raise SystemExit("--actor is required (who registered these models)")
 
+    report = json.loads(Path(args.evaluation).read_text(encoding="utf-8")) if args.evaluation else None
     results = []
     for man in manifests:
+        metrics, calibration = evaluation_for(report, man)
         uri = f"github-release://{args.release}/{man['artifact_file']}" if args.release else None
         if args.dry_run:
-            results.append({"model_version": man["model_version"], "artifact_uri": uri, "would_register": True})
+            results.append({"model_version": man["model_version"], "artifact_uri": uri, "would_register": True,
+                            "evaluation": bool(metrics)})
             continue
         from db import ml_model_registry as R
 
-        res = R.register_model(man, actor=args.actor, artifact_uri=uri)
-        results.append({"model_version": man["model_version"], "artifact_uri": uri, **res})
+        res = R.register_model(man, actor=args.actor, artifact_uri=uri, metrics=metrics, calibration=calibration)
+        if metrics and not res["created"] and res["status"] in ("candidate", "validated"):
+            R.attach_evaluation(res["id"], metrics=metrics, calibration=calibration, actor=args.actor)
+        results.append({"model_version": man["model_version"], "artifact_uri": uri, "evaluation": bool(metrics),
+                        **res})
     for r in results:
         state = "dry run" if args.dry_run else ("registered" if r.get("created") else f"already {r.get('status')}")
         print(f"{r['model_version']}: {state} ({r['artifact_uri']})")
