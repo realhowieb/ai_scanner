@@ -124,7 +124,7 @@ class PremiumAiApiTests(PaidApiTestCase):
         with mock.patch("api.trading.insights", return_value={"closed": 2}):
             r = self.post("prem@example.com", "/v1/ai/journal-coach")
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json(), {"closed": 2, "min_trades": 5, "text": None})
+        self.assertEqual(r.json(), {"closed": 2, "min_trades": 5, "text": None, "auto": False, "written_at": None})
         self.ask.assert_not_called()
 
     def test_journal_coach_writes_and_caches(self):

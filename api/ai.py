@@ -142,7 +142,10 @@ def ticker_note(username: Optional[str], ticker: str, *, stored_only: bool = Fal
     stored_only returns text None instead of writing one."""
     from api.today import market_runs
 
-    runs = market_runs()
+    try:
+        runs = market_runs()
+    except Exception:   # the saved-note check never blocks writing one
+        runs = []
     latest = int(runs[0]["id"]) if runs else None
     if latest is not None:
         saved = stored(SHARED_USER, "ticker_note", f"{latest}:{ticker}")
