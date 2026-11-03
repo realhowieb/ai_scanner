@@ -13,7 +13,8 @@ name: ML v4 Train & Evaluate
 #   register=true (Milestone 4, mode=train only) is the one step that writes:
 # a separate job uploads the model files to a new GitHub Release
 # (ml-v4-models-<run id>, never overwriting) and inserts one "candidate" row per
-# model into the ML v4 registry tables (ml_models / ml_model_events). It never
+# model into the ML v4 registry tables (ml_models / ml_model_events), with the
+# walk-forward evaluation of the same run stored on each row. It never
 # promotes a model and never touches production AI Confidence or PreBreakout.
 on:
   workflow_dispatch:
@@ -89,9 +90,15 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           MODE: ${{ inputs.mode }}
+          REGISTER: ${{ inputs.register }}
         run: |
           if [ "$MODE" = "train" ]; then
             python scripts/ml_v4_train.py --out "$RUNNER_TEMP/ml_v4"
+            if [ "$REGISTER" = "true" ]; then
+              # Evaluation evidence stored with each candidate (needed before "validated").
+              python scripts/ml_v4_evaluate.py --out "$RUNNER_TEMP/ml_v4/evaluation"
+              cat "$RUNNER_TEMP/ml_v4/evaluation/ml_v4_evaluation.md" >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             python scripts/ml_v4_evaluate.py --out "$RUNNER_TEMP/ml_v4"
             cat "$RUNNER_TEMP/ml_v4/ml_v4_evaluation.md" >> "$GITHUB_STEP_SUMMARY"
@@ -149,4 +156,4 @@ jobs:
           AI_SCANNER_SQLITE_FALLBACK: "false"
           ML_V4_RELEASE_TAG: ml-v4-models-${{ github.run_id }}
           ML_V4_ACTOR: ${{ github.actor }}
-        run: python scripts/ml_v4_register.py --dir "$RUNNER_TEMP/ml_v4"
+        run: python scripts/ml_v4_register.py --dir "$RUNNER_TEMP/ml_v4" --evaluation "$RUNNER_TEMP/ml_v4/evaluation/ml_v4_evaluation.json"

@@ -20,6 +20,7 @@ def register_all(app: FastAPI) -> None:
         history,
         market,
         marketing,
+        ml_models,
         onboarding,
         outcomes,
         public,
@@ -44,6 +45,7 @@ def register_all(app: FastAPI) -> None:
     research.register(app)
     research.register_ml(app)
     admin.register(app)
+    ml_models.register(app)
     onboarding.register(app)
     founding.register(app)
     marketing.register(app)
