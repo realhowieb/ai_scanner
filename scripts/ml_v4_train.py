@@ -83,6 +83,31 @@ def _as_list(value):
     return json.loads(value) if isinstance(value, str) else (value or [])
 
 
+def load_audit_rows(dataset_version: str | None) -> dict:
+    """SELECT only: a finalized dataset version, rebuilt as it stood at its freeze
+    instant, as ML v3 audit rows (signal-day unit)."""
+    from analytics import ml_v3_audit as A
+    from analytics import ml_v3_pipeline as V3
+    from analytics import research_dataset as rd
+    from api.research import load_window
+
+    entry = _pick_version(dataset_version)
+    meta = entry.get("metadata") or {}
+    if isinstance(meta, str):
+        meta = json.loads(meta)
+    members = _as_list(entry.get("observation_ids"))
+    frozen_at = rd.to_dt(entry.get("created_at"))
+    _log(f"dataset {entry['dataset_version']} frozen_at={frozen_at} members={len(members)}")
+    window = load_window(EARLIEST, dt.datetime.now(dt.timezone.utc).date())
+    bca = _benchmark_computed_at([r["id"] for r in window["rows"]])
+    rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
+    rows_asof = V3.as_of(rows, frozen_at)
+    built = rd.build_dataset(rows_asof, window["scans"], filters=meta.get("filters") or {}, members=members)
+    audit_rows = A.build_audit_rows(built["records"], rows_asof, unit="signal_day")
+    _log(f"signal-day rows={len(audit_rows)}")
+    return {"entry": entry, "members": members, "frozen_at": frozen_at, "built": built, "audit_rows": audit_rows}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dataset-version", default=os.getenv("ML_V4_DATASET_VERSION") or None,
@@ -93,10 +118,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     from analytics import ml_v3_audit as A
-    from analytics import ml_v3_pipeline as V3
     from analytics import ml_v4_providers as P
-    from analytics import research_dataset as rd
-    from api.research import load_window
 
     providers = [p.strip() for p in args.providers.split(",") if p.strip()]
     feature_sets = [f.strip() for f in args.feature_sets.split(",") if f.strip()]
@@ -116,21 +138,9 @@ def main(argv=None) -> int:
         raise SystemExit(f"{out} is not empty; ML v4 never overwrites artifacts")
 
     t0 = time.time()
-    entry = _pick_version(args.dataset_version)
-    meta = entry.get("metadata") or {}
-    if isinstance(meta, str):
-        meta = json.loads(meta)
-    members = _as_list(entry.get("observation_ids"))
-    frozen_at = rd.to_dt(entry.get("created_at"))
-    _log(f"dataset {entry['dataset_version']} frozen_at={frozen_at} members={len(members)}")
-
-    window = load_window(EARLIEST, dt.datetime.now(dt.timezone.utc).date())
-    bca = _benchmark_computed_at([r["id"] for r in window["rows"]])
-    rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
-    rows_asof = V3.as_of(rows, frozen_at)
-    built = rd.build_dataset(rows_asof, window["scans"], filters=meta.get("filters") or {}, members=members)
-    audit_rows = A.build_audit_rows(built["records"], rows_asof, unit="signal_day")
-    _log(f"signal-day rows={len(audit_rows)}")
+    loaded = load_audit_rows(args.dataset_version)
+    entry, members, frozen_at, built, audit_rows = (loaded[k] for k in
+                                                    ("entry", "members", "frozen_at", "built", "audit_rows"))
 
     split = P.training_split(audit_rows, P.PRIMARY_TARGET)
     hold = split["holdout"]
