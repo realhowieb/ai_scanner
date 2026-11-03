@@ -2,73 +2,65 @@
 import json
 import unittest
 
-import pytest
-
 from analytics import ml_v4_lifecycle as L
 
 OK = dict(actor="howard", reason="test")
 
 
-def test_happy_path_needs_evidence_and_approval():
-    L.check_transition("candidate", "validated", evidence={"evaluation": {"auc": 0.6}}, **OK)
-    L.check_transition("validated", "shadow", **OK)
-    L.check_transition("shadow", "champion", evidence={"promotion_gates_passed": True}, approved=True, **OK)
-    L.check_transition("champion", "retired", **OK)
+class LifecycleTest(unittest.TestCase):
+    def test_happy_path_needs_evidence_and_approval(self):
+        L.check_transition("candidate", "validated", evidence={"evaluation": {"auc": 0.6}}, **OK)
+        L.check_transition("validated", "shadow", **OK)
+        L.check_transition("shadow", "champion", evidence={"promotion_gates_passed": True}, approved=True, **OK)
+        L.check_transition("champion", "retired", **OK)
 
+    def test_skipping_stages_is_refused(self):
+        for frm, to in [("candidate", "shadow"), ("candidate", "champion"), ("validated", "champion"),
+                        ("champion", "shadow"), ("retired", "candidate"), ("shadow", "validated")]:
+            with self.subTest(frm=frm, to=to), self.assertRaises(L.LifecycleError):
+                L.check_transition(frm, to, evidence={"evaluation": 1, "promotion_gates_passed": True},
+                                   approved=True, was_champion_before=True, **OK)
 
-@pytest.mark.parametrize("frm,to", [("candidate", "shadow"), ("candidate", "champion"), ("validated", "champion"),
-                                    ("champion", "shadow"), ("retired", "candidate"), ("shadow", "validated")])
-def test_skipping_stages_is_refused(frm, to):
-    with pytest.raises(L.LifecycleError):
-        L.check_transition(frm, to, evidence={"evaluation": 1, "promotion_gates_passed": True}, approved=True,
-                           was_champion_before=True, **OK)
+    def test_any_stage_can_be_retired(self):
+        for status in L.STATUSES[:-1]:
+            with self.subTest(status=status):
+                L.check_transition(status, "retired", **OK)
 
+    def test_actor_and_reason_required(self):
+        with self.assertRaisesRegex(L.LifecycleError, "admin"):
+            L.check_transition("validated", "shadow", actor=" ", reason="x")
+        with self.assertRaisesRegex(L.LifecycleError, "reason"):
+            L.check_transition("validated", "shadow", actor="howard", reason=None)
 
-@pytest.mark.parametrize("status", L.STATUSES[:-1])
-def test_any_stage_can_be_retired(status):
-    L.check_transition(status, "retired", **OK)
+    def test_unknown_status(self):
+        with self.assertRaisesRegex(L.LifecycleError, "unknown"):
+            L.check_transition("candidate", "live", **OK)
 
+    def test_validated_needs_evaluation(self):
+        with self.assertRaisesRegex(L.LifecycleError, "evaluation"):
+            L.check_transition("candidate", "validated", **OK)
 
-def test_actor_and_reason_required():
-    with pytest.raises(L.LifecycleError, match="admin"):
-        L.check_transition("validated", "shadow", actor=" ", reason="x")
-    with pytest.raises(L.LifecycleError, match="reason"):
-        L.check_transition("validated", "shadow", actor="howard", reason=None)
+    def test_champion_needs_approval_and_gates(self):
+        with self.assertRaisesRegex(L.LifecycleError, "approval"):
+            L.check_transition("shadow", "champion", evidence={"promotion_gates_passed": True}, **OK)
+        with self.assertRaisesRegex(L.LifecycleError, "promotion-gate"):
+            L.check_transition("shadow", "champion", approved=True, **OK)
 
+    def test_retired_returns_to_champion_only_as_rollback(self):
+        with self.assertRaisesRegex(L.LifecycleError, "rollback"):
+            L.check_transition("retired", "champion", approved=True, **OK)
+        L.check_transition("retired", "champion", approved=True, was_champion_before=True, **OK)
 
-def test_unknown_status():
-    with pytest.raises(L.LifecycleError, match="unknown"):
-        L.check_transition("candidate", "live", **OK)
-
-
-def test_validated_needs_evaluation():
-    with pytest.raises(L.LifecycleError, match="evaluation"):
-        L.check_transition("candidate", "validated", **OK)
-
-
-def test_champion_needs_approval_and_gates():
-    with pytest.raises(L.LifecycleError, match="approval"):
-        L.check_transition("shadow", "champion", evidence={"promotion_gates_passed": True}, **OK)
-    with pytest.raises(L.LifecycleError, match="promotion-gate"):
-        L.check_transition("shadow", "champion", approved=True, **OK)
-
-
-def test_retired_returns_to_champion_only_as_rollback():
-    with pytest.raises(L.LifecycleError, match="rollback"):
-        L.check_transition("retired", "champion", approved=True, **OK)
-    L.check_transition("retired", "champion", approved=True, was_champion_before=True, **OK)
-
-
-def test_rollback_target_picks_latest_retired_former_champion():
-    hist = [
-        {"model_id": 1, "to_status": "champion", "created_at": "2026-11-01T10:00", "status": "retired"},
-        {"model_id": 2, "to_status": "champion", "created_at": "2026-11-02T10:00", "status": "retired"},
-        {"model_id": 3, "to_status": "champion", "created_at": "2026-11-03T10:00", "status": "champion"},
-        {"model_id": 4, "to_status": "shadow", "created_at": "2026-11-03T11:00", "status": "retired"},
-    ]
-    assert L.rollback_target(hist, current_champion_id=3) == 2
-    assert L.rollback_target(hist[:1], current_champion_id=None) == 1
-    assert L.rollback_target(hist[2:], current_champion_id=3) is None
+    def test_rollback_target_picks_latest_retired_former_champion(self):
+        hist = [
+            {"model_id": 1, "to_status": "champion", "created_at": "2026-11-01T10:00", "status": "retired"},
+            {"model_id": 2, "to_status": "champion", "created_at": "2026-11-02T10:00", "status": "retired"},
+            {"model_id": 3, "to_status": "champion", "created_at": "2026-11-03T10:00", "status": "champion"},
+            {"model_id": 4, "to_status": "shadow", "created_at": "2026-11-03T11:00", "status": "retired"},
+        ]
+        self.assertEqual(L.rollback_target(hist, current_champion_id=3), 2)
+        self.assertEqual(L.rollback_target(hist[:1], current_champion_id=None), 1)
+        self.assertIsNone(L.rollback_target(hist[2:], current_champion_id=3))
 
 
 class RegisterScriptTest(unittest.TestCase):
