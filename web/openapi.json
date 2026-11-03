@@ -18558,6 +18558,18 @@
    },
    "WatchlistDetail": {
     "properties": {
+     "auto_scored_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only, Premium: when the auto-score pass behind items[].auto ran",
+      "title": "Auto Scored At"
+     },
      "id": {
       "title": "Id",
       "type": "integer"
@@ -19089,6 +19101,17 @@
        }
       ],
       "title": "Added At"
+     },
+     "auto": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ScanSetup"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only, Premium (can_watchlist_autoscore): when latest is null, the ticker's row from the scheduled scan's auto-score pass over unranked watchlist stocks (auto_scored_at); null if not scored"
      },
      "latest": {
       "anyOf": [

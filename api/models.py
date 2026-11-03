@@ -500,6 +500,9 @@ class WatchlistItemDetail(WatchlistItem):
     latest: Optional[WatchlistScanState] = Field(default=None, description=(
         "GET /v1/watchlists/{id} only: the ticker's row in the latest market scan; null when it "
         "isn't a ranked setup there (or the scan couldn't be read)"))
+    auto: Optional[ScanSetup] = Field(default=None, description=(
+        "GET only, Premium (can_watchlist_autoscore): when latest is null, the ticker's row from the "
+        "scheduled scan's auto-score pass over unranked watchlist stocks (auto_scored_at); null if not scored"))
 
 
 class WatchlistDetail(Watchlist):
@@ -507,6 +510,7 @@ class WatchlistDetail(Watchlist):
     scan_at: Optional[str] = Field(default=None, description="GET only: the market scan behind items[].latest")
     scan_total: Optional[int] = Field(default=None, description="GET only: ranked setups in that scan")
     stale: Optional[bool] = Field(default=None, description="GET only: a scheduled scan was missed (see Market.stale)")
+    auto_scored_at: Optional[str] = Field(default=None, description="GET only, Premium: when the auto-score pass behind items[].auto ran")
 
 
 class TickersResult(BaseModel):

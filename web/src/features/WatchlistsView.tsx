@@ -31,6 +31,7 @@ import { DailySpark, useDailyBarsState } from "./Sparks";
 import { StarterWatchlistButton } from "./Starters";
 import { WatchlistAINote } from "./WatchlistAINote";
 import { WatchlistPerformanceCard } from "./WatchlistPerformance";
+import { AutoTag } from "./SetupTable";
 
 const NOTE_MAX = 500;
 /** GET /v1/quotes answers at most this many tickers per request. */
@@ -347,7 +348,8 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const reload = () => { detail.reload(); intel.reload(); onChanged(); };
 
   const scores = useMemo(() => {
-    if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest).map((i) => [i.ticker, i.latest!]));
+    // Premium also gets items[].auto: the scheduled scan's score for a ticker the scan didn't rank.
+    if (!legacy) return new Map((detail.data?.items ?? []).filter((i) => i.latest || i.auto).map((i) => [i.ticker, (i.latest ?? i.auto)!]));
     return new Map((scan.data?.setups ?? []).map((s) => [s.ticker, s]));
   }, [legacy, detail.data, scan.data]);
   const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
@@ -368,7 +370,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
   const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
-  const ranked = w.items.filter((i) => scores.has(i.ticker)).length;
+  const ranked = legacy ? w.items.filter((i) => scores.has(i.ticker)).length : w.items.filter((i) => i.latest).length;
   const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
   const notes = w.items.filter((i) => i.note).length;
   const hasQuotes = Object.keys(quoteBy).length > 0;
@@ -444,6 +446,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                       <>
                         <ScoreBadge score={s.score} />
                         <Pill>{setupLabel(s.primary_setup)}</Pill>
+                        {!it.latest && it.auto && <AutoTag />}
                         {s.fading && <Pill tone="warn">Fading</Pill>}
                       </>
                     ) : <span className="cap wl-unranked">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
@@ -480,6 +483,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           </ul>
         )}
         {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
+        {!legacy && w.items.some((i) => !i.latest && i.auto) && <p className="cap">Auto: not ranked in the latest scan, so Premium scores it after each scan.</p>}
         {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? `Score, setup and rank are from that scan. ${hasQuotes ? "Price and change are the latest trade vs the previous close." : "Price and change are from that scan, not live quotes."} The rank is the ticker's place among the scan's ranked setups.` : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 
