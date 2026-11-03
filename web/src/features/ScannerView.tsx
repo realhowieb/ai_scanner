@@ -19,6 +19,7 @@ import { SavedResearchViews } from "./SavedResearchViews";
 import { ScanAlertButton } from "./ScanAlert";
 import { SetupTable } from "./SetupTable";
 import { ScannerCsvButton } from "./ScannerCsv";
+import { WatchlistControls, WatchlistResults, useScannerWatchlists } from "./WatchlistScanner";
 
 export const SIGNALS = [
   { id: "", label: "All setups" },
@@ -28,6 +29,7 @@ export const SIGNALS = [
   { id: "gainer", label: "Gainer" },
   { id: "prebreakout", label: "PreBreakout", feature: "can_early_breakout" },
   { id: "earnings", label: "Earnings" },
+  { id: "watchlist", label: "Watchlist" },
 ] as const;
 const MIN_SCORES = [0, 40, 60, 75];
 /** Price bands for the inline filter, as [id, label, min, max]. */
@@ -49,7 +51,7 @@ export const SORTS = [
 ] as const;
 type Sort = (typeof SORTS)[number]["id"];
 
-type Signal = "golden_cross" | "breakout" | "prebreakout" | "gapper" | "gainer" | "earnings";
+type Signal = "golden_cross" | "breakout" | "prebreakout" | "gapper" | "gainer" | "earnings" | "watchlist";
 
 export function readFilters(sp: URLSearchParams) {
   const sig = sp.get("signal") || "";
@@ -87,7 +89,11 @@ export function ScannerView() {
   const earnings = f.signal === "earnings";
   const ef = readEarningsFilters(new URLSearchParams(sp.toString()));
   const earn = useEarningsScan(ef, earnings && !earningsLocked(ef, pro));
-  const scanSignal = earnings ? "" : f.signal;
+  const watchlist = f.signal === "watchlist";
+  const wl = useScannerWatchlists(Number(sp.get("wl") || 0), watchlist);
+  // Earnings and Watchlist tabs have their own rows; the market scan behind them stays unfiltered.
+  const scanSignal = earnings || watchlist ? "" : f.signal;
+  const ownRows = earnings || watchlist;
   const offset = (f.page - 1) * f.size;
 
   const sort: Sort = f.sort === "prob" && !premium ? "score" : f.sort;
@@ -124,7 +130,7 @@ export function ScannerView() {
   const countText = !data ? "" : earnings
     ? `${plural(scanTotal)} ranked${earn.data ? ` · ${earn.data.total} report ${earnWindow}` : ""}`
     : `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}`;
-  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, eview: "", price: "", rvol: 0 };
+  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, eview: "", price: "", rvol: 0, wl: "" };
 
 
   return (
@@ -145,21 +151,23 @@ export function ScannerView() {
       {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
         checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} />}
 
-      {leader && !earnings && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
+      {leader && !ownRows && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 
       <div className="chips scanner-chips" role="group" aria-label="Setup type">
         {SIGNALS.map((s) => {
           const locked = "feature" in s && !can(s.feature);
           return (
             <button key={s.id || "all"} type="button" className="chip" aria-pressed={f.signal === s.id}
-              onClick={() => set({ signal: s.id })}>
+              onClick={() => set({ signal: s.id, ...(s.id === "watchlist" ? {} : { wl: "" }) })}>
               {s.label}{locked && <span className="chip-lock"> · Premium</span>}
             </button>
           );
         })}
       </div>
 
-      {!earnings && <section aria-label="Filters" className="filters scanner-filters">
+      {watchlist && wl.chosen && <WatchlistControls all={wl.all} chosenId={wl.chosen?.id ?? null} sort={sort}
+        sorts={SORTS.filter((x) => !("feature" in x) || can(x.feature))} onPick={(id) => set({ wl: id })} onSort={(next) => set({ sort: next })} />}
+      {!ownRows && <section aria-label="Filters" className="filters scanner-filters">
         <label className="inline-field">Min HSF Score
           <select value={f.minScore} onChange={(e) => set({ min: Number(e.target.value) })}>
             {MIN_SCORES.map((m) => <option key={m} value={m}>{m === 0 ? "Any" : `${m}+`}</option>)}
@@ -191,20 +199,23 @@ export function ScannerView() {
       {f.signal === "prebreakout" && premium && <p className="cap">The PreBreakout model&apos;s 10 strongest names in this scan, in HSF order. Sort by PreBreakout to put the highest % first.</p>}
 
       {!(earnings && ef.calendar) && <div className="scanner-toolbar" role="group" aria-label="Scanner tools">
-      <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100,
+      {!watchlist && <SavedResearchViews kind="scanner_views" current={{ name: "", signal: f.signal === "watchlist" ? "" : f.signal, when: ef.when, min: f.minScore as 0 | 40 | 60 | 75, sort: f.sort, size: f.size as 25 | 50 | 100,
           price: f.price, rvol: f.rvol as 0 | 1.5 | 2 | 3 }}
         onApply={(v) => { if ("signal" in v) set({ ...resetAll, signal: v.signal ?? "", when: v.signal === "earnings" ? (v.when ?? "") : "", min: v.min ?? 0, sort: v.sort ?? "score", size: v.size ?? 25,
-          price: v.price ?? "", rvol: v.rvol ?? 0 }); }} />
-      <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !ef.calendar && !earningsLocked(ef, pro) ? ef.when : undefined}
+          price: v.price ?? "", rvol: v.rvol ?? 0 }); }} />}
+      {!watchlist && <ScanAlertButton setup={scanSignal} minScore={f.minScore} earnings={earnings && !ef.calendar && !earningsLocked(ef, pro) ? ef.when : undefined}
         setupLabel={SIGNALS.find((s) => s.id === f.signal)?.label}
-        initial={{ min_price: minPrice, max_price: maxPrice, min_rvol: f.rvol || undefined }} />
-      {data && data.setups.length > 0 && !earnings && !lockedSignal && can("can_export_csv") && (
+        initial={{ min_price: minPrice, max_price: maxPrice, min_rvol: f.rvol || undefined }} />}
+      {data && data.setups.length > 0 && !ownRows && !lockedSignal && can("can_export_csv") && (
         <ScannerCsvButton query={filterQuery} total={visibleTotal} scanAt={data.scan_at} premium={premium} />
       )}
       {preferences.data && <TablePreferences key={JSON.stringify(preferences.data.table)} initial={preferences.data.table ?? { columns: [...DEFAULT_COLUMNS], compact: false }} premium={premium} />}
       </div>}
 
-      {earnings ? (
+      {watchlist ? (
+        <WatchlistResults state={wl} premium={premium} prefs={preferences} sort={sort} onSort={(next) => set({ sort: next })}
+          onCreated={(id) => set({ wl: id })} />
+      ) : earnings ? (
         <EarningsResults f={ef} pro={pro} autoScore={can("can_earnings_autoscore")} res={earn} onClear={() => set({ all: 1 })} />
       ) : lockedSignal ? (
         <Card><Locked title="PreBreakout is part of Premium" plan="premium">The PreBreakout model ranks names before they break out, with its probability.</Locked></Card>
@@ -229,7 +240,7 @@ export function ScannerView() {
         </section>
       ) : null}
 
-      {!earnings && <>
+      {!ownRows && <>
       {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups.</p>}
       {data && data.limited && (
         <div className="cap-note" role="note">
