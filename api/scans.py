@@ -308,6 +308,30 @@ def earnings_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {"at": stamp.get("created_at"), "rows": rows}
 
 
+def watchlist_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """{at, rows: {ticker key: scanner row}} from the newest scheduled pass over watchlist
+    stocks the market scan didn't rank (Premium auto-score), or {at: None, rows: {}}.
+    Cached like earnings_autoscore: stamp once a minute, rows once per pass."""
+    from api.today import _cached
+    from db.watchlist_autoscore import latest_stamp, load_setups
+
+    stamp = _cached("watchlist_autoscore_stamp", lambda: latest_stamp(AUTOSCORE_MAX_AGE_S) or {})
+    if not stamp:
+        return {"at": None, "rows": {}}
+    raw = _cached(("watchlist_autoscore", int(stamp["id"])), lambda: load_setups(int(stamp["id"])),
+                  ttl_s=AUTOSCORE_ROWS_TTL_S)
+    if not entitlements.get("can_early_breakout"):
+        from ui.entitlement_view import redact_prebreakout_opportunity
+
+        raw = [_scan_row(redact_prebreakout_opportunity(r, allowed=False)) for r in raw]
+    rows: Dict[str, Dict[str, Any]] = {}
+    for r in raw:
+        k = _ticker_key(r.get("ticker"))
+        if k and k not in rows:
+            rows[k] = r
+    return {"at": stamp.get("created_at"), "rows": rows}
+
+
 def _fill_quotes(rows: List[Dict[str, Any]]) -> None:
     """Live last / change / gap for rows the scan never priced, QUOTE_MAX tickers per provider
     call (each set cached like the Watchlists Refresh). No quote leaves the row as it is."""

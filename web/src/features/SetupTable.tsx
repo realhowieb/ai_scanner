@@ -42,10 +42,16 @@ type NewsFlag = Schemas["NewsFlag"];
 /** `ranks`: each ticker's rank in the whole latest scan (null = not ranked), for rows that
  * aren't a slice of the ranked list (the Scanner's Watchlist tab). */
 type Ranks = Record<string, number | null>;
-type Ctx = { numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks };
+type Ctx = { numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks; auto?: Set<string> };
 const TableCtx = createContext<Ctx>({ numbered: true, offset: 0, sparks: false, series: {}, news: {}, choose: () => null });
 const NOT_RANKED = "Not ranked in the latest scan";
-const isUnranked = (ranks: Ranks | undefined, ticker: string) => Boolean(ranks && ranks[ticker] == null);
+/** Unranked and not auto-scored: no score to show. */
+const isUnranked = (ranks: Ranks | undefined, ticker: string, auto?: Set<string>) => Boolean(ranks && ranks[ticker] == null && !auto?.has(ticker));
+
+/** Marks a score from the scheduled auto-score pass (Premium), not the market scan's ranking. */
+export function AutoTag() {
+  return <span className="pill earn-yours" title="Not ranked in the latest scan; scored automatically after the scan (Premium)">Auto</span>;
+}
 
 /** "News" marker: the ticker had a story in the last 24 hours. Links to the stock page's News card. */
 function NewsMark({ ticker, flag }: { ticker: string; flag: NewsFlag | undefined }) {
@@ -62,10 +68,13 @@ function RankCell({ row }: { row: { index: number; original: Row } }) {
   return c.numbered ? c.offset + row.index + 1 : "";
 }
 function SetupCell({ row }: { row: { original: Row } }) {
-  return isUnranked(useCtx().ranks, row.original.ticker) ? <span className="cap">—</span> : <Pill>{setupLabel(row.original.primary_setup)}</Pill>;
+  const c = useCtx();
+  return isUnranked(c.ranks, row.original.ticker, c.auto) ? <span className="cap">—</span> : <Pill>{setupLabel(row.original.primary_setup)}</Pill>;
 }
 function ScoreCell({ row }: { row: { original: Row } }) {
-  return isUnranked(useCtx().ranks, row.original.ticker) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <ScoreBar score={row.original.score} />;
+  const c = useCtx(); const t = row.original.ticker;
+  if (isUnranked(c.ranks, t, c.auto)) return <span className="cap" title={NOT_RANKED}>Not ranked</span>;
+  return c.auto?.has(t) ? <span className="score-auto"><ScoreBar score={row.original.score} /> <AutoTag /></span> : <ScoreBar score={row.original.score} />;
 }
 function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
@@ -93,10 +102,12 @@ const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
 /** `sort` + `onSort` make the sortable headers buttons that ask the server for a new order. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, sort, onSort, prefs: given, ranks }: {
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, sort, onSort, prefs: given, ranks, auto }: {
   rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean;
   /** Show each row's rank in the whole scan instead of its position; null marks a row that isn't ranked. */
   ranks?: Ranks;
+  /** Tickers whose row comes from the Premium auto-score pass (shown with an Auto tag). */
+  auto?: Set<string>;
   sort?: ServerSort; onSort?: (sort: ServerSort) => void;
   /** The page's own research preferences, so the table doesn't ask for them again once results arrive. */
   prefs?: ReturnType<typeof useWorkspace>;
@@ -113,7 +124,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const series = useDailySparks(sparks && visible("spark") ? rows.map((r) => r.ticker) : []);
   const news = useNewsFlags(sparks ? rows.map((r) => r.ticker) : []);
 
-  const ctx = { numbered, offset, sparks, series, news, choose, ranks };
+  const ctx = { numbered, offset, sparks, series, news, choose, ranks, auto };
   const columnVisibility = Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)]));
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
@@ -185,14 +196,14 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
                 : numbered && <span className="mono cap">#{offset + i + 1}</span>}
               {sparks && choose(r.ticker)}
               <TickerLink ticker={r.ticker} named />
-              {visible("setup") && !isUnranked(ranks, r.ticker) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
+              {visible("setup") && !isUnranked(ranks, r.ticker, auto) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
               <span className="grow" />
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">
-              <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <ScoreBadge score={r.score} />}</dd></div>
+              <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker, auto) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <>{<ScoreBadge score={r.score} />}{auto?.has(r.ticker) && <> <AutoTag /></>}</>}</dd></div>
               <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}</dd></div>
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${upDown(r.chg_pct)}`}>{pct(r.chg_pct)}</dd></div>
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>

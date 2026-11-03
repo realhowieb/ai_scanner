@@ -44,6 +44,7 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("Live Day Trader monitor: intraday movers, VWAP, relative volume and stair-steppers", "can_day_trader"),
     ("Earnings calendar & filters", "can_earnings"),
     ("Every earnings reporter scored automatically on the Earnings tab", "can_earnings_autoscore"),
+    ("Every watchlist stock scored after each scan, ranked or not", "can_watchlist_autoscore"),
     ("Scan history & historical research", "can_scan_history"),
     ("Ask HSF: an AI research assistant for your stocks, watchlists and scans", "can_ai_notes"),
     ("Scheduled custom scans: your scan runs on its own and the results arrive by email", "can_scheduled_scans"),
