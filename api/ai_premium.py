@@ -308,7 +308,7 @@ def _trades_hash(trades: List[Dict[str, Any]]) -> str:
     import hashlib
 
     key = "|".join(f"{t.get('id')}:{t.get('exit_price')}" for t in trades)
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 def journal_trades_hash(username: str) -> str:
