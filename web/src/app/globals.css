@@ -968,6 +968,11 @@ summary:focus-visible, .table-wrap:focus-visible { outline: 2px solid var(--acce
 .custom-scan-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
 .custom-scan-layout > * { min-width: 0; width: auto; }
 .custom-scan-layout fieldset { min-width: 0; }
+.custom-scan-layout.is-done { display: flex; flex-direction: column; align-items: stretch; }
+.custom-scan-layout > [hidden] { display: none; }
+.custom-scan-layout.is-done .scan-submit { position: static; }
+.scan-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-xl); }
+.scan-summary p { margin: 0; }
 .scan-submit { position: sticky; bottom: 12px; padding: 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-xl); z-index: 2; }
 .password-input { display: flex; gap: 8px; }
 .password-input input { flex: 1; min-width: 0; }
