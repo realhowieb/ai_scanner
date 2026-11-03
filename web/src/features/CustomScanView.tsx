@@ -238,6 +238,11 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
 
   const err = scan.error;
   const planErr = err?.status === 403;
+  // Finished results take the full width; the form folds into a one-line summary until "Edit settings".
+  const done = job?.status === "complete" && !!job.result;
+  const [editingFor, setEditingFor] = useState<string | null>(null);   // folds again for each new scan
+  const editing = done && editingFor === job.scan_id;
+  const folded = done && !editing;
 
   return (
     <div className="stack">
@@ -255,8 +260,16 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
           min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), score_all: scoreAll }}
         onApply={applyView} />
       <ScanBuilder disabled={active || scan.starting} onApply={applyView} />
-      <div className="split custom-scan-layout">
-        <form className="card col-side form" onSubmit={submit} aria-label="Scan settings">
+      <div className={`split custom-scan-layout${done ? " is-done" : ""}`}>
+        {done && (
+          <div className="scan-summary" role="group" aria-label="Scan settings summary">
+            <p className="grow"><span className="cap">Scan settings</span> <strong>{job.result?.label}</strong> · {job.params.session} session</p>
+            <button type="button" className="btn" aria-expanded={editing} aria-controls="scan-settings" onClick={() => setEditingFor(editing ? null : job.scan_id)}>
+              {editing ? "Hide settings" : "Edit settings"}
+            </button>
+          </div>
+        )}
+        <form id="scan-settings" className="card col-side form" onSubmit={submit} aria-label="Scan settings" hidden={folded}>
           <fieldset disabled={active || scan.starting}>
             <legend className="h2">What to scan</legend>
             <div className="radio-list">
