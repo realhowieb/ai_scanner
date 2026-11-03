@@ -165,6 +165,16 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
     status.includes(`Already in the list: ${ticker}`) && status.includes("Not valid"), status.slice(0, 160));
 });
 
+await step("Scanner Watchlist tab shows the watchlist's stocks", async () => {
+  const id = new URL(watchlistUrl).searchParams.get("id");
+  await page.goto(`${BASE}/scanner?signal=watchlist&wl=${id}`);
+  await page.getByRole("button", { name: "Watchlist", exact: true, pressed: true }).waitFor();
+  const summary = await page.getByTestId("watchlist-scan-summary").textContent();
+  await page.locator(`table a.tk[href="/stocks/${encodeURIComponent(ticker)}"]`).first().waitFor();
+  await shot(page, "journey-4b-scanner-watchlist");
+  check("Scanner Watchlist tab shows the watchlist's stocks", summary.includes(RUN), summary.replace(/\s+/g, " ").slice(0, 160));
+});
+
 await step("alerts page: capacity, turn off", async () => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Alerts(, \d+ new)?$/ }).click();
   await page.waitForURL(/\/alerts/);
