@@ -347,12 +347,12 @@ def _concentration(rows: Sequence[Any]) -> Dict[str, Any]:
 
 # --------------------------------------------------------------------------- collection audit
 def _slot_of(ts: _dt.datetime) -> Optional[str]:
-    """Nearest expected scan slot (HH:MM UTC) within system_health's early/late window."""
+    """Nearest expected scan slot (HH:MM New York time) within system_health's early/late window."""
     from analytics.system_health import SLOT_EARLY, SLOT_LATE
 
     for s in mc.expected_scan_slots(ts.astimezone(mc.ET).date()):
         if s - SLOT_EARLY <= ts <= s + SLOT_LATE:
-            return s.strftime("%H:%M")
+            return mc.slot_label(s)
     return None
 
 
@@ -396,11 +396,14 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
             if d < today or now >= _day_close_utc(d)]
     # Only regular-hours slots save a snapshot (pre/post-market scans freeze
     # nothing), so those are the windows a snapshot is expected in.
-    snap_slots = {d: [s.strftime("%H:%M") for s in mc.snapshot_scan_slots(d)] for d in days}
+    snap_slots = {d: [mc.slot_label(s) for s in mc.snapshot_scan_slots(d)] for d in days}
     expected_slot_days = sum(len(v) for v in snap_slots.values())
     expected_per_day = (_rate(expected_slot_days * TOP_N_PER_SNAPSHOT, len(days)) if days
                         else len(mc.snapshot_scan_slots(today)) * TOP_N_PER_SNAPSHOT)
-    slot_names = [f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_UTC]
+    # Slot labels are New York times; days before the schedule moved to New York
+    # time can add their own (e.g. 11:35 for the early-winter UTC schedule).
+    slot_names = sorted({f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_ET}
+                        | {mc.slot_label(s) for d in days for s in mc.expected_scan_slots(d)})
     missing = [(d, s) for d in days for s in snap_slots[d] if (d, s) not in slot_hits]
     per_slot = {s: {"expected": sum(1 for d in days if s in snap_slots[d]),
                     "with_snapshot": sum(1 for d in days if (d, s) in slot_hits)}
@@ -426,7 +429,7 @@ def collection_audit(raw_rows: Sequence[Mapping[str, Any]], now: _dt.datetime, *
         "trading_days_in_range": len(days),
         "trading_days_with_observations": sum(1 for d in days if by_day_obs.get(d)),
         "expected_observations_per_trading_day": expected_per_day,
-        "expected_basis": f"regular-hours scan slots (of {len(mc.SCAN_SLOTS_UTC)} scheduled) x top "
+        "expected_basis": f"regular-hours scan slots (of {len(mc.SCAN_SLOTS_ET)} scheduled) x top "
                           f"{TOP_N_PER_SNAPSHOT} Scanner setups "
                           "(an upper bound: a slot whose snapshot is unchanged freezes nothing new; "
                           f"snapshots before 2026-10-13 froze the Brief's top {BRIEF_TOP_N_PER_SNAPSHOT})",
@@ -933,7 +936,7 @@ def render_markdown(report: Mapping[str, Any], *, alerts: Sequence[Mapping[str, 
     msw = col.get("missing_scan_windows") or {}
     L += ["", f"Expected basis: {col.get('expected_basis')}.", "",
           f"Missing scan windows: {msw.get('count')} of {msw.get('of')} slot-days.", "",
-          "| SLOT (UTC) | EXPECTED (REGULAR HOURS) | WITH SNAPSHOT |", "|---|---|---|"]
+          "| SLOT (ET) | EXPECTED (REGULAR HOURS) | WITH SNAPSHOT |", "|---|---|---|"]
     for s, v in (msw.get("per_slot") or {}).items():
         L.append(f"| {s} | {v['expected']} | {v['with_snapshot']} |")
     if col.get("symbols_repeatedly_without_labels"):

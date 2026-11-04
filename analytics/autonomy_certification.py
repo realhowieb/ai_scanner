@@ -1080,15 +1080,16 @@ def gate_x_thirty_days() -> Dict[str, Any]:
 
 
 def info_schedule_timezone() -> Dict[str, Any]:
-    """Informational (non-blocking): the health plane's expected scan slots are UTC
-    constants (cron-job.org dispatch). Observed EDT run times are consistent with both
-    a UTC job and an America/New_York job, so this cannot be proven until DST ends."""
-    return _gate("WARN", {"scan_slots_utc": [f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_UTC],
-                          "dst_end": "2026-11-01",
-                          "risk": "if the cron-job.org job uses America/New_York, winter runs shift +1h UTC "
-                                  "and slot matching would raise false MISSED_SCAN incidents"},
-                 "analytics/market_calendar.SCAN_SLOTS_UTC",
-                 notes="Confirm the cron-job.org job timezone is UTC before 2026-11-01 (runbook).",
+    """Informational (non-blocking): expected scan slots are New York times
+    (cron-job.org jobs in America/New_York since 2026-11-05), so their UTC times
+    follow daylight saving time. Days before then use the old fixed-UTC slots."""
+    return _gate("WARN", {"scan_slots_et": [f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_ET],
+                          "et_since": mc.SCAN_SLOTS_ET_SINCE.isoformat(),
+                          "legacy_slots_utc": [f"{h:02d}:{m:02d}" for h, m in mc.LEGACY_SCAN_SLOTS_UTC],
+                          "risk": "if a cron-job.org scan job is set back to UTC, winter runs land 1h early "
+                                  "and slot matching raises MISSED_SCAN incidents"},
+                 "analytics/market_calendar.SCAN_SLOTS_ET",
+                 notes="cron-job.org scan jobs must use the America/New_York time zone (runbook).",
                  mandatory=False)
 
 

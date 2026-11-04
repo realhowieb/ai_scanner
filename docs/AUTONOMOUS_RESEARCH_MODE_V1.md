@@ -25,7 +25,7 @@ schedules for the rest).
 
 | When (UTC) | What | Workflow |
 |---|---|---|
-| 12:35 13:35 16:35 19:35 20:35 21:35 | Scheduled scans (pre-market, regular, post-market). Regular-session scans capture CANDIDATE / NEAR_MISS / CONTROL research observations with point-in-time metadata | `scheduled-scans.yml` (cron-job.org dispatch) |
+| 08:35 09:35 12:35 15:35 16:35 17:35 **ET** (UTC moves with DST) | Scheduled scans (pre-market, regular, post-market). Regular-session scans capture CANDIDATE / NEAR_MISS / CONTROL research observations with point-in-time metadata | `scheduled-scans.yml` (cron-job.org dispatch) |
 | every 30 min, 13–22 | Outcome maturation (batched Alpaca, 429-safe, first-write-wins, 2,000-symbol cap, 6-day retirement) | `mature-observations.yml` |
 | 23:15 | Forward-evidence readiness (Run 56, anti-peeking) | `forward-evidence-readiness.yml` |
 | 17:05, 23:45 | System health: 10 subsystems, incidents, human action | `system-health.yml` |
@@ -154,11 +154,15 @@ the research-validation lifecycle, not this one.
 
 ## Known assumption (informational gate INFO_1)
 
-Expected scan slots are the cron-job.org **UTC** times. Before **2026-11-01**
-(DST ends), confirm the cron-job.org job timezone is UTC. If it is
-America/New_York, update `SCAN_SLOTS_UTC` (and re-certify), or the health plane
-will report false missed scans in winter. The yearly calendar update is due
-before 2028.
+Expected scan slots are New York times (`SCAN_SLOTS_ET` in
+`analytics/market_calendar.py`): 08:35, 09:35, 12:35, 15:35, 16:35 and 17:35 ET.
+The cron-job.org scan jobs must use the **America/New_York** time zone so they
+keep those market times through daylight saving changes. Until 2026-11-04 the
+jobs ran on fixed UTC times, which after DST ended (2026-11-01) put every scan an
+hour early and left no scan between 12:00 and 14:00 ET; days before
+`SCAN_SLOTS_ET_SINCE` (2026-11-05) are judged against those UTC times. If a job
+is ever set back to UTC, the health plane will report missed scans in winter.
+The yearly calendar update is due before 2028.
 
 ## Frozen-scanner gate (Gate U) comparison rule
 

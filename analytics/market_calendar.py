@@ -36,10 +36,20 @@ NYSE_EARLY_CLOSES = frozenset(_dt.date.fromisoformat(d) for d in (
     "2027-11-26",
 ))
 
-# The external scheduler (cron-job.org → workflow_dispatch on main) fires the
-# scheduled scan at these UTC times on weekdays; measured reliable to ±1 minute.
-# The scan itself skips non-trading days.
-SCAN_SLOTS_UTC: Tuple[Tuple[int, int], ...] = ((12, 35), (13, 35), (16, 35), (19, 35), (20, 35), (21, 35))
+# The external scheduler (cron-job.org -> workflow_dispatch on main) fires the
+# scheduled scan at these New York times on weekdays; measured reliable to +-1
+# minute. The scan itself skips non-trading days. The jobs run in the
+# America/New_York time zone, so the slots keep the same market times all year
+# (pre-market 8:35, open 9:35, midday 12:35, late day 15:35, after hours 16:35
+# and 17:35 ET) and their UTC times move with daylight saving time.
+SCAN_SLOTS_ET: Tuple[Tuple[int, int], ...] = ((8, 35), (9, 35), (12, 35), (15, 35), (16, 35), (17, 35))
+
+# Until 2026-11-04 the cron-job.org jobs ran on fixed UTC times. Those equal the
+# New York slots above in summer (EDT), but after DST ended on 2026-11-01 every
+# scan ran an hour early (7:35 ... 16:35 ET, nothing between 12:00 and 14:00 ET).
+# Days before SCAN_SLOTS_ET_SINCE are judged against the UTC times that really ran.
+LEGACY_SCAN_SLOTS_UTC: Tuple[Tuple[int, int], ...] = ((12, 35), (13, 35), (16, 35), (19, 35), (20, 35), (21, 35))
+SCAN_SLOTS_ET_SINCE = _dt.date(2026, 11, 5)
 
 
 def calendar_covered(d: _dt.date) -> bool:
@@ -88,7 +98,14 @@ def expected_scan_slots(d: _dt.date) -> List[_dt.datetime]:
     """UTC datetimes at which a scheduled scan is expected on ET date `d`."""
     if not is_trading_day(d):
         return []
-    return [_dt.datetime(d.year, d.month, d.day, h, m, tzinfo=UTC) for h, m in SCAN_SLOTS_UTC]
+    if d < SCAN_SLOTS_ET_SINCE:
+        return [_dt.datetime(d.year, d.month, d.day, h, m, tzinfo=UTC) for h, m in LEGACY_SCAN_SLOTS_UTC]
+    return [_dt.datetime(d.year, d.month, d.day, h, m, tzinfo=ET).astimezone(UTC) for h, m in SCAN_SLOTS_ET]
+
+
+def slot_label(slot: _dt.datetime) -> str:
+    """'HH:MM' New York time of a scan slot (stable across daylight saving time)."""
+    return slot.astimezone(ET).strftime("%H:%M")
 
 
 def snapshot_scan_slots(d: _dt.date) -> List[_dt.datetime]:
