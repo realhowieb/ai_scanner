@@ -182,6 +182,43 @@ class SendTests(unittest.TestCase):
         self.assertEqual(buf.created, [])
 
 
+class WeeklyRotationTests(unittest.TestCase):
+    def setUp(self):
+        from services import social_posts as sp
+
+        self.sp = sp
+        mock.patch("services.social_posts._base_url", return_value="https://app.hsfinest.com").start()
+        self.addCleanup(mock.patch.stopall)
+
+    def test_spotlight_and_explainer_rotate_and_pass_claims(self):
+        sp = self.sp
+        for kind, posts in (("spotlight", sp.SPOTLIGHT_POSTS), ("explainer", sp.EXPLAINER_POSTS)):
+            seen = set()
+            for w in range(40, 40 + len(posts)):
+                p = sp.compose(kind, f"2026-W{w}")
+                self.assertEqual(p["kind"], kind)
+                seen.add(p["image"]["headline"])
+                for s in ("threads", "linkedin", "instagram"):
+                    t = sp.channel_text(p, s)
+                    sp.check_claims(t)
+                    self.assertLessEqual(len(t), 500, (kind, w, s))  # Threads limit
+                self.assertTrue(all(len(x) <= 34 for x in p["image"]["points"]), p["image"]["points"])
+            self.assertEqual(len(seen), len(posts))
+        self.assertEqual(sp.compose_product("2026-W45")["image"]["kicker"], "What HSF does")
+
+    def test_new_kinds_post_times_and_start_weeks(self):
+        sp = self.sp
+        self.assertEqual(sp.post_time("spotlight", "2026-W48"), dt.datetime(2026, 11, 24, 17, 0, tzinfo=UTC))
+        self.assertEqual(sp.post_time("explainer", "2026-W47"), dt.datetime(2026, 11, 19, 17, 0, tzinfo=UTC))
+        early = dt.datetime(2026, 11, 9, 23, 30, tzinfo=UTC)  # Mon 6:30pm ET, before the first automatic week
+        self.assertEqual(sp.next_week_for("spotlight", early), "2026-W48")
+        self.assertIsNone(sp.due("spotlight", early))
+        self.assertIsNone(sp.due("explainer", dt.datetime(2026, 11, 11, 23, 30, tzinfo=UTC)))  # W46 was hand-made
+        self.assertEqual(sp.due("explainer", dt.datetime(2026, 11, 18, 23, 30, tzinfo=UTC)), "2026-W47")
+        self.assertEqual(sp.due("spotlight", dt.datetime(2026, 11, 23, 23, 30, tzinfo=UTC)), "2026-W48")
+        self.assertIsNone(sp.due("spotlight", dt.datetime(2026, 11, 24, 16, 0, tzinfo=UTC)))  # inside the 2h cutoff
+
+
 class OpsJobTests(unittest.TestCase):
     def test_tick_runs_due_kinds_only_with_key(self):
         from api import ops_jobs
@@ -194,7 +231,8 @@ class OpsJobTests(unittest.TestCase):
             ops_jobs.tick(now=now)
         social = [c.args for c in run.call_args_list if c.args[0].startswith("social_")]
         self.assertEqual({a[0]: a[1] for a in social},
-                         {"social_earnings": None, "social_product": None, "social_founding": "2026-W46", "social_recap": None})
+                         {"social_earnings": None, "social_spotlight": None, "social_product": None, "social_explainer": None,
+                          "social_founding": "2026-W46", "social_recap": None})
         with mock.patch.dict("os.environ", {**env, "BUFFER_API_KEY": ""}), mock.patch("api.ops_jobs._run_once") as run:
             ops_jobs.tick(now=now)
         self.assertFalse([c for c in run.call_args_list if c.args[0].startswith("social_")])
