@@ -65,8 +65,9 @@ secrets, Render environment). Changing a key in one does not change the others.
 
 ### Scheduler: cron-job.org
 
-- **Symptom:** no Scheduled Scans runs at the expected times (12:35, 13:35, 16:35,
-  19:35, 20:35, 21:35 UTC on weekdays).
+- **Symptom:** no Scheduled Scans runs at the expected times (08:35, 09:35, 12:35,
+  15:35, 16:35, 17:35 New York time on weekdays; the jobs use the America/New_York
+  time zone).
 - **Cause is usually** the GitHub token in cron-job.org expired, or cron-job.org
   disabled the job after repeated failures. Renew the token / re-enable the job.
 - **Meanwhile:** start runs by hand with `gh workflow run scheduled-scans.yml --ref main

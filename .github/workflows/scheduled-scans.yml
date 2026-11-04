@@ -20,7 +20,9 @@ on:
 
   # No GitHub `schedule:` trigger (removed 2026-09-29). cron-job.org is the only
   # scheduler: it dispatches this workflow on main (force=false, session=auto)
-  # at 12:35, 13:35, 16:35, 19:35, 20:35 and 21:35 UTC on weekdays. GitHub's own
+  # at 08:35, 09:35, 12:35, 15:35, 16:35 and 17:35 New York time on weekdays (jobs
+  # set to the America/New_York time zone, so UTC times move with DST; before
+  # 2026-11-04 they were fixed UTC, see analytics/market_calendar.py). GitHub's own
   # cron fired hours late (e.g. the 21:10 UTC slot at 00:27 UTC) and duplicated
   # those slots; a late run after UTC midnight sent the morning digest at night.
 
@@ -41,7 +43,7 @@ permissions:
 jobs:
   run-scans:
     runs-on: ubuntu-24.04
-    # Normal runs take 3-19 min (longest: pre-market 12:35 slot, or Alpaca
+    # Normal runs take 3-19 min (longest: pre-market 08:35 ET slot, or Alpaca
     # timeouts re-requested in pieces). Without a cap a stuck run holds the
     # scheduled-scans concurrency group for GitHub's 6 h default and the later
     # slots queue behind it; 45 min frees the group well before the next slot.

@@ -41,7 +41,7 @@ class FreshnessTests(unittest.TestCase):
         out = describe('2026-11-27T17:25:00Z', market_data_at='2026-11-27T17:25:00Z',
                        now='2026-11-27T21:00:00Z')
         self.assertEqual(out['state'], 'fresh')
-        self.assertEqual(out['expected_scan_at'], '2026-11-27T16:35:00+00:00')
+        self.assertEqual(out['expected_scan_at'], '2026-11-27T17:35:00+00:00')
 
     def test_unknown_market_data_and_old_inputs_are_distinct_from_new_scan(self):
         current = '2026-10-09T20:25:00Z'
