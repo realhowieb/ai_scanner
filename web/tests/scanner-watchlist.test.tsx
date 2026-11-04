@@ -61,6 +61,14 @@ describe("Scanner Watchlist tab", () => {
     expect(screen.getByText(/scores every watchlist stock after each scan, including the 1 that didn/)).toBeInTheDocument();
   });
 
+  it("shows when automatic scores were written and warns about a stale market scan", async () => {
+    detail = { ...detail, stale: true, auto_scored_at: "2026-11-04T14:40:00Z" };
+    wrap("premium");
+    await screen.findByRole("table");
+    expect(screen.getByTestId("watchlist-scan-summary")).toHaveTextContent(/Scored Nov 4, 9:40 AM ET/);
+    expect(screen.getByText(/HSF Scores from the scan/)).toHaveTextContent("Scan delayed");
+  });
+
   it("sorts ranked before auto-scored before unscored on HSF Score", () => {
     const rows = [setup("KO", 0), setup("ZZZQ", 90), setup("AAA", 50)];
     const out = sortWatchlistRows(rows, { KO: null, ZZZQ: null, AAA: 3 }, "score", new Set(["ZZZQ"]));

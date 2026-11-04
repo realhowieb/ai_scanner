@@ -10,9 +10,10 @@ import { useMemo } from "react";
 
 import type { Schemas } from "@/api/client";
 import { watchlists } from "@/api/userData";
-import { Card, Empty, ErrorState, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorState, Freshness, Skeleton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import type { useWorkspace } from "@/hooks/useWorkspace";
+import { etTime } from "@/lib/format";
 
 import { SetupTable } from "./SetupTable";
 import type { ServerSort } from "./SetupTable";
@@ -131,8 +132,10 @@ export function WatchlistResults({ state, premium, autoScore, prefs, sort, onSor
         {chosen.name}: {items.length} stock{items.length === 1 ? "" : "s"} · {rankedCount} ranked in the latest scan
         {detail.data?.scan_total ? ` of ${detail.data.scan_total}` : ""}. Rank is the stock&apos;s place in the whole scan.
         {auto.size > 0 && ` ${auto.size} more scored automatically after the scan (Auto).`}
+        {auto.size > 0 && detail.data?.auto_scored_at && ` Scored ${etTime(detail.data.auto_scored_at)}.`}
         {unscored > 0 && (autoScore ? " Stocks that didn't rank show their latest price until the next scan scores them." : " Stocks that didn't rank show their latest price.")}
       </p>
+      {detail.data?.scan_at && <Freshness at={detail.data.scan_at} label="HSF Scores from the scan" stale={detail.data.stale ?? undefined} />}
       {!autoScore && unranked.length > 0 && <p className="cap">
         <Link href="/pricing">Premium</Link> scores every watchlist stock after each scan, including the {unranked.length} that didn&apos;t rank.
       </p>}

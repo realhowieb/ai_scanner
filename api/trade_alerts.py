@@ -76,15 +76,20 @@ def add_for_trade(username: str, ticker: str, entry_price: float) -> Optional[Di
             return None   # one pair per stock; a second lot keeps the first trade's levels
         lv = levels(entry, _stop_pct(t))
         ids: List[int] = []
-        for direction, price in (("below", lv["stop"]), ("above", lv["target"])):
-            try:
+        try:
+            for direction, price in (("below", lv["stop"]), ("above", lv["target"])):
                 a = user_data.create_alert(username, int(ent["alert_limit"]), "price",
                                            ticker=t, threshold=price, direction=direction)
                 ids.append(int(a["id"]))
-            except (user_data.LimitReached, user_data.Conflict):
-                continue
-        if not ids:
-            return None
+        except Exception:
+            # The journal promises a pair. If only one slot remains, remove only
+            # the alerts we just created rather than claiming both levels exist.
+            for alert_id in ids:
+                try:
+                    user_data.delete_alert(username, alert_id)
+                except Exception as e:
+                    log.warning(json.dumps({"event": "trade_alerts_rollback_failed", "error": type(e).__name__}))
+            raise
         text = f"Price alerts at ${lv['stop']:.2f} (stop) and ${lv['target']:.2f} (target)"
         ai.store(username, KIND, t, text, alert_ids=ids, entry=round(entry, 2), **lv)
         return {**lv, "alert_ids": ids}
