@@ -103,9 +103,14 @@ def load_audit_rows(dataset_version: str | None) -> dict:
     rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
     rows_asof = V3.as_of(rows, frozen_at)
     built = rd.build_dataset(rows_asof, window["scans"], filters=meta.get("filters") or {}, members=members)
+    from analytics.ml_v4_preflight import verify_dataset
+
+    verify_dataset(entry, built)
     audit_rows = A.build_audit_rows(built["records"], rows_asof, unit="signal_day")
     _log(f"signal-day rows={len(audit_rows)}")
-    return {"entry": entry, "members": members, "frozen_at": frozen_at, "built": built, "audit_rows": audit_rows}
+    selected = set(built["observation_ids"])
+    return {"entry": entry, "members": members, "frozen_at": frozen_at, "built": built, "audit_rows": audit_rows,
+            "raw_rows": [r for r in rows_asof if int(r["id"]) in selected], "scan_rows": window["scans"]}
 
 
 def main(argv=None) -> int:
@@ -115,6 +120,9 @@ def main(argv=None) -> int:
     ap.add_argument("--providers", default=os.getenv("ML_V4_PROVIDERS") or "xgboost,lightgbm,catboost")
     ap.add_argument("--feature-sets", default=os.getenv("ML_V4_FEATURE_SETS") or "production,leakage_safe")
     ap.add_argument("--out", default=None, help="artifact folder (default: ml/artifacts/ml_v4/<UTC stamp>)")
+    ap.add_argument("--git-sha", default=os.getenv("GITHUB_SHA"))
+    ap.add_argument("--preflight-only", action="store_true", help="Write readiness reports without fitting any model")
+    ap.add_argument("--cost-bps", type=float, default=float(os.getenv("ML_V4_COST_BPS") or 20))
     args = ap.parse_args(argv)
 
     from analytics import ml_v3_audit as A
@@ -129,7 +137,7 @@ def main(argv=None) -> int:
         if f not in P.FEATURE_SETS:
             raise SystemExit(f"unknown feature set {f!r}")
     missing = [p for p in providers if p not in P.available_providers()]
-    if missing:
+    if missing and not args.preflight_only:
         raise SystemExit(f"not installed: {missing}; pip install -r requirements-ml-v4.txt -c requirements.lock")
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -138,11 +146,25 @@ def main(argv=None) -> int:
         raise SystemExit(f"{out} is not empty; ML v4 never overwrites artifacts")
 
     t0 = time.time()
-    loaded = load_audit_rows(args.dataset_version)
+    from analytics import ml_v4_preflight as PF
+
+    try:
+        loaded = load_audit_rows(args.dataset_version)
+    except PF.PreparationError as e:
+        PF.write_load_failure(out, e, args.dataset_version)
+        raise
+    preparation, split, evaluation_binding = PF.prepare(loaded, providers, feature_sets, git_sha=args.git_sha)
+    evaluation_binding["cost_bps"] = args.cost_bps
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "ml_v4_preflight.json").write_text(A.dumps(preparation) + "\n")
+    (out / "ml_v4_preflight.md").write_text(PF.markdown(preparation))
+    print(PF.markdown(preparation))
+    if args.preflight_only:
+        return 0 if preparation["ready"] else 1
+    PF.require_ready(preparation)
     entry, members, frozen_at, built, audit_rows = (loaded[k] for k in
                                                     ("entry", "members", "frozen_at", "built", "audit_rows"))
 
-    split = P.training_split(audit_rows, P.PRIMARY_TARGET)
     hold = split["holdout"]
     _log(f"target={P.PRIMARY_TARGET.label}@{P.PRIMARY_TARGET.horizon}d eligible={split['eligible_rows']} "
          f"train={split['train_rows']} (positive {split['train_positive']}) purged={split['purged']} "
@@ -153,10 +175,11 @@ def main(argv=None) -> int:
     dataset = {"dataset_version": entry["dataset_version"], "dataset_fingerprint": entry.get("fingerprint"),
                "unit": "signal_day"}
     results = P.train_all(split["train"], providers=providers, feature_sets=feature_sets,
-                          target=P.PRIMARY_TARGET, dataset=dataset, git_sha=os.getenv("GITHUB_SHA"))
+                          target=P.PRIMARY_TARGET, dataset=dataset, git_sha=args.git_sha)
     manifests, failures = [], []
     for res in results:
         rec = res["record"]
+        rec["evaluation_binding"] = evaluation_binding
         if res["model"] is None:
             failures.append(rec)
             _log(f"FAILED {rec['provider']}/{rec['feature_set']}: {rec['error']}")
@@ -168,7 +191,7 @@ def main(argv=None) -> int:
 
     summary = {
         "engine_version": P.ENGINE_VERSION, "mode": "dry_run (no database writes)",
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(), "git_sha": os.getenv("GITHUB_SHA"),
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(), "git_sha": args.git_sha,
         "dataset": {**dataset, "frozen_at": str(frozen_at), "members": len(members),
                     "fingerprint_rebuilt_as_of": built["metadata"].get("fingerprint")},
         "target": {"label": P.PRIMARY_TARGET.label, "horizon_days": P.PRIMARY_TARGET.horizon,

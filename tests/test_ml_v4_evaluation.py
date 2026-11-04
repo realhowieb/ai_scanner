@@ -72,7 +72,7 @@ def rows():
 def result(rows):
     data = A.eligible(rows, 5, P.PRIMARY_TARGET.label)
     models = E.default_models(feature_sets=("production",), params=SMALL)
-    return E.evaluate(data, models, fold_kw=FOLD_KW, holdout_kw=HOLD_KW)
+    return E.evaluate(data, models, fold_kw=FOLD_KW, holdout_kw=HOLD_KW, evaluate_holdout=True)
 
 
 # ----------------------------------------------------------------------------- calibration
@@ -242,26 +242,24 @@ def test_evaluate_script_writes_reports_only(monkeypatch, tmp_path):
     import json
     from pathlib import Path
 
-    raw, scans = _dataset()
-    audit_rows = A.build_audit_rows(rd.build_records(raw, scans), raw, unit="signal_day")
+    from analytics.ml_v4_synthetic import dataset
+
+    loaded = dataset()
     spec = importlib.util.spec_from_file_location(
         "ml_v4_evaluate_script", Path(__file__).resolve().parents[1] / "scripts" / "ml_v4_evaluate.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    entry = {"dataset_version": "hsf-ml-test-v1", "fingerprint": "sha256:test"}
-    monkeypatch.setattr(mod.T, "load_audit_rows", lambda v: {"entry": entry, "members": [1], "frozen_at": None,
-                                                            "built": {}, "audit_rows": audit_rows})
-    monkeypatch.setattr(mod, "_served_ai_confidence",
-                        lambda ids: {i: 35.0 + (i % 7) for i in list(ids)[len(list(ids)) // 3:]})
+    monkeypatch.setattr(mod.T, "load_audit_rows", lambda v: loaded)
     monkeypatch.setattr(mod, "_spy_closes", lambda: {})
     monkeypatch.setattr(P, "DEFAULT_PARAMS", SMALL)
     monkeypatch.setattr(E, "FOLD_KW", FOLD_KW)
     monkeypatch.setattr(E, "HOLDOUT_KW", HOLD_KW)
     monkeypatch.setattr(E, "BOOT", 200)
     out = tmp_path / "eval"
-    assert mod.main(["--out", str(out), "--feature-sets", "production"]) == 0
+    assert mod.main(["--out", str(out), "--feature-sets", "production", "--git-sha", "test-code"]) == 0
     rep = json.loads((out / "ml_v4_evaluation.json").read_text())
-    assert rep["mode"].startswith("read-only")
+    assert rep["mode"].startswith("development")
+    assert not any("holdout" in m for m in rep["primary"]["models"].values())
     assert rep["head_to_head_ai_confidence"]["comparison_reference"] == "ai_confidence_as_served"
     assert len(rep["secondary_targets"]) == 6
     md = (out / "ml_v4_evaluation.md").read_text()
@@ -310,7 +308,7 @@ def test_ensembles_in_evaluation_use_earlier_folds_and_compare_with_best_member(
     models = E.default_models(feature_sets=("production",), params=SMALL)
     ens = E.default_ensembles(feature_sets=("production",))
     assert set(ens) == {f"ensemble_{m}_production" for m in EN.METHODS}
-    res = E.evaluate(data, models, ensembles=ens, fold_kw=FOLD_KW, holdout_kw=HOLD_KW)
+    res = E.evaluate(data, models, ensembles=ens, fold_kw=FOLD_KW, holdout_kw=HOLD_KW, evaluate_holdout=True)
     n = res["models"]["xgboost_production"]["walk_forward_raw"]["n"]
     for name in ens:
         m = res["models"][name]

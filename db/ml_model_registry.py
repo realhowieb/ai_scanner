@@ -180,7 +180,7 @@ def register_model(manifest: Mapping[str, Any], *, actor: str, artifact_uri: Opt
              manifest.get("dataset_fingerprint"), _j({k: manifest.get(k) for k in (
                  "engine_version", "params", "seed", "columns", "train_rows", "train_positive", "train_start",
                  "train_end", "training_seconds", "library_versions", "training_slice_fingerprint",
-                 "train_ids_sha256", "config_sha256", "unit") if k in manifest}),
+                 "train_ids_sha256", "config_sha256", "unit", "evaluation_binding") if k in manifest}),
              _j(dict(metrics or {})), _j(calibration), _j(members), artifact_uri,
              manifest.get("artifact_sha256"), manifest.get("artifact_bytes"), manifest.get("git_sha"),
              manifest.get("trained_at")))

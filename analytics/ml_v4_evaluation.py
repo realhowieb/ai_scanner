@@ -37,7 +37,7 @@ from analytics import ml_v4_calibration as C
 from analytics import ml_v4_ensemble as EN
 from analytics import ml_v4_providers as P
 
-EVALUATION_VERSION = "hsf-ml-v4-eval-1"
+EVALUATION_VERSION = "hsf-ml-v4-eval-2"
 FOLD_KW = dict(min_train=60, min_val=30, min_val_class=5, embargo=1)  # pre-registered ML v4 spec
 HOLDOUT_KW = dict(min_rows=100, min_days=5, min_remaining_folds=3)
 TOP_FRACTIONS = (0.1, 0.2, 1 / 3)
@@ -226,7 +226,8 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
              holdout_kw: Optional[Mapping[str, Any]] = None, cost_bps: float = DEFAULT_COST_BPS,
              regime_by_day: Optional[Mapping[_dt.date, Mapping[str, Any]]] = None,
              reference: Optional[str] = None, detail: bool = True,
-             ensembles: Optional[Mapping[str, Tuple[str, Sequence[str]]]] = None) -> Dict[str, Any]:
+             ensembles: Optional[Mapping[str, Tuple[str, Sequence[str]]]] = None,
+             evaluate_holdout: bool = False, reserved_holdout: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """Walk-forward + holdout evaluation of ``models`` (and ``ensembles`` of them, as
     name -> (method, member names)) on the common scorable sample of ``data``."""
     h = target.horizon
@@ -245,10 +246,19 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
         "fold_spec": fk, "holdout_spec": hk, "cost_bps_round_trip": cost_bps,
         "models": {}, "comparisons": {}, "warnings": [],
     }
-    hold = A.final_holdout(common, h, **hk, **fk) if common else {"valid": False, "reason": "no rows"}
+    hold = dict(reserved_holdout) if reserved_holdout is not None else (
+        A.final_holdout(common, h, **hk, **fk) if common else {"valid": False, "reason": "no rows"})
+    if hold.get("valid"):
+        available_ids = {r.observation_id for r, _ in common}
+        hold["ids"] = [i for i in hold["ids"] if i in available_ids]
+        hold["rows"] = len(hold["ids"])
     if hold.get("valid"):
         hstart = _dt.date.fromisoformat(hold["start"])
-        wf = [(r, y) for r, y in common if r.entry_day < hstart]
+        # Validation labels must not read prices inside the reserved final-test
+        # period either. Use the same purged/embargoed population as training.
+        development, _, _ = A.purge_train([r for r, _ in common], hstart, h, fk.get("embargo", 1))
+        development_ids = {r.observation_id for r in development}
+        wf = [(r, y) for r, y in common if r.observation_id in development_ids]
     else:
         hstart, wf = None, list(common)
     folds = A.walk_forward_folds(wf, h, **fk)
@@ -256,7 +266,7 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
                                                   "purged", "embargoed")} | {"train_n": len(f.train_ids), "validation_n": len(f.val_ids)}
                     for f in folds]
     out["holdout"] = {"valid": bool(hold.get("valid")), "start": hold.get("start"), "rows": hold.get("rows", 0),
-                      "reason": hold.get("reason")}
+                      "reason": hold.get("reason"), "evaluated": evaluate_holdout and bool(hold.get("valid"))}
     by_id = {r.observation_id: (r, y) for r, y in common}
     pooled_ids: Optional[List[int]] = None
     oof: Dict[str, Dict[str, Any]] = {}
@@ -340,11 +350,12 @@ def evaluate(data: Sequence[Tuple[A.AuditRow, int]], models: Mapping[str, ModelF
             mres["serving_calibrator"] = C.choose_and_fit(chunks)
         out["models"][name] = mres
 
-    ho_rows = [by_id[i] for i in hold["ids"]] if hold.get("valid") else []
+    ho_rows = [by_id[i] for i in hold["ids"]] if hold.get("valid") and evaluate_holdout else []
     ho_train = []
     if hold.get("valid"):
         kept, _, _ = A.purge_train([r for r, _ in wf], hstart, h, fk.get("embargo", 1))
         ho_train = [by_id[r.observation_id] for r in kept]
+    out["training_slice_fingerprint"] = A.slice_fingerprint([r for r, _ in ho_train])
     for name, factory in models.items():
         fold_preds = []
         for f in folds:
@@ -481,7 +492,8 @@ def render_markdown(result: Mapping[str, Any], *, title: str = "ML v4 walk-forwa
              f"Sample: {s['common_rows']} signal-days ({s['positive']} positive, {_f(s['positive_rate'], True)}), "
              f"{s['entry_days']} entry days, {s['tickers']} tickers; {s['dropped_not_scorable_by_all']} dropped so every "
              f"model sees the same rows. Folds: {len(result['folds'])}. Holdout: "
-             + (f"from {result['holdout']['start']}, {result['holdout']['rows']} rows (evaluated once)."
+             + (f"from {result['holdout']['start']}, {result['holdout']['rows']} rows "
+                f"({'evaluated' if result['holdout'].get('evaluated') else 'withheld; development folds only'})."
                 if result["holdout"]["valid"] else f"not reserved ({result['holdout']['reason']})."), ""]
     if result["warnings"]:
         lines += ["## Warnings", ""] + [f"- {w}" for w in result["warnings"]] + [""]
