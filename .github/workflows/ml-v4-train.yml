@@ -1,6 +1,8 @@
 name: ML v4 Train & Evaluate
 
-# Manual only, read-only against production (SELECT only; no database writes).
+# Manual only. Preflight, training and development evaluation read production only.
+# Explicit final_holdout=true writes the durable final-test ledger; register=true
+# also publishes candidate artifacts and writes the model registry.
 #   mode=train    (Milestone 2) trains XGBoost, LightGBM and CatBoost on an
 # existing finalized research dataset version (SELECT only), for the
 # pre-declared target "+4% before -2% within 5 trading days", stopping before
@@ -8,9 +10,9 @@ name: ML v4 Train & Evaluate
 # production AI Confidence or PreBreakout. Model files + manifest are uploaded
 # as this run's artifact (30 days).
 #   mode=evaluate (Milestone 3) walk-forward evaluation + calibration of every
-# model on identical rows, a final holdout evaluated once, head-to-head with AI
+# model on identical rows, the final holdout withheld by default, head-to-head with AI
 # Confidence as served, and secondary targets by horizon. Reports only.
-#   register=true (Milestone 4, mode=train only) is the one step that writes:
+#   register=true (Milestone 4, mode=train only, requires final_holdout=true):
 # a separate job uploads the model files to a new GitHub Release
 # (ml-v4-models-<run id>, never overwriting) and inserts one "candidate" row per
 # model into the ML v4 registry tables (ml_models / ml_model_events), with the
@@ -20,11 +22,12 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "train (save models) or evaluate (reports only)"
+        description: "preflight (check only), train (save models), evaluate (development reports; final test requires explicit opt-in)"
         required: true
-        default: "evaluate"
+        default: "preflight"
         type: choice
         options:
+          - preflight
           - evaluate
           - train
       dataset_version:
@@ -45,6 +48,11 @@ on:
         default: "20"
       register:
         description: "mode=train only: upload model files to a GitHub Release and register them as candidates (database write)"
+        required: false
+        default: false
+        type: boolean
+      final_holdout:
+        description: "Explicit final test: writes a durable database claim; completed identical reports are reused and interrupted tests cannot automatically retry"
         required: false
         default: false
         type: boolean
@@ -76,7 +84,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml-v4.txt -c requirements.lock
-      - name: Run (read-only, no database writes)
+      - name: Prepare and run (final-test ledger writes only with explicit opt-in)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -91,10 +99,30 @@ jobs:
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           MODE: ${{ inputs.mode }}
           REGISTER: ${{ inputs.register }}
+          ML_V4_FINAL_HOLDOUT: ${{ inputs.final_holdout }}
         run: |
+          if [ "$REGISTER" = "true" ] && [ "$MODE" != "train" ]; then
+            echo 'Registration is only available in train mode.'
+            exit 1
+          fi
+          if [ "$REGISTER" = "true" ] && [ "$ML_V4_FINAL_HOLDOUT" != "true" ]; then
+            echo 'Registration requires an explicitly requested final holdout evaluation.'
+            exit 1
+          fi
+          if [ "$ML_V4_FINAL_HOLDOUT" = "true" ] && [ "$MODE" = "preflight" ]; then
+            echo 'Preflight never evaluates the final holdout.'
+            exit 1
+          fi
+          # Resolve newest once so training and evaluation cannot select different versions.
+          ML_V4_DATASET_VERSION="$(python -c 'import os; from scripts.ml_v4_train import _pick_version; print(_pick_version(os.getenv("ML_V4_DATASET_VERSION") or None)["dataset_version"])')"
+          export ML_V4_DATASET_VERSION
+          if [ "$MODE" = "preflight" ]; then
+            python scripts/ml_v4_train.py --preflight-only --out "$RUNNER_TEMP/ml_v4"
+            exit 0
+          fi
           if [ "$MODE" = "train" ]; then
             python scripts/ml_v4_train.py --out "$RUNNER_TEMP/ml_v4"
-            if [ "$REGISTER" = "true" ]; then
+            if [ "$REGISTER" = "true" ] || [ "$ML_V4_FINAL_HOLDOUT" = "true" ]; then
               # Evaluation evidence stored with each candidate (needed before "validated").
               python scripts/ml_v4_evaluate.py --out "$RUNNER_TEMP/ml_v4/evaluation"
               cat "$RUNNER_TEMP/ml_v4/evaluation/ml_v4_evaluation.md" >> "$GITHUB_STEP_SUMMARY"
@@ -103,6 +131,13 @@ jobs:
             python scripts/ml_v4_evaluate.py --out "$RUNNER_TEMP/ml_v4"
             cat "$RUNNER_TEMP/ml_v4/ml_v4_evaluation.md" >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Preparation report (including blocked runs)
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/ml_v4/ml_v4_preflight.md" ]; then
+            cat "$RUNNER_TEMP/ml_v4/ml_v4_preflight.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload models / reports
         if: always()
         uses: actions/upload-artifact@v7

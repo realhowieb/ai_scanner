@@ -21,7 +21,7 @@ BAR_LIMIT = 260  # about a year of sessions, for the chart's 1Y range
 EMA_WARMUP_BARS = 22  # ema_cross_detail needs 23 bars before it reports a cross
 # Stock pages get their own cache so a client paging through many tickers can't
 # push the scan runs out of the shared one.
-stock_cache = TTLCache(max_entries=128)
+stock_cache = TTLCache(max_entries=128, name="stocks")
 # Stock pages are built from the latest scan (no live quote), so a page is reused for
 # two minutes and, past that, served while one background rebuild runs.
 STOCK_TTL_S = 120
@@ -611,7 +611,7 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
 SPARK_SESSIONS = 21  # 20 sessions of change: the first close is the baseline
 SPARK_MAX = 50
 SPARK_TTL_S = 900
-spark_cache = TTLCache(max_entries=64)
+spark_cache = TTLCache(max_entries=64, name="sparklines")
 
 
 def daily_closes(tickers: List[str]) -> Dict[str, Any]:
@@ -653,7 +653,7 @@ def daily_closes(tickers: List[str]) -> Dict[str, Any]:
 
 QUOTE_MAX = 50
 QUOTE_TTL_S = 60
-quote_cache = TTLCache(max_entries=64)
+quote_cache = TTLCache(max_entries=64, name="quotes")
 
 
 def _trade_day(stamp: Any) -> Optional[str]:
@@ -730,7 +730,7 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
 
 
 SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans
-score_cache = TTLCache(max_entries=SCORE_HISTORY_RUNS * 2)
+score_cache = TTLCache(max_entries=SCORE_HISTORY_RUNS * 2, name="score_history")
 
 
 def _run_ticker_scores(run_id: int) -> Dict[str, Dict[str, Any]]:

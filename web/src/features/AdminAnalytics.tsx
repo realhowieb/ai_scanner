@@ -353,6 +353,11 @@ function Evidence({ days }: { days: number }) {
         {e.cohorts.length === 0 ? <p className="cap">No research cohorts in this period.</p> : <HBars label="Observations by cohort" rows={e.cohorts.map((c) => [c.cohort, c.observations])} />}
         <h3 className="h3">Evidence readiness</h3>
         <p><StatusPill status={e.readiness.state} /> <span className="cap">{e.readiness.reason ?? "No readiness explanation recorded."}</span></p>
+        {e.readiness.completed_evaluation_run != null && <p className="cap">
+          <a href={`https://github.com/realhowieb/ai_scanner/actions/runs/${e.readiness.completed_evaluation_run}`} target="_blank" rel="noopener noreferrer">
+            Review completed evaluation #{e.readiness.completed_evaluation_run}
+          </a>. A new evaluation requires a separate research decision.
+        </p>}
         {e.readiness.trading_days != null && (
           <div className="metric-strip">
             <span>Trading days <strong>{String(e.readiness.trading_days)} / {String(e.readiness.trading_days_preferred ?? "—")}</strong></span>

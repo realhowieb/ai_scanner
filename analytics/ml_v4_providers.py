@@ -58,9 +58,8 @@ class Target:
 # Confidence shows customers as "5D outcome probability".
 PRIMARY_TARGET = Target(
     label="F_clean_path_5d", horizon=5,
-    description="+4% before -2% within 5 trading days (production AI Confidence event); measured as "
-                "MFE_5d >= +4% and MAE_5d > -2% over the same window (canonical order-free proxy, slightly "
-                "stricter: no -2% touch at any point in the window)")
+    description="Reaches +4% and never touches -2% over five trading days (MFE_5d >= +4%, MAE_5d > -2%). "
+                "This is an order-free proxy for '+4% before -2%', not a measurement of which price was reached first.")
 # Reported alongside the primary target; never used to pick a winner after the fact.
 SECONDARY_TARGETS = tuple(
     Target(label=label, horizon=h, description=A.LABELS[label].description)

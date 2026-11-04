@@ -73,7 +73,7 @@ async function handle(input: Request | string, init?: RequestInit): Promise<Resp
   if (path === "/v1/admin/analytics") return jsonResponse(analytics);
   if (path === "/v1/admin/signals") return jsonResponse(signals(new URL(req.url).searchParams));
   if (path === "/v1/admin/evidence") return jsonResponse({ days: 30, funnel: [{ stage: "Captured", count: 40, pct: 100 }, { stage: "Matured", count: 30, pct: 75 }],
-    pending: 10, excluded: 5, cohorts: [{ cohort: "CANDIDATE", observations: 25 }], readiness: { state: "COLLECTING", reason: "Need 20 trading days", trading_days: 9, trading_days_preferred: 20 } });
+    pending: 10, excluded: 5, cohorts: [{ cohort: "CANDIDATE", observations: 25 }], readiness: { state: "COLLECTING", reason: "Need 20 trading days", trading_days: 9, trading_days_preferred: 20, completed_evaluation_run: 12345 } });
   if (path === "/v1/admin/stair-stepper") return jsonResponse({ days: 30, observations: 0, horizons: ["+5m", "+10m"], windows: [], best_window: null, verdict_reason: "Requires 30 matured outcomes." });
   if (path === "/v1/admin/ml-readiness") return jsonResponse({ status: "NOT_READY", recommendation: "Keep collecting.", matured_signal_days: 134, matured_rows: 600,
     matured_trading_days: 12, matured_symbols: 80, outcome_coverage_recent: 0.9, walk_forward_folds: 0, blocking_reasons: ["Matured signal-days 134 < 1000"],
@@ -156,6 +156,7 @@ describe("Admin page", () => {
     await u.selectOptions(screen.getByRole("combobox", { name: "Signal" }), "Breakout");
     expect(await screen.findByText("777")).toBeInTheDocument();
     expect(await screen.findByText("Need 20 trading days")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review completed evaluation #12345/ })).toHaveAttribute("href", "https://github.com/realhowieb/ai_scanner/actions/runs/12345");
     expect(screen.getByText("No Stair-Stepper outcomes have matured in this period.")).toBeInTheDocument();
     expect(await screen.findByText("Keep collecting.")).toBeInTheDocument();
     expect(screen.getByText(">= 1000")).toBeInTheDocument();

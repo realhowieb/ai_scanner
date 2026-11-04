@@ -71,7 +71,8 @@ def workflow_runs(session, repo: str, workflow: str, *, event: Optional[str] = N
         return []
     r.raise_for_status()
     return [{"id": x.get("id"), "created_at": x.get("created_at"), "updated_at": x.get("updated_at"),
-             "conclusion": x.get("conclusion"), "status": x.get("status"), "event": x.get("event")}
+             "conclusion": x.get("conclusion"), "status": x.get("status"), "event": x.get("event"),
+             "head_branch": x.get("head_branch")}
             for x in (r.json().get("workflow_runs") or [])]
 
 
@@ -386,7 +387,7 @@ def api_ready() -> Dict[str, Any]:
     r = requests.get(f"{base}/readyz", timeout=60)
     body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     keys = ("rss_mb", "rss_peak_mb", "container_mb", "container_peak_mb", "memory_limit_mb",
-            "memory_warn_mb", "memory_warning", "price_cache_entries")
+            "memory_warn_mb", "memory_warning", "price_cache_entries", "cache_counts")
     return {"status": r.status_code, **{k: body.get(k) for k in keys}}
 
 
@@ -395,6 +396,11 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
     timings: Dict[str, float] = {}
     T = lambda n, f: _timed(errors, timings, n, f)  # noqa: E731
     workflows = T("workflows", lambda: collect_workflows(now))
+    def evaluations():
+        session, repo = _gh()
+        return workflow_runs(session, repo, "signal-effectiveness.yml",
+                             event="workflow_dispatch", status="success", per_page=100)
+    formal_runs = T("formal_evaluation_runs", evaluations)
     mat_report = T("maturation_report", latest_maturation_report)
     obs = T("observations", recent_observations)
     probe = T("db_probe", lambda: db_probe(obs))
@@ -437,6 +443,7 @@ def collect(now: _dt.datetime) -> Dict[str, Any]:
         "db_probe": probe,
         "workflows": workflows,
         "readiness": readiness,
+        "formal_evaluation_runs": formal_runs,
         "parity": parity,
         "artifacts": artifacts,
         "collection_errors": errors,

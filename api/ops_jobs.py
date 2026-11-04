@@ -356,6 +356,12 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
             log.warning(json.dumps({"event": "scheduled_scans_error", "error": type(e).__name__}))
     if _on("HSF_PREMIUM_AUTO_ENABLED"):
         _premium_auto(now)
+    try:
+        from api.memory import maintain_memory
+
+        maintain_memory()
+    except Exception as e:
+        log.warning(json.dumps({"event": "memory_maintenance_failed", "error": type(e).__name__}))
 
 
 def _premium_auto(now: dt.datetime) -> None:

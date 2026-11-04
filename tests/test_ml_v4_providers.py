@@ -272,25 +272,26 @@ def test_training_script_dry_run_writes_artifacts_only(monkeypatch, tmp_path: Pa
     import importlib.util
 
     import api.research
+    from analytics.ml_v4_synthetic import dataset
 
-    raw, scans = _dataset()
+    loaded = dataset()
+    raw, scans = loaded["raw_rows"], loaded["scan_rows"]
     spec = importlib.util.spec_from_file_location(
         "ml_v4_train_script", Path(__file__).resolve().parents[1] / "scripts" / "ml_v4_train.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    entry = {"dataset_version": "hsf-ml-test-v1", "fingerprint": "sha256:test",
-             "created_at": "2027-01-01T00:00:00+00:00", "observation_ids": [r["id"] for r in raw], "metadata": {}}
+    entry = loaded["entry"]
     monkeypatch.setattr(mod, "_pick_version", lambda requested: entry)
     monkeypatch.setattr(mod, "_benchmark_computed_at", lambda ids: {})
     monkeypatch.setattr(api.research, "load_window", lambda a, b: {"rows": raw, "scans": scans})
     monkeypatch.setattr(P, "DEFAULT_PARAMS", {p: _small(p) for p in P.PROVIDERS})
     out = tmp_path / "run"
-    assert mod.main(["--out", str(out)]) == 0
+    assert mod.main(["--out", str(out), "--git-sha", "test-code"]) == 0
     import json as _json
 
     summary = _json.loads((out / "ml_v4_training_manifest.json").read_text())
     assert summary["mode"].startswith("dry_run")
-    assert summary["dataset"]["dataset_version"] == "hsf-ml-test-v1"
+    assert summary["dataset"]["dataset_version"] == entry["dataset_version"]
     assert summary["split"]["holdout"]["valid"] and "ids" not in summary["split"]["holdout"]
     assert len(summary["models"]) == 6 and not summary["failures"]
     assert len(list(out.glob("*.joblib"))) == 6

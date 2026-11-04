@@ -545,7 +545,20 @@ _READINESS_WHITELIST_GATES = ("A_trading_days", "B_scan_runs", "C_cohort_cluster
                               "H_research_integrity")
 
 
-def eval_forward_evidence(readiness: Optional[Mapping[str, Any]], now: _dt.datetime) -> Dict[str, Any]:
+def completed_formal_evaluation(readiness, runs, now):
+    """A manual main-branch evaluation in this epoch; newer data alone isn't approval to peek again."""
+    epoch = _parse((readiness.get("epoch") or {}).get("forward_epoch_start_timestamp"))
+    if epoch is None:
+        return None
+    eligible = [r for r in runs or [] if r.get("conclusion") == "success" and r.get("status") == "completed"
+                and r.get("event") == "workflow_dispatch" and r.get("head_branch") == "main"
+                and _parse(r.get("created_at")) is not None and epoch <= _parse(r["created_at"]) <= now
+                and str(r.get("id")) != str((readiness.get("epoch") or {}).get("run55_workflow_run"))]
+    return max(eligible, key=lambda r: _parse(r["created_at"]), default=None)
+
+
+def eval_forward_evidence(readiness: Optional[Mapping[str, Any]], now: _dt.datetime,
+                          evaluations: Optional[Sequence[Mapping[str, Any]]] = None) -> Dict[str, Any]:
     if readiness is None:
         return unknown("Run 56 readiness unavailable")
     state = readiness.get("state")
@@ -558,6 +571,7 @@ def eval_forward_evidence(readiness: Optional[Mapping[str, Any]], now: _dt.datet
                for m in mat]
     known_cov = [c for c in min_cov if c is not None]
     f: List[Dict[str, Any]] = []
+    completed = completed_formal_evaluation(readiness, evaluations, now)
     if state == "DATA_QUALITY_BLOCKED":
         ext = "FORWARD_EVIDENCE_BLOCKED"
         f.append(finding(ext, "CRITICAL", f"forward evidence blocked: {readiness.get('state_reason')}",
@@ -565,10 +579,18 @@ def eval_forward_evidence(readiness: Optional[Mapping[str, Any]], now: _dt.datet
                          action="resolve the blocking data-quality issue before any formal evaluation"))
         out_state, status = "DATA_QUALITY_BLOCKED", "HEALTHY"
     elif state == "READY_FOR_RUN55_RERUN":
-        f.append(finding("FORMAL_EVALUATION_READY", "INFO", "forward evidence gates pass; formal evaluation may run",
-                         detected_at=now, human="HUMAN_ACTION_REQUIRED",
-                         action="approve and manually dispatch Signal Effectiveness Analysis (never automatic)"))
-        out_state, status = "READY_FOR_FORMAL_EVALUATION", "HEALTHY"
+        if completed:
+            f.append(finding("FORMAL_EVALUATION_COMPLETED", "INFO",
+                             f"formal evaluation already completed for this evidence period (run {completed['id']})",
+                             evidence={"run_id": completed["id"], "completed_at": completed.get("updated_at")},
+                             detected_at=now, human="NO_ACTION",
+                             action="review the completed Signal Effectiveness Analysis; another run needs a separate research decision"))
+            out_state, status = "FORMAL_EVALUATION_COMPLETED", "HEALTHY"
+        else:
+            f.append(finding("FORMAL_EVALUATION_READY", "INFO", "forward evidence gates pass; formal evaluation may run",
+                             detected_at=now, human="HUMAN_ACTION_REQUIRED",
+                             action="approve and manually dispatch Signal Effectiveness Analysis (never automatic)"))
+            out_state, status = "READY_FOR_FORMAL_EVALUATION", "HEALTHY"
     elif limiting == "NO_FORWARD_DATA":
         out_state, status = "NO_FORWARD_DATA", "WAITING"
     else:
@@ -592,8 +614,11 @@ def eval_forward_evidence(readiness: Optional[Mapping[str, Any]], now: _dt.datet
                               "estimated_trading_days_until_ready": readiness.get("estimated_trading_days_until_ready"),
                               "long_readiness": readiness.get("long_readiness"),
                               "short_readiness": readiness.get("short_readiness"),
+                              "completed_evaluation_run": completed.get("id") if completed else None,
+                              "completed_evaluation_at": completed.get("updated_at") if completed else None,
                               "formal_evaluation": "HUMAN APPROVAL REQUIRED" if out_state ==
-                              "READY_FOR_FORMAL_EVALUATION" else "NOT READY"})
+                              "READY_FOR_FORMAL_EVALUATION" else "COMPLETED" if out_state ==
+                              "FORMAL_EVALUATION_COMPLETED" else "NOT READY"})
 
 
 def eval_workflows(workflows: Optional[Mapping[str, Optional[Sequence[Mapping[str, Any]]]]],
@@ -685,7 +710,7 @@ def api_memory_finding(api: Optional[Mapping[str, Any]], now: _dt.datetime) -> O
     return finding("API_MEMORY_HIGH", "WARNING",
                    f"API memory peaked at {_api_peak_mb(api)} MB of {api.get('memory_limit_mb')} MB",
                    evidence={k: api.get(k) for k in ("rss_mb", "rss_peak_mb", "container_mb", "container_peak_mb",
-                                                     "memory_limit_mb", "memory_warn_mb", "price_cache_entries")},
+                                                     "memory_limit_mb", "memory_warn_mb", "price_cache_entries", "cache_counts")},
                    detected_at=now, human="WATCH",
                    action="check what grew (custom scans, caches) before Render restarts the API for memory")
 
@@ -783,7 +808,7 @@ def evaluate(inputs: Mapping[str, Any]) -> Dict[str, Any]:
                                               psub.get("maturation"), now),
         "market_data": lambda: eval_market_data(inputs.get("maturation_report"), inputs.get("universe"), now),
         "cohort_parity": lambda: eval_cohort_parity(inputs.get("parity"), inputs.get("readiness"), now),
-        "forward_evidence": lambda: eval_forward_evidence(inputs.get("readiness"), now),
+        "forward_evidence": lambda: eval_forward_evidence(inputs.get("readiness"), now, inputs.get("formal_evaluation_runs")),
         "workflows": lambda: eval_workflows(inputs.get("workflows"), now),
         "database": lambda: eval_database(inputs.get("db_probe"), now),
         "artifact_freshness": lambda: eval_artifacts(inputs.get("artifacts"), now),
