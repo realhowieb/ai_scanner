@@ -30,7 +30,7 @@ MAX_DAYS = 400
 MAX_PAGE = 500
 RECORDS_TTL_S = 900        # 15 min fresh
 RECORDS_STALE_S = 3600     # then served stale for up to an hour while refreshing
-_cache = TTLCache(16)
+_cache = TTLCache(16, name="research")
 
 
 class BadRequest(ValueError):

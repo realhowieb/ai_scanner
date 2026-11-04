@@ -67,5 +67,48 @@ class AllocatorTuningTests(unittest.TestCase):
             self.assertTrue(memory.memory_status()["memory_warning"])
 
 
+
+
+
+class MemoryMaintenanceTests(unittest.TestCase):
+    def test_current_pressure_trims_free_pages_and_reports_before_and_after(self):
+        from api.today import TTLCache
+
+        lib = mock.Mock()
+        lib.malloc_trim.return_value = 1
+        with mock.patch.object(memory, "container_mb", side_effect=[455.0, 310.0]), \
+                mock.patch.object(TTLCache, "prune_all", return_value=3), \
+                mock.patch.object(TTLCache, "statistics", return_value={"entries": 4}), \
+                mock.patch.object(memory, "_glibc", return_value=lib), mock.patch("gc.collect") as collect:
+            out = memory.maintain_memory()
+        self.assertEqual((out["before_mb"], out["after_mb"], out["expired_cache_entries"]), (455, 310, 3))
+        lib.malloc_trim.assert_called_once_with(0)
+        collect.assert_called_once()
+
+    def test_low_current_usage_does_not_trim_because_of_an_old_peak(self):
+        from api.today import TTLCache
+
+        with mock.patch.object(memory, "container_mb", return_value=200.0), \
+                mock.patch.object(memory, "peak_container_mb", return_value=490.0), \
+                mock.patch.object(TTLCache, "prune_all", return_value=0), \
+                mock.patch.object(memory, "_glibc") as libc, mock.patch("gc.collect") as collect:
+            memory.maintain_memory()
+        libc.assert_not_called()
+        collect.assert_not_called()
+
+    def test_disabled_is_a_noop(self):
+        with mock.patch.dict(os.environ, {"HSF_MEMORY_MAINTENANCE_ENABLED": "0"}), \
+                mock.patch.object(memory, "container_mb") as sample:
+            self.assertEqual(memory.maintain_memory(), {"disabled": True})
+        sample.assert_not_called()
+
+    def test_growth_is_logged_even_when_the_operation_fails(self):
+        with mock.patch.object(memory, "rss_mb", side_effect=[200.0, 235.0]), \
+                self.assertLogs("hsf.memory", level="INFO") as logs:
+            with self.assertRaises(RuntimeError), memory.observe_memory("custom_scan"):
+                raise RuntimeError("provider failed")
+        self.assertIn('"rss_delta_mb": 35.0', logs.output[0])
+
+
 if __name__ == "__main__":
     unittest.main()

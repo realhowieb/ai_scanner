@@ -7,6 +7,7 @@ import json
 import math
 import threading
 import time
+import weakref
 from typing import Any, Callable, Dict, List, Optional
 
 from analytics import market_calendar as mc
@@ -27,18 +28,25 @@ class TTLCache:
     never make a visitor wait once warm. Concurrent misses on one key share a
     single load instead of each building it."""
 
-    def __init__(self, max_entries: int):
+    _instances = weakref.WeakSet()
+    _instances_lock = threading.Lock()
+
+    def __init__(self, max_entries: int, *, name: str = "shared"):
         self.max_entries = max_entries
+        self.name = name
         self._items: Dict[Any, tuple[float, float, Any]] = {}  # key -> (expires at, stale until, value)
         self._lock = threading.Lock()
-        self._loading: Dict[Any, threading.Lock] = {}  # key -> held while that key loads
+        self._loading: Dict[Any, list] = {}  # key -> [gate, users (including waiters)]
         self._refreshing: set = set()
+        with self._instances_lock:
+            self._instances.add(self)
 
     def get(self, key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:
         from db.traffic import cache
 
         now = time.monotonic()
         with self._lock:
+            self._prune(now)
             hit = self._items.get(key)
             if hit and now < hit[0]:
                 cache("api_results", hits=1)
@@ -50,38 +58,84 @@ class TTLCache:
                     threading.Thread(target=self._refresh, args=(key, loader, ttl_s, stale_s),
                                      name="cache-refresh", daemon=True).start()
                 return hit[2]
-            gate = self._loading.setdefault(key, threading.Lock())
-        with gate:  # one load per key; later callers take its result
+            slot = self._loading.setdefault(key, [threading.Lock(), 0])
+            slot[1] += 1
+        try:
+            with slot[0]:  # keep the same gate while any caller is waiting
+                with self._lock:
+                    hit = self._items.get(key)
+                    if hit and time.monotonic() < hit[0]:
+                        cache("api_results", hits=1)
+                        return hit[2]
+                cache("api_results", misses=1)
+                from api.memory import observe_memory
+
+                with observe_memory(f"cache_load:{self.name}"):
+                    value = loader()
+                self._put(key, value, ttl_s, stale_s)
+                return value
+        finally:
             with self._lock:
-                hit = self._items.get(key)
-                if hit and time.monotonic() < hit[0]:
-                    cache("api_results", hits=1)
-                    return hit[2]
-            cache("api_results", misses=1)
-            value = loader()
-            self._put(key, value, ttl_s, stale_s)
-        with self._lock:
-            if self._loading.get(key) is gate and not gate.locked():
-                del self._loading[key]
-        return value
+                slot[1] -= 1
+                if slot[1] == 0 and self._loading.get(key) is slot:
+                    del self._loading[key]
+
+    def _prune(self, now: float) -> int:
+        expired = [k for k, (_, until, _) in self._items.items() if now >= until]
+        for key in expired:
+            del self._items[key]
+        return len(expired)
+
+    @classmethod
+    def prune_all(cls) -> int:
+        with cls._instances_lock:
+            caches = list(cls._instances)
+        total = 0
+        for cache in caches:
+            with cache._lock:
+                total += cache._prune(time.monotonic())
+        return total
+
+    @classmethod
+    def statistics(cls) -> dict:
+        with cls._instances_lock:
+            caches = list(cls._instances)
+        totals = {"caches": len(caches), "entries": 0, "loads": 0, "refreshes": 0}
+        for cache in caches:
+            with cache._lock:
+                totals["entries"] += len(cache._items)
+                totals["loads"] += len(cache._loading)
+                totals["refreshes"] += len(cache._refreshing)
+        return totals
 
     def _refresh(self, key: Any, loader: Callable[[], Any], ttl_s: float, stale_s: float) -> None:
+        with self._lock:
+            slot = self._loading.setdefault(key, [threading.Lock(), 0])
+            slot[1] += 1
         try:
+            from api.memory import observe_memory
             from db.traffic import scope
 
-            with scope("api.cache_refresh"):
-                self._put(key, loader(), ttl_s, stale_s)
+            with slot[0], scope("api.cache_refresh"):
+                with self._lock:
+                    hit = self._items.get(key)
+                    if hit and time.monotonic() < hit[0]:
+                        return
+                with observe_memory(f"cache_refresh:{self.name}"):
+                    self._put(key, loader(), ttl_s, stale_s)
         except Exception:  # keep serving the stale value; the next request past stale_s loads in the foreground
             pass
         finally:
             with self._lock:
+                slot[1] -= 1
+                if slot[1] == 0 and self._loading.get(key) is slot:
+                    del self._loading[key]
                 self._refreshing.discard(key)
 
     def _put(self, key: Any, value: Any, ttl_s: float, stale_s: float) -> None:
         now = time.monotonic()
         with self._lock:
-            for k in [k for k, (_, stale_until, _) in self._items.items() if now >= stale_until]:
-                del self._items[k]
+            self._prune(now)
             self._items[key] = (now + ttl_s, now + ttl_s + max(0.0, stale_s), value)
             while len(self._items) > self.max_entries:
                 del self._items[min(self._items, key=lambda k: self._items[k][1])]
@@ -99,8 +153,8 @@ class TTLCache:
             self._items.clear()
 
 
-_cache = TTLCache(CACHE_MAX_ENTRIES)
-_run_cache = TTLCache(RUN_CACHE_MAX_ENTRIES)
+_cache = TTLCache(CACHE_MAX_ENTRIES, name="page_results")
+_run_cache = TTLCache(RUN_CACHE_MAX_ENTRIES, name="saved_runs")
 
 
 def _cached(key: Any, loader: Callable[[], Any], ttl_s: float = CACHE_TTL_S, stale_s: float = 0) -> Any:

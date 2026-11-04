@@ -26,7 +26,7 @@ log = logging.getLogger("hsf_api.ml_readiness")
 
 TTL_S = 1800
 STALE_S = 7200
-_cache = TTLCache(2)
+_cache = TTLCache(2, name="ml_readiness")
 
 
 def clear_cache() -> None:

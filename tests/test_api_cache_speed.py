@@ -162,5 +162,71 @@ class WarmUpTests(unittest.TestCase):
         self.assertEqual(calls, ["movers"])
 
 
+
+
+
+class CacheRetentionTests(unittest.TestCase):
+    def test_failed_unique_loads_release_all_coordination_entries(self):
+        cache = TTLCache(2)
+        def fail():
+            raise RuntimeError("unavailable")
+        for i in range(100):
+            with self.assertRaises(RuntimeError):
+                cache.get(i, fail)
+        self.assertEqual(cache._loading, {})
+        self.assertEqual(cache.size(), 0)
+
+    def test_expired_values_are_pruned_without_a_new_cache_write(self):
+        cache = TTLCache(2)
+        with mock.patch("api.today.time.monotonic", return_value=100):
+            cache.get("expired", lambda: bytearray(1000), ttl_s=1)
+            cache.get("valid", lambda: "keep", ttl_s=60)
+        with mock.patch("api.today.time.monotonic", return_value=102):
+            TTLCache.prune_all()
+            self.assertEqual(cache.size(), 1)
+            self.assertEqual(cache.get("valid", lambda: self.fail("must reuse valid entry")), "keep")
+
+    def test_expired_failed_refresh_does_not_retain_the_old_value(self):
+        cache = TTLCache(2)
+        with mock.patch("api.today.time.monotonic", return_value=100):
+            cache.get("key", lambda: bytearray(1000), ttl_s=1)
+        def fail():
+            raise RuntimeError("provider")
+        with mock.patch("api.today.time.monotonic", return_value=102), self.assertRaises(RuntimeError):
+            cache.get("key", fail)
+        self.assertEqual(cache.size(), 0)
+        self.assertEqual(cache._loading, {})
+
+    def test_success_after_waiting_on_a_failed_load_keeps_single_flight(self):
+        cache = TTLCache(2)
+        entered, release = threading.Event(), threading.Event()
+        calls, result = [], []
+        def load():
+            calls.append(1)
+            if len(calls) == 1:
+                entered.set()
+                release.wait(2)
+                raise RuntimeError("first failed")
+            return "recovered"
+        def get():
+            try:
+                result.append(cache.get("same", load))
+            except RuntimeError:
+                result.append("failed")
+        first = threading.Thread(target=get)
+        first.start()
+        self.assertTrue(entered.wait(2))
+        others = [threading.Thread(target=get) for _ in range(4)]
+        for t in others:
+            t.start()
+        release.set()
+        for t in [first, *others]:
+            t.join(3)
+            self.assertFalse(t.is_alive())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sorted(result), ["failed", "recovered", "recovered", "recovered", "recovered"])
+        self.assertEqual(cache._loading, {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -503,13 +503,51 @@ class StoreAndScriptTests(unittest.TestCase):
         boom = mock.Mock(side_effect=RuntimeError("down"))
         with mock.patch.multiple(script, collect_workflows=boom, latest_maturation_report=boom,
                                  recent_observations=boom, forward_outcomes=boom, db_runs=boom,
-                                 universe_probe=boom, parity_report=boom), \
+                                 universe_probe=boom, parity_report=boom, _gh=boom), \
                 mock.patch("db.system_health.load_latest", side_effect=RuntimeError("down")):
             inputs = script.collect(WED)
         r = sh.evaluate(inputs)
         self.assertIn(r["system_status"], ("UNKNOWN", "ACTION_REQUIRED"))
         self.assertTrue(inputs["collection_errors"])
         self.assertEqual(r["subsystems"]["workflows"]["status"], "UNKNOWN")
+
+
+
+
+
+class CompletedFormalEvaluationTests(unittest.TestCase):
+    def setUp(self):
+        self.readiness = _readiness(state="READY_FOR_RUN55_RERUN")
+        self.run = {"id": 12345, "created_at": "2026-09-29T12:00:00Z",
+                    "updated_at": "2026-09-29T12:05:00Z", "status": "completed",
+                    "conclusion": "success", "event": "workflow_dispatch", "head_branch": "main"}
+
+    def test_completed_manual_evaluation_replaces_repeat_dispatch_notice(self):
+        result = sh.eval_forward_evidence(self.readiness, WED, [self.run])
+        self.assertEqual(result["metrics"]["formal_evaluation"], "COMPLETED")
+        self.assertEqual(result["metrics"]["completed_evaluation_run"], 12345)
+        self.assertEqual(result["findings"][0]["code"], "FORMAL_EVALUATION_COMPLETED")
+
+    def test_unqualified_runs_do_not_acknowledge_evaluation(self):
+        for change in ({"conclusion": "failure"}, {"status": "in_progress"},
+                       {"event": "schedule"}, {"head_branch": "dev"},
+                       {"created_at": "2026-09-25T12:00:00Z"},
+                       {"created_at": "2026-10-01T12:00:00Z"}):
+            with self.subTest(change=change):
+                result = sh.eval_forward_evidence(self.readiness, WED, [{**self.run, **change}])
+                self.assertEqual(result["metrics"]["formal_evaluation"], "HUMAN APPROVAL REQUIRED")
+
+    def test_new_epoch_and_baseline_run_require_new_decision(self):
+        self.readiness["epoch"]["run55_workflow_run"] = 12345
+        self.assertIsNone(sh.completed_formal_evaluation(self.readiness, [self.run], WED))
+        self.readiness["epoch"] = {"forward_epoch_start_timestamp": "2026-09-30T00:00:00Z"}
+        self.assertIsNone(sh.completed_formal_evaluation(self.readiness, [self.run], WED))
+
+    def test_data_quality_block_takes_priority(self):
+        self.readiness["state"] = "DATA_QUALITY_BLOCKED"
+        result = sh.eval_forward_evidence(self.readiness, WED, [self.run])
+        self.assertEqual(result["metrics"]["formal_evaluation"], "NOT READY")
+        self.assertEqual(result["findings"][0]["code"], "FORWARD_EVIDENCE_BLOCKED")
 
 
 if __name__ == "__main__":
