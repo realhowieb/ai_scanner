@@ -36,7 +36,7 @@ VIEW_TTL_S = {"summary": 1800, "scores": 1800, "horizons": 1800, "setups": 1800,
               "symbol": 600, "query": 600}
 MAX_ROWS = 100_000   # hard cap on rows loaded; reported as truncated when hit
 
-_cache = TTLCache(256)
+_cache = TTLCache(256, name="outcomes")
 _state_lock = threading.Lock()
 _state: Dict[str, Any] = {"stamp": None, "stale": False}
 

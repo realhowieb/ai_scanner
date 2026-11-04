@@ -79,6 +79,8 @@ class Ready(BaseModel):
     container_peak_mb: Optional[float] = Field(default=None, description=(
         "Highest container memory since the last restart (MB); memory_warning uses this when present"))
     price_cache_entries: Optional[int] = Field(default=None, description="Price frames held in memory now")
+    cache_counts: Optional[Dict[str, int]] = Field(default=None, description=(
+        "Aggregate result-cache counts (caches, entries, loads, refreshes); no keys or user data"))
     memory_limit_mb: Optional[float] = Field(default=None, description="The instance's memory limit (MB)")
     memory_warn_mb: Optional[float] = Field(default=None, description="memory_warning turns on at this peak (MB)")
     memory_warning: Optional[bool] = Field(default=None, description=(
@@ -1904,6 +1906,7 @@ class AdminEvidenceReadiness(BaseModel):
     scan_runs: Optional[Any] = None
     scan_runs_preferred: Optional[Any] = None
     formal_evaluation: Optional[str] = None
+    completed_evaluation_run: Optional[int] = None
 
 
 class AdminEvidence(BaseModel):

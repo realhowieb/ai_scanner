@@ -4149,6 +4149,8 @@ export interface components {
         };
         /** AdminEvidenceReadiness */
         AdminEvidenceReadiness: {
+            /** Completed Evaluation Run */
+            completed_evaluation_run?: number | null;
             /** Formal Evaluation */
             formal_evaluation?: string | null;
             /** Reason */
@@ -9088,6 +9090,13 @@ export interface components {
              * @description Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match
              */
             build?: string | null;
+            /**
+             * Cache Counts
+             * @description Aggregate result-cache counts (caches, entries, loads, refreshes); no keys or user data
+             */
+            cache_counts?: {
+                [key: string]: number;
+            } | null;
             /**
              * Container Mb
              * @description Container memory now, as Render measures it (MB); rss_mb also counts shared libraries

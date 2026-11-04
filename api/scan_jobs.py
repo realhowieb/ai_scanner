@@ -292,7 +292,10 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
             def report(progress: Dict[str, Any]) -> None:
                 _set_progress(job_id, {**progress, "elapsed_s": round(time.perf_counter() - started, 1)})
 
-            result = work(report)
+            from api.memory import observe_memory
+
+            with observe_memory("custom_scan"):
+                result = work(report)
             _finish(job_id, "complete", {"phase": "complete", "elapsed_s": round(time.perf_counter() - started, 1)},
                     result=result)
         except ScanCancelled:

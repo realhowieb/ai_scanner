@@ -13,6 +13,8 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import os
+import sys
+from contextlib import contextmanager
 from typing import Optional
 
 M_ARENA_MAX = -8  # glibc mallopt parameter
@@ -28,6 +30,8 @@ def _glibc() -> Optional[ctypes.CDLL]:
             lib = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
             lib.mallopt  # noqa: B018 - glibc only; AttributeError elsewhere
             lib.malloc_trim  # noqa: B018
+            lib.malloc_trim.argtypes = [ctypes.c_size_t]
+            lib.malloc_trim.restype = ctypes.c_int
             _libc = lib
         except (OSError, AttributeError):
             return None
@@ -139,4 +143,57 @@ def memory_status() -> dict:
     return {"rss_mb": now, "rss_peak_mb": peak, "container_mb": c_now, "container_peak_mb": c_peak,
             "memory_limit_mb": _env_mb("HSF_MEMORY_LIMIT_MB", 512.0), "memory_warn_mb": warn,
             "memory_warning": bool(judged is not None and judged >= warn),
-            "price_cache_entries": _price_cache_entries()}
+            "price_cache_entries": _price_cache_entries(),
+            "cache_counts": sys.modules["api.today"].TTLCache.statistics() if "api.today" in sys.modules else None}
+
+
+# These observations contain aggregate counts only: never cache keys/usernames/tickers.
+@contextmanager
+def observe_memory(operation: str):
+    """Log substantial retained RSS growth around a known operation, even on failure."""
+    import json
+    import logging
+
+    before = rss_mb()
+    try:
+        yield
+    finally:
+        after = rss_mb()
+        if before is not None and after is not None and after - before >= 16:
+            logging.getLogger("hsf.memory").info(json.dumps({
+                "event": "memory_growth", "operation": operation,
+                "rss_before_mb": before, "rss_after_mb": after, "rss_delta_mb": round(after - before, 1)}))
+
+
+def maintain_memory() -> dict:
+    """Five-minute ops maintenance: expire unused entries; trim only under current pressure.
+
+    No valid cache entries are evicted. malloc_trim returns free allocator pages
+    to the OS; it does not restart the process or release live Python objects.
+    """
+    import gc
+    import json
+    import logging
+
+    if os.getenv("HSF_MEMORY_MAINTENANCE_ENABLED", "1").strip() == "0":
+        return {"disabled": True}
+    from api.today import TTLCache
+
+    before = container_mb()
+    if before is None:
+        before = rss_mb()
+    expired = TTLCache.prune_all()
+    trimmed = False
+    if before is not None and before >= _env_mb("HSF_MEMORY_WARN_MB", 400.0):
+        gc.collect()
+        lib = _glibc()
+        if lib is not None:
+            trimmed = bool(lib.malloc_trim(0))
+    after = container_mb()
+    if after is None:
+        after = rss_mb()
+    result = {"expired_cache_entries": expired, "before_mb": before, "after_mb": after,
+              "allocator_trimmed": trimmed, "cache_counts": TTLCache.statistics()}
+    if expired or (before is not None and before >= _env_mb("HSF_MEMORY_WARN_MB", 400.0)):
+        logging.getLogger("hsf.memory").info(json.dumps({"event": "memory_maintenance", **result}))
+    return result

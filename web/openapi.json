@@ -1194,6 +1194,17 @@
    },
    "AdminEvidenceReadiness": {
     "properties": {
+     "completed_evaluation_run": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Completed Evaluation Run"
+     },
      "formal_evaluation": {
       "anyOf": [
        {
@@ -14168,6 +14179,21 @@
       ],
       "description": "Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match",
       "title": "Build"
+     },
+     "cache_counts": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Aggregate result-cache counts (caches, entries, loads, refreshes); no keys or user data",
+      "title": "Cache Counts"
      },
      "container_mb": {
       "anyOf": [

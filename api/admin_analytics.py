@@ -26,8 +26,8 @@ PERIODS = (7, 30, 90, 365)
 TTL_S = 600
 MAX_SCANNER_OBSERVATIONS = 20_000  # newest first; the response says when a period holds more
 MAX_STAIR_OBSERVATIONS = 3_000
-_cache = TTLCache(24)  # computed answers (small)
-_datasets = TTLCache(1)  # the compact research set behind them: one period at a time
+_cache = TTLCache(24, name="admin_analytics")  # computed answers (small)
+_datasets = TTLCache(1, name="admin_datasets")  # the compact research set behind them: one period at a time
 
 
 class AnalyticsError(ValueError):
@@ -521,6 +521,7 @@ def _evidence(days: int) -> Dict[str, Any]:
             "scan_runs": metrics.get("scan_runs_collected"),
             "scan_runs_preferred": metrics.get("scan_runs_preferred"),
             "formal_evaluation": metrics.get("formal_evaluation"),
+            "completed_evaluation_run": metrics.get("completed_evaluation_run"),
         },
     }
 
