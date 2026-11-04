@@ -285,6 +285,12 @@ def register(app: FastAPI) -> None:
                 from api.scans import _iso, _ticker_key, watchlist_autoscore
 
                 auto = watchlist_autoscore(ent)
+                # A new market scan can land before its auto-score pass finishes (or
+                # after that pass fails). Don't mix the previous pass into this scan.
+                scan_at = dt.datetime.fromisoformat(state["scan_at"]) if state["scan_at"] else None
+                auto_at = _aware(auto.get("at"))
+                if scan_at and (auto_at is None or auto_at < _aware(scan_at)):
+                    auto = {"at": None, "rows": {}}
                 out["items"] = [i if i["latest"] is not None else {**i, "auto": auto["rows"].get(_ticker_key(i["ticker"]))}
                                 for i in out["items"]]
                 out["auto_scored_at"] = _iso(auto["at"]) if any(i.get("auto") for i in out["items"]) else None

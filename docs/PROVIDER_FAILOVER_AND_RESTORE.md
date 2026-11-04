@@ -7,19 +7,21 @@ Where things run:
 
 | Piece | Runs on | Deploys from |
 |---|---|---|
-| Streamlit app | Streamlit Community Cloud | `dev` |
-| Billing service + live price alerts | Render (`billing_service/`) | `dev` (auto) |
+| Next.js web app | Render `hsf-web-v1`, app.hsfinest.com | `main` |
+| FastAPI, embedded billing, live alerts and Premium ops jobs | Render `hsf-api-v1` | `main` |
 | Scheduled scans, digest, wrap, alerts | GitHub Actions (`scheduled-scans.yml`) | `main` |
 | Scan scheduler | cron-job.org → `workflow_dispatch` on `main` | — |
 | Database | Neon, branch `live` (default branch) | — |
 
-Secrets live in three separate places (Streamlit Cloud secrets, GitHub repository
-secrets, Render environment). Changing a key in one does not change the others.
+The API and GitHub Actions hold their own provider credentials; the Render web
+service holds its web settings. Changing a key in one does not change the others.
+Streamlit Cloud was retired on 2026-10-21. Work targets `dev`, then a promote PR
+from `dev` to `main` releases both services.
 
 ## First look
 
 1. **Admin page → System health, Email delivery, Email setup cards.** One status
-   per area; the Email setup card shows all three environments.
+   per area; the Email setup card shows the configured environments.
 2. **Sentry** for new errors (`component=cron` is the scheduled job).
 3. **GitHub → Actions → Scheduled Scans**: did the last run start, and did it pass?
 4. **Billing:** `https://hsf-api-v1.onrender.com/billing/health` (`ok`, `db`, `email`).
@@ -38,7 +40,7 @@ secrets, Render environment). Changing a key in one does not change the others.
   run, dispatch the scan with the fallback on (unset `PRICE_SKIP_YF_FALLBACK` for
   that run). yfinance is slower and rate-limited, so expect partial coverage.
 - **401/403:** the key was revoked or rotated. Update `ALPACA_API_KEY_ID` /
-  `ALPACA_API_SECRET_KEY` in all three secret stores.
+  `ALPACA_API_SECRET_KEY` in the API Render environment and GitHub Actions secrets.
 - Do not change scanner logic to work around an outage (scanner core is frozen).
 
 ### Email: Resend (SMTP)
@@ -51,15 +53,15 @@ secrets, Render environment). Changing a key in one does not change the others.
   after at least one send succeeds, so a full outage retries at the next cron slot
   inside the send window (digest 6 AM–noon ET, wrap from 4 PM ET).
 - **Login rejected:** the API key was revoked. Create a new *sending-only* key in
-  Resend and update `SMTP_PASS` on Streamlit Cloud, GitHub and Render.
+  Resend and update `SMTP_PASS` in the API Render environment and GitHub Actions secrets.
 - **Sender rejected:** `SMTP_FROM` must be on the verified domain
   (`ai.hsfinest.com`). Check the domain is still Verified in Resend (DNS changes at
   the registrar can un-verify it).
 - **Recipient refused (only the owner receives):** the account fell back to test
   mode or the domain lost verification.
-- **Resend down for hours:** switching providers means new SMTP settings in all three
-  stores plus sender-domain DNS for the new provider. Only worth it for a long
-  outage; password resets are the urgent path.
+- **Resend down for hours:** update SMTP settings in the API Render environment and
+  GitHub Actions secrets, plus sender-domain DNS for the new provider. Only worth
+  it for a long outage; password resets are the urgent path.
 - **Missed a day's digest:** a forced run resends it (owner approval needed:
   `gh workflow run scheduled-scans.yml --ref main -f force=true`).
 
@@ -81,28 +83,28 @@ secrets, Render environment). Changing a key in one does not change the others.
 - **Failing run:** open the run's log; Autonomous recovery (Run 60) retries the
   allowlisted problems on its own. See `docs/AUTONOMY_OPERATOR_CARD.md`.
 
-### Render (billing service)
+### Render (API and web)
 
-- **Symptom:** checkout or the billing portal fails, `/health` is not `ok`.
-- `/health` lists missing settings and whether the database is reachable. Fix the
-  setting in Render; a redeploy picks it up.
+- **Symptom:** checkout or the billing portal fails, `/billing/health` is not `ok`.
+- Check `/readyz?strict=true` for database and scan readiness, `/healthz` for API
+  liveness, and `/billing/health` for billing configuration. Fix the setting in
+  Render; a redeploy picks it up.
 - **Bad deploy:** in Render → Deploys, roll back to the previous deploy, then fix on
   `dev`.
 - Stripe retries webhooks for about three days, so a short outage loses no
   upgrades; processed events are de-duplicated.
 
-### Streamlit Community Cloud
+### Web app
 
-- **App crash after a deploy** is most often a stale module (an old copy of a
-  changed module still loaded). Reboot the app from the Streamlit Cloud menu.
-- **Outage:** nothing to fail over to; scheduled scans and emails keep running on
-  GitHub Actions.
+- If only the web app fails, inspect `hsf-web-v1` logs and `/api/healthz`.
+- A bad release can be rolled back in Render; keep API and web versions compatible.
+- Scheduled scans and their emails run independently on GitHub Actions.
 
 ### Anthropic (AI summaries)
 
 - **Symptom:** Premium AI summaries time out or error.
 - Summaries fail on their own (30 s timeout) without blocking the page. For a long
-  outage set `AI_ENABLED=0` on Streamlit Cloud to hide AI features cleanly; set it
+  outage set `AI_ENABLED=0` on `hsf-api-v1` to disable AI calls; set it
   back to `1` afterwards.
 
 ### Stripe
@@ -118,8 +120,11 @@ branch). Its parent branch, `stale-production-unused`, holds old data.
 **Never use "Reset from parent" on `live`.** That replaces live data with the old
 parent data.
 
-Restore window: **1 day** on the current plan. Anything older can't be restored,
-so act the same day.
+Verified 2026-11-04: **1 day** (`history_retention_seconds=86400`), on the existing
+Launch plan. Anything older cannot be restored, so act the same day. Branch `live`
+is now **protected**. Extending retention to seven days is prepared, pending owner
+approval because additional retained history is billed. Extending it cannot
+recover history already discarded.
 
 ### Before restoring
 
@@ -163,7 +168,8 @@ schema plus the rows of every table under `big_table_mb` (default 50 MB; the big
 tables are copied as schema only), restores into a throwaway Postgres on the runner and
 compares row counts table by table. The dump is deleted when the job ends and is never
 uploaded, and the job prints only counts, sizes and timings. Neon counts the download as
-network transfer, so the job stops before downloading more than `max_dump_mb` (default 300).
+network transfer. The job rejects an estimated retained-table size above `max_dump_mb`
+(default 300); this is a preflight estimate, not a hard cap on actual transfer.
 Script: `scripts/restore_drill.sh`.
 
 This tests a second way back that does not depend on the 1-day restore window: a
@@ -173,16 +179,22 @@ stays at 1 day; it needs a storage bucket the owner chooses.
 
 | Date | Tables | Dump | Restore | Whole drill | Result |
 |---|---|---|---|---|---|
-| (first run pending) | | | | | |
+| 2026-10-29 | 75 (72 with rows, 3 schema only) | 26 MB / 19 s | 4 s | 48 s | [Passed](https://github.com/realhowieb/ai_scanner/actions/runs/40923786223) |
+| 2026-11-04 | 87 (84 with rows, 3 schema only) | 28 MB / 27 s | 4 s | 70 s | [Passed](https://github.com/realhowieb/ai_scanner/actions/runs/41882862990) |
 
 ### Local development branch (P2-37)
 
 `dev-local` is a copy of `live` for local runs; the local `.streamlit/secrets.toml`
 points at it. Refresh it with `bash scripts/reset_dev_branch.sh` (only ever resets
-`dev-local`, from `live`). Never put its connection string in Streamlit Cloud,
-GitHub or Render. It holds a copy of customer data, so treat it like live.
+`dev-local`, from `live`). Never put its connection string in production GitHub
+or Render settings. It holds a copy of customer data, so treat it like live.
 
-### Recommended once (owner, Neon console)
+### Recovery settings checked 2026-11-04
 
-- Mark `live` as a **protected branch**, so it can't be deleted or reset by mistake.
-- Raise the restore window above 1 day now that real payments are live (P1-44).
+- `live` is protected (confirmed after enabling it through Neon).
+- The current Launch plan supports seven-day retention. Proposed setting:
+  `history_retention_seconds=604800`. Approval is pending; no plan upgrade is needed.
+  History storage is billed at $0.20/GB-month; the total depends on changes retained.
+  [Neon history-window documentation](https://github.com/neondatabase/website/blob/main/content/docs/postgres/backup-restore/history-window.md).
+- A dump/restore drill does not test an in-place point-in-time restore of `live`.
+  Never run a production restore as a drill.

@@ -483,7 +483,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
           </ul>
         )}
         {legacy && scan.data && <p className="cap">Scores and prices are from that scan, only for tickers among your plan&apos;s top {scan.data.max_results} ranked setups. Not live quotes.</p>}
-        {!legacy && w.items.some((i) => !i.latest && i.auto) && <p className="cap">Auto: not ranked in the latest scan, so Premium scores it after each scan.</p>}
+        {!legacy && w.items.some((i) => !i.latest && i.auto) && <p className="cap">Auto: not ranked in the latest scan, so Premium scores it after each scan.{w.auto_scored_at ? ` Scored ${etTime(w.auto_scored_at)}.` : ""}</p>}
         {!legacy && w.items.length > 0 && <p className="cap">{scanAt ? `Score, setup and rank are from that scan. ${hasQuotes ? "Price and change are the latest trade vs the previous close." : "Price and change are from that scan, not live quotes."} The rank is the ticker's place among the scan's ranked setups.` : "The latest market scan couldn't be read, so scores aren't shown. The list itself is current."}</p>}
       </Card>
 

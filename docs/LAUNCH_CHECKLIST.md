@@ -25,7 +25,7 @@
 - [ ] Move perf_history + operational telemetry to durable storage
 - [ ] Document + test market-data provider failover
 - [x] Backup/restore runbook for Neon: docs/PROVIDER_FAILOVER_AND_RESTORE.md
-- [ ] Run the Database restore drill workflow and record its timings (monthly after that)
+- [x] Run the Database restore drill workflow and record its timings (2026-10-29 and 2026-11-04 passed; monthly after that)
 - [ ] Raise the Neon restore window above 1 day
 - [x] Secret rotation policy — docs/SECRET_ROTATION.md (P1-45)
 

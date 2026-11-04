@@ -446,6 +446,16 @@ class ScanAndStockApiTests(DataApiBase):
             self.assertIsNone(pro.get("auto_scored_at"))
             self.assertEqual(ld.call_count, 1)
 
+        # A newer market scan must not borrow scores from an earlier auto-score pass.
+        from api import today
+
+        today.clear_cache()
+        with mock.patch("db.watchlist_autoscore.latest_stamp", return_value={**stamp, "created_at": dt.datetime(2026, 9, 27, tzinfo=UTC)}), \
+                mock.patch("db.watchlist_autoscore.load_setups", return_value=auto):
+            old = self.client.get(f"/v1/watchlists/{lists['prem']}", headers=prem).json()
+        self.assertTrue(all(i.get("auto") is None for i in old["items"]))
+        self.assertIsNone(old["auto_scored_at"])
+
     def test_latest_scan_counts_the_whole_scan_beside_the_filtered_total(self):
         whole = self.client.get("/v1/scans/latest", headers=self.h).json()
         self.assertEqual(whole["scan_total"], whole["total"])
