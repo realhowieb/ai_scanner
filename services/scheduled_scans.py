@@ -19,7 +19,8 @@ released and tried again on the next pass. At most PER_PASS schedules are queued
 pass so customers' own scans keep their place in line.
 
 Emails respect the "alerts" email preference and need a verified address. The email
-lists the top results ranked by HSF Score. It's research, not a recommendation.
+lists the top results ranked by HSF Score, then a short AI read of the leading setups
+(2026-11-03; HSF_SCHEDULED_SCAN_AI=0 leaves it out). It's research, not a recommendation.
 
 Env: HSF_SCHEDULED_SCANS_ENABLED=0 stops it (checked in api/ops_jobs.py),
 HSF_SCHEDULED_SCANS_PER_PASS (default 3). Never raises.
@@ -78,8 +79,55 @@ def setup_label(v: Any) -> str:
     return _SETUPS.get(s.lower(), s.replace("_", " ").title() if s else "")
 
 
+# ---- the AI summary (Premium automation, 2026-11-03) ---------------------------------------------
+AI_ROWS = 10
+
+
+def ai_enabled() -> bool:
+    return os.environ.get("HSF_SCHEDULED_SCAN_AI", "1").strip() != "0"
+
+
+def summary_table(rows: List[Dict[str, Any]]) -> str:
+    """The top results as CSV for the AI prompt (scan numbers only). Pure."""
+    cols = ("ticker", "score", "primary_setup", "status", "chg_pct", "gap_pct", "rvol", "breakout_score", "last")
+    lines = [",".join(cols)]
+    for r in rows[:AI_ROWS]:
+        vals = []
+        for c in cols:
+            v = r.get(c)
+            if c == "primary_setup":
+                v = setup_label(v)
+            vals.append("" if v is None else str(v).replace(",", " "))
+        lines.append(",".join(vals))
+    return "\n".join(lines)
+
+
+def ai_summary(username: str, result: Dict[str, Any]) -> Optional[str]:
+    """A short AI read of the top results, or None (AI off, no rows, daily limit). Counts
+    toward the owner's daily AI requests. Never raises."""
+    rows = list(result.get("setups") or [])
+    if not rows or not ai_enabled():
+        return None
+    try:
+        from ui.ai import ask_claude
+        from ui.ai_summary import _SYSTEM_PROMPT
+
+        text, _err = ask_claude(system=_SYSTEM_PROMPT,
+                                user=(f"Here are the top {min(len(rows), AI_ROWS)} results of the trader's own scheduled "
+                                      f"scan in HSF Score order (CSV):\n\n{summary_table(rows)}\n\n"
+                                      "Explain the leading setups in this order. Keep it under 150 words."),
+                                max_tokens=500, username=username, feature="scheduled_scan_summary")
+    except Exception as e:
+        log.info(json.dumps({"event": "scheduled_scan_ai_failed", "error": type(e).__name__}))
+        return None
+    if not text or text.startswith("_Some wording was removed"):
+        return None
+    return text.strip()
+
+
 # ---- the email ------------------------------------------------------------------------------------
-def compose(name: str, run_at: str, result: Dict[str, Any], *, base_url: str) -> Tuple[str, str, str, str]:
+def compose(name: str, run_at: str, result: Dict[str, Any], *, base_url: str,
+            ai_text: Optional[str] = None) -> Tuple[str, str, str, str]:
     """(subject, text, html_inner, glance_html). Pure."""
     from ui import email_kit as k
 
@@ -104,6 +152,11 @@ def compose(name: str, run_at: str, result: Dict[str, Any], *, base_url: str) ->
         body = k.empty("Nothing passed your filters this time. Looser filters or a larger list find more.")
     sub = f"{label} · {scanned:,} stocks scanned" if label else f"{scanned:,} stocks scanned"
     html = k.card(f"🔎 {k.esc(name)}", body, sub=k.esc(sub))
+    if ai_text and top:
+        from services.premium_auto import paragraphs
+
+        html += k.card("🤖 AI read of these results", paragraphs(ai_text.replace("**", "")),
+                       sub="Written by AI from the scan numbers only")
     html += k.card("Change or stop this scan", k.note(
         "Open Custom scan to see every result, edit the filters or delete this schedule. "
         "HSF Scores rank setups for research. They aren't predictions or advice.")
@@ -111,6 +164,8 @@ def compose(name: str, run_at: str, result: Dict[str, Any], *, base_url: str) ->
     text = [f"Your scheduled scan \"{name}\" ({sub})", ""]
     text += [f"{i}. {r.get('ticker')}  HSF {r.get('score')}  {setup_label(r.get('primary_setup'))}"
              for i, r in enumerate(top, 1)] or ["No setups matched your filters this time."]
+    if ai_text and top:
+        text += ["", "AI read of these results:", ai_text]
     text += ["", f"See every result or change the schedule: {link}"]
     parts = [f"<b style='color:#fff'>{n} setup{'s' if n != 1 else ''}</b> from {scanned:,} stocks."]
     if top:
@@ -133,7 +188,8 @@ def _email(username: str, name: str, run_at: str, result: Dict[str, Any]) -> str
         return "unverified"
     if not wants_email(username, "alerts"):
         return "unsubscribed"
-    subject, text, inner, glance = compose(name, run_at, result, base_url=_base_url())
+    subject, text, inner, glance = compose(name, run_at, result, base_url=_base_url(),
+                                           ai_text=ai_summary(username, result))
     ok = send_digest_email(username, subject, inner, text, unsubscribe_url=unsubscribe_url(username, "alerts"),
                            title_line=f"Scheduled scan · {name}", glance_html=glance)
     return "sent" if ok else "email_failed"

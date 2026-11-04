@@ -82,6 +82,12 @@
    },
    "AIJournalCoach": {
     "properties": {
+     "auto": {
+      "default": false,
+      "description": "A saved note (from the Friday email or an earlier request)",
+      "title": "Auto",
+      "type": "boolean"
+     },
      "closed": {
       "description": "Closed trades in the journal",
       "title": "Closed",
@@ -103,6 +109,18 @@
       ],
       "description": "Markdown bullets; null below min_trades",
       "title": "Text"
+     },
+     "written_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When the saved note was written (UTC)",
+      "title": "Written At"
      }
     },
     "required": [
@@ -305,6 +323,12 @@
    },
    "AIText": {
     "properties": {
+     "auto": {
+      "default": false,
+      "description": "Already written (by a Premium automation or an earlier request); no AI call was made",
+      "title": "Auto",
+      "type": "boolean"
+     },
      "run_id": {
       "anyOf": [
        {
@@ -350,6 +374,18 @@
        }
       ],
       "title": "Ticker"
+     },
+     "written_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When a saved answer was written (UTC)",
+      "title": "Written At"
      }
     },
     "title": "AIText",
@@ -8433,6 +8469,21 @@
    },
    "JournalTrade": {
     "properties": {
+     "auto_alerts": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "number"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: the stop and target price alerts HSF added for this open trade",
+      "title": "Auto Alerts"
+     },
      "closed_at": {
       "anyOf": [
        {
@@ -22389,8 +22440,22 @@
   },
   "/v1/ai/brief-narrative": {
    "get": {
-    "description": "A 2-3 sentence brief written from the Market Brief's facts only.",
+    "description": "A 2-3 sentence brief written from the Market Brief's facts only. HSF writes it\nautomatically after each market scan on trading days, so it's usually ready.",
     "operationId": "ai_brief_narrative_v1_ai_brief_narrative_get",
+    "parameters": [
+     {
+      "description": "Only return the summary HSF already wrote for this snapshot (text null when none); never calls the AI",
+      "in": "query",
+      "name": "saved",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only return the summary HSF already wrote for this snapshot (text null when none); never calls the AI",
+       "title": "Saved",
+       "type": "boolean"
+      }
+     }
+    ],
     "responses": {
      "200": {
       "content": {
@@ -22502,6 +22567,56 @@
    }
   },
   "/v1/ai/journal-coach": {
+   "get": {
+    "description": "The last coaching note (from the Friday email or \"Coach me\"); text is null when there\nisn't one. Never calls the AI.",
+    "operationId": "ai_journal_coach_saved_v1_ai_journal_coach_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIJournalCoach"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Saved AI journal coaching (Premium)"
+   },
    "post": {
     "description": "A short note on patterns in your closed trades (by HSF Score when taken, holding time,\nsource; win and loss sizes). text is null below min_trades. Cached per journal state.",
     "operationId": "ai_journal_coach_v1_ai_journal_coach_post",
@@ -22554,6 +22669,70 @@
    }
   },
   "/v1/ai/notes/{ticker}": {
+   "get": {
+    "description": "The note already written for this ticker in the latest market scan (HSF writes one\nautomatically when a stock on a Premium watchlist newly ranks); text is null when there\nisn't one yet. Never calls the AI.",
+    "operationId": "ai_note_saved_v1_ai_notes__ticker__get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Saved AI setup note for a ticker (Premium)"
+   },
    "post": {
     "description": "Claude's note on one result of the latest market scan; text is null when the ticker\nisn't in it.",
     "operationId": "ai_note_v1_ai_notes__ticker__post",
@@ -22744,6 +22923,68 @@
    }
   },
   "/v1/ai/watchlists/{watchlist_id}/note": {
+   "get": {
+    "description": "The last rundown written for this list (by the morning or Sunday email, or a refresh);\ntext is null when there isn't one. Never calls the AI.",
+    "operationId": "ai_watchlist_note_saved_v1_ai_watchlists__watchlist_id__note_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "minimum": 1,
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AIText"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Premium feature"
+     },
+     "404": {
+      "description": "Scan not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Daily AI limit or hourly request limit reached"
+     },
+     "502": {
+      "description": "AI call failed"
+     },
+     "503": {
+      "description": "AI unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Saved AI rundown of a watchlist (Premium)"
+   },
    "post": {
     "description": "A short plain-English rundown of what changed on one of your watchlists since the\nprevious market scan (score and rank moves, new or lost setups, volume, earnings within\na week), from the latest saved scan only. text is null when the list is empty or no\nscan exists. Cached per watchlist and scan.",
     "operationId": "ai_watchlist_note_v1_ai_watchlists__watchlist_id__note_post",

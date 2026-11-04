@@ -110,9 +110,14 @@ function Earnings() {
 
 function Narrative() {
   const act = useAction();
-  const [text, setText] = useState<Schemas["AIText"] | null>(null);
+  const [fresh, setText] = useState<Schemas["AIText"] | null>(null);
+  // HSF writes the narrative after each market scan; show that one without a click.
+  const saved = useApi("brief-narrative-saved", (signal) =>
+    unwrap(api.GET("/v1/ai/brief-narrative", { params: { query: { saved: true } }, signal })));
+  const text = fresh ?? (saved.data?.text ? saved.data : null);
   return (
     <Card title="AI market narrative" id="ai" source="ai">
+      {!fresh && text?.auto && <p className="cap" data-testid="auto-written">Written automatically after the {text.snapshot_time ? etTime(text.snapshot_time) : "latest"} scan.</p>}
       {text?.text ? <AIText text={text.text} /> : text ? <p className="cap">Nothing to summarize yet today.</p>
         : <p className="cap">A short read of today&apos;s brief, written by Claude from the data on this page.</p>}
       <ErrorLine error={act.error} />

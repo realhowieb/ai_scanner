@@ -56,6 +56,9 @@ ROWS: List[Tuple[str, Optional[str]]] = [
     ("A short AI \"why\" line on the alerts you get", "can_ai_notes"),
     ("AI journal coach that looks for patterns in your closed trades", "can_ai_notes"),
     ("CSV export of watchlists, Track record, journal and scan history", "can_export_research"),
+    ("Done for you: the Brief's AI summary and AI notes on newly ranked watchlist stocks are ready when you look", "can_auto_research"),
+    ("Sunday AI watchlist rundown and Friday AI journal coaching, by email", "can_auto_research"),
+    ("Stop and target price alerts added automatically when you log a trade", "can_auto_research"),
     ("Alpaca paper-trading workflow", "can_paper_trade"),
 ]
 

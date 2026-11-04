@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 SHARED_TTL_S = 1800
+SHARED_USER = "*"           # db.premium_auto rows that are the same for everyone
 MAX_CHAT_TURNS = 8          # ui.ai_chat._MAX_HISTORY
 MAX_TURN_CHARS = 2000
 
@@ -65,6 +66,42 @@ def _shared(key: Any, make) -> str:
     return _cached(("ai",) + tuple(key), make, ttl_s=SHARED_TTL_S)
 
 
+# ---- saved answers (Premium automations, db.premium_auto) --------------------------------------
+def stored(username: str, kind: str, ref: Any) -> Optional[Dict[str, Any]]:
+    """A saved automation row as {"text", "written_at", ...extra}, or None. Never raises."""
+    import json
+
+    try:
+        from db import premium_auto
+
+        row = premium_auto.get(username, kind, str(ref))
+    except Exception:
+        return None
+    if not row:
+        return None
+    try:
+        body = json.loads(row["body"])
+    except (TypeError, ValueError):
+        body = {"text": row["body"]}
+    if not isinstance(body, dict) or not body.get("text"):
+        return None
+    return {**body, "written_at": row.get("created_at")}
+
+
+def store(username: str, kind: str, ref: Any, text: Optional[str], **extra: Any) -> None:
+    """Save an answer so the app shows it without a button press. Never raises."""
+    import json
+
+    if not text:
+        return
+    try:
+        from db import premium_auto
+
+        premium_auto.save(username, kind, str(ref), json.dumps({"text": text, **extra}, default=str))
+    except Exception:
+        pass
+
+
 def scan_df(username: str, run_id: Optional[int]):
     """(run_id, DataFrame): the latest market scan, or one of your saved scans."""
     from api.today import market_runs, run_df
@@ -99,11 +136,27 @@ def summary(username: str, run_id: Optional[int], *, shared: bool) -> Dict[str, 
     return {"run_id": rid, "text": text}
 
 
-def ticker_note(username: str, ticker: str) -> Dict[str, Any]:
-    """Claude's per-result research note, for a ticker in the latest market scan."""
+def ticker_note(username: Optional[str], ticker: str, *, stored_only: bool = False) -> Dict[str, Any]:
+    """Claude's per-result research note, for a ticker in the latest market scan. A note the
+    Premium automation already wrote for this scan comes back without an AI call (auto=True);
+    stored_only returns text None instead of writing one."""
+    from api.today import market_runs
+
+    try:
+        runs = market_runs()
+    except Exception:   # the saved-note check never blocks writing one
+        runs = []
+    latest = int(runs[0]["id"]) if runs else None
+    if latest is not None:
+        saved = stored(SHARED_USER, "ticker_note", f"{latest}:{ticker}")
+        if saved:
+            return {"run_id": latest, "ticker": ticker, "text": saved["text"], "auto": True,
+                    "written_at": saved.get("written_at")}
+    if stored_only:
+        return {"run_id": latest, "ticker": ticker, "text": None}
     from ui.ai_summary import _SUMMARY_COLUMNS, _TICKER_SYSTEM_PROMPT
 
-    rid, df = scan_df(username, None)
+    rid, df = scan_df(username or "", None)
     if df is None or "Ticker" not in getattr(df, "columns", []):
         return {"run_id": rid, "ticker": ticker, "text": None}
     rows = df[df["Ticker"].astype(str).str.strip().str.upper() == ticker]
@@ -127,7 +180,9 @@ def ticker_note(username: str, ticker: str) -> Dict[str, Any]:
                           "Explain this setup."),
                     max_tokens=600, username=username, feature="ticker_deepdive")
 
-    return {"run_id": rid, "ticker": ticker, "text": _shared(("note", rid, ticker), make)}
+    text = _shared(("note", rid, ticker), make)
+    store(SHARED_USER, "ticker_note", f"{rid}:{ticker}", text)
+    return {"run_id": rid, "ticker": ticker, "text": text}
 
 
 def chat(username: str, run_id: Optional[int], messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -151,20 +206,27 @@ def chat(username: str, run_id: Optional[int], messages: List[Dict[str, str]]) -
     return {"run_id": rid, "answer": answer}
 
 
-def brief_narrative(username: str) -> Dict[str, Any]:
-    """The Market Brief's 2-3 sentence narrative, from real facts only."""
+def brief_narrative(username: Optional[str], *, stored_only: bool = False) -> Dict[str, Any]:
+    """The Market Brief's 2-3 sentence narrative, from real facts only. The one the
+    Premium automation wrote for this snapshot comes back without an AI call (auto=True);
+    stored_only returns text None instead of writing one."""
     from api.market import _brief_core
     from ui.market_brief import BRIEF_NARRATIVE_SYSTEM, _brief_narrative_facts
 
     core = _brief_core()
     data = (core or {}).get("data")
+    ts = (data or {}).get("snapshot_time")
+    if ts:
+        saved = stored(SHARED_USER, "brief_narrative", ts)
+        if saved:
+            return {"snapshot_time": ts, "text": saved["text"], "auto": True, "written_at": saved.get("written_at")}
     facts = _brief_narrative_facts(data) if data else ""
-    if not facts.strip():
-        return {"snapshot_time": (data or {}).get("snapshot_time"), "text": None}
-    ts = data.get("snapshot_time")
+    if stored_only or not facts.strip():
+        return {"snapshot_time": ts, "text": None}
     text = _shared(("narrative", str(ts)), lambda: _ask(system=BRIEF_NARRATIVE_SYSTEM, user=f"Today's scan facts:\n{facts}",
                                                           max_tokens=200, username=username,
                                                           feature="market_brief_narrative"))
+    store(SHARED_USER, "brief_narrative", ts, text)
     return {"snapshot_time": ts, "text": text}
 
 
@@ -259,4 +321,16 @@ def watchlist_note(username: str, watchlist: Dict[str, Any], entitlements: Dict[
                     max_tokens=350, username=username, feature="watchlist_note")
 
     key = ("watchlist", username, int(watchlist["id"]), str(as_of), hash(facts))
-    return {"snapshot_time": as_of, "text": _shared(key, make)}
+    text = _shared(key, make)
+    store(username, "watchlist_note", int(watchlist["id"]), text, snapshot_time=as_of)
+    return {"snapshot_time": as_of, "text": text}
+
+
+def latest_watchlist_note(username: str, watchlist_id: int) -> Dict[str, Any]:
+    """The last rundown written for this list (by the button, the morning email or the
+    weekly email), without an AI call; text None when there isn't one."""
+    saved = stored(username, "watchlist_note", int(watchlist_id))
+    if not saved:
+        return {"snapshot_time": None, "text": None}
+    return {"snapshot_time": saved.get("snapshot_time"), "text": saved["text"], "auto": True,
+            "written_at": saved.get("written_at")}

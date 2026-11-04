@@ -44,6 +44,11 @@ UPGRADE_MESSAGES = {
         "Premium runs your saved custom scan on a schedule (before the open, midday or after the close) "
         "and emails you the results."
     ),
+    "can_auto_research": (
+        "Premium does the routine work for you: the Brief's AI summary and notes on your newly ranked "
+        "watchlist stocks are written before you look, a Sunday watchlist rundown and a Friday journal "
+        "coaching email arrive on their own, and logged trades get stop and target alerts."
+    ),
     "can_export_research": (
         "Premium adds CSV export of your watchlists, Track record, journal and scan history."
     ),
