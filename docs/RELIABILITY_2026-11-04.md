@@ -17,8 +17,7 @@ A watchlist no longer combines the latest market scan with automatic scores writ
 ## Database recovery
 
 - Enabled and verified protection on `live` in `HSF_Stock_Finder`.
-- Existing plan: Launch; verified retention: 86,400 seconds (one day).
-- Seven-day retention (`604800`) is prepared, awaiting approval for history storage costs. No plan upgrade is required; old discarded history cannot be recovered by extending the setting.
+- Existing plan: Launch. Owner approved the history storage costs; extended retention from 86,400 to 604,800 seconds (one to seven days), verified in the Neon update response. No plan upgrade; discarded history cannot be recovered by extending the setting.
 - Owner-approved [restore drill](https://github.com/realhowieb/ai_scanner/actions/runs/41882862990): **87 tables, 28 MB, dump 27 seconds, restore 4 seconds, total 70 seconds; passed**. Three large research tables were checked as schema only. Production was read only; the temporary copy was deleted when the workflow ended.
 - Recorded the earlier October 29 drill too, corrected retired deployment references, and marked the completed recovery tasks in the launch checklists.
 
@@ -30,8 +29,8 @@ ESLint 10 installs and runs successfully with the updated Next.js configuration.
 
 ## Validation
 
-- Full Python suite: 3,406 passed, 68 skipped, 165 subtests passed. Subsequent focused checks cover the final alert-limit and email-consent regressions.
-- Web suite: 571 passed before the new freshness regression; the focused Scanner Watchlist suite covers the additional test.
+- Full Python suite: 3,406 passed, 68 skipped, 165 subtests passed. Final focused checks: 61 passed, including the final alert-limit and email-consent regressions.
+- Web suite: 571 passed before the new freshness regression; the final focused Scanner Watchlist suite passed all four tests, including the additional regression.
 - Web lint, typecheck, production build, and production dependency audit passed (zero vulnerabilities). Local Node version: 26.10.0; GitHub CI uses Node 22.
 - Python lint and OpenAPI contract checks cover the changed API paths. No response-schema changes are required.
 

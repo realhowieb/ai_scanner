@@ -26,7 +26,7 @@
 - [ ] Document + test market-data provider failover
 - [x] Backup/restore runbook for Neon: docs/PROVIDER_FAILOVER_AND_RESTORE.md
 - [x] Run the Database restore drill workflow and record its timings (2026-10-29 and 2026-11-04 passed; monthly after that)
-- [ ] Raise the Neon restore window above 1 day
+- [x] Raise the Neon restore window above 1 day (7 days, owner approved and verified 2026-11-04)
 - [x] Secret rotation policy — docs/SECRET_ROTATION.md (P1-45)
 
 ## Before PUBLIC LAUNCH
@@ -38,6 +38,6 @@
 - [ ] SLA / status page / incident runbook
 
 ## Backup/recovery (current-stage)
-- Neon point-in-time restore: 1 day on the current plan (confirmed in the runbook).
+- Neon point-in-time restore: 7-day retention configured on Launch (2026-11-04). History accumulates from the previously retained window; discarded history is not recovered.
 - Observations/outcomes/runs are append-only (recoverable from Neon).
 - Restore steps and the monthly drill: docs/PROVIDER_FAILOVER_AND_RESTORE.md.

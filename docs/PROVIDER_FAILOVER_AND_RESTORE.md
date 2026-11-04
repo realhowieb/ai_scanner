@@ -120,11 +120,12 @@ branch). Its parent branch, `stale-production-unused`, holds old data.
 **Never use "Reset from parent" on `live`.** That replaces live data with the old
 parent data.
 
-Verified 2026-11-04: **1 day** (`history_retention_seconds=86400`), on the existing
-Launch plan. Anything older cannot be restored, so act the same day. Branch `live`
-is now **protected**. Extending retention to seven days is prepared, pending owner
-approval because additional retained history is billed. Extending it cannot
-recover history already discarded.
+Verified 2026-11-04: retention extended from **1 to 7 days**
+(`history_retention_seconds=604800`) on the existing Launch plan, after owner
+approval of history storage costs. Branch `live` is **protected**. Retention
+accumulates from the previously retained history; extending it cannot recover
+history already discarded. Check the earliest available restore time in Neon
+before choosing a timestamp.
 
 ### Before restoring
 
@@ -172,10 +173,10 @@ network transfer. The job rejects an estimated retained-table size above `max_du
 (default 300); this is a preflight estimate, not a hard cap on actual transfer.
 Script: `scripts/restore_drill.sh`.
 
-This tests a second way back that does not depend on the 1-day restore window: a
-`pg_dump` copy of accounts, billing, watchlists, alerts and journals. Keeping such a copy
-off Neon (an encrypted nightly dump in private storage) is the next step if the window
-stays at 1 day; it needs a storage bucket the owner chooses.
+This validates a `pg_dump` recovery path for accounts, billing, watchlists, alerts
+and journals. The drill deletes its dump, so it does not provide a retained
+backup. An encrypted nightly backup outside Neon would need a private storage
+bucket the owner chooses.
 
 | Date | Tables | Dump | Restore | Whole drill | Result |
 |---|---|---|---|---|---|
@@ -192,8 +193,8 @@ or Render settings. It holds a copy of customer data, so treat it like live.
 ### Recovery settings checked 2026-11-04
 
 - `live` is protected (confirmed after enabling it through Neon).
-- The current Launch plan supports seven-day retention. Proposed setting:
-  `history_retention_seconds=604800`. Approval is pending; no plan upgrade is needed.
+- Owner approved seven-day retention; applied and verified
+  `history_retention_seconds=604800` on the existing Launch plan. No plan upgrade.
   History storage is billed at $0.20/GB-month; the total depends on changes retained.
   [Neon history-window documentation](https://github.com/neondatabase/website/blob/main/content/docs/postgres/backup-restore/history-window.md).
 - A dump/restore drill does not test an in-place point-in-time restore of `live`.
