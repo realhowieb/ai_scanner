@@ -62,3 +62,70 @@ Shadow job freshness (2 trading days), overdue labels (10 trading days), probabi
 - Shadow scoring writes only `ml_shadow_predictions`; it never changes AI Confidence, alerts or PreBreakout.
 - No live trading or order execution.
 - No performance claims without a real evaluation run on a finalized dataset.
+
+## Preparation safeguards (2026-11-04)
+
+Start with **ML v4 Train & Evaluate → mode=preflight**. It is now the default.
+Use an explicit finalized dataset version for a reviewed run. The workflow resolves
+an empty version to newest once, then pins that same version for training and evaluation.
+It never finalizes a dataset automatically.
+
+Every CLI entry point rebuilds and verifies the frozen dataset fingerprint and exact
+membership. A mismatch stops the run; it does not silently accept a newer reconstruction.
+Finalize a fresh, reviewed dataset if historical inputs can no longer be reproduced.
+Preflight audits that selected population at its freeze time, then also checks the
+actual `F_clean_path_5d` target: both outcome classes, at least 20% minority class,
+a valid 100-row / five-day final test, and at least three chronological validation
+periods before it. A green generic return-based readiness report alone is insufficient.
+The code commit must be supplied (`GITHUB_SHA`, or `--git-sha` locally).
+
+The target means **reaches +4% and never touches −2% anywhere in five trading days**.
+It does not establish which price was reached first. No thresholds were relaxed.
+
+### What the preparation report shows
+
+`ml_v4_preflight.md` and `.json` show READY/BLOCKED, reasons, dataset identity,
+target definition, positive/negative examples, training dates, validation-period
+count, and reserved final-test dates/counts. Actions publishes it even on blocked
+runs. Training stops before fitting anything when preparation fails. Neither the
+preflight nor training mode writes to production.
+
+### Development versus final evaluation
+
+- `mode=evaluate`, `final_holdout=false` (default): repeatable development reports.
+  The primary final-test observations are reserved and excluded from fitting and
+  validation. Secondary targets use only dates before that final-test boundary.
+- `final_holdout=true`: an explicit database write. Before predicting any final-test
+  outcome, the run commits a claim to the additive `ml_holdout_evaluations` table.
+  Claims serialize per target; overlapping final-test observation IDs are refused.
+  The table is created only by this explicitly requested operation, never by a read.
+- A completed report is reused exactly when the holdout and evaluation binding match.
+  A different code commit, settings, dataset, library versions, cost assumption or
+  frozen AI inputs cannot silently reuse it as new evidence. Model artifacts can be
+  regenerated under the same binding without consuming the final test again.
+- An interrupted/failed final evaluation leaves its claim consumed. It cannot retry
+  automatically. Do not delete/reset its claim to get another look at the outcomes;
+  inspect the failure and arrange a genuinely unseen final test with owner approval.
+- `register=true` requires `mode=train` and `final_holdout=true`. Evaluation attachment
+  checks the provider, feature set, target, dataset fingerprint/version, training
+  slice, settings, code and libraries. Registration verifies the supplied report
+  against the ledger's completed report before writing any model rows.
+
+The existing post-shadow promotion gates still apply. This work does not train,
+register, promote or replace any production model by itself.
+
+### Offline rehearsal
+
+Install the pinned ML requirements, then run:
+
+```bash
+python scripts/ml_v4_rehearsal.py --out /tmp/hsf-ml-rehearsal
+```
+
+Use an empty output directory. The rehearsal uses deterministic fictional data,
+small versions of all three real estimators, and a local SQLite final-test ledger.
+It exercises preparation, training, development evaluation, final evaluation,
+exact report reuse, registration dry-run checks, artifact reload and 30 shadow
+predictions. It never connects to Neon, GitHub or a market-data provider. Its scores
+are not evidence about real trading performance. The `ml-v4-models` CI job now runs
+this rehearsal alongside the unit tests.

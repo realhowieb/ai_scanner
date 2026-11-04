@@ -234,16 +234,29 @@ class RegisterEvaluationTest(unittest.TestCase):
     def test_evaluation_matched_by_provider_feature_set_and_dataset(self):
         import ml_v4_register as R
 
-        report = {"evaluation_version": "hsf-ml-v4-eval-1", "dataset": {"dataset_version": "ds1"},
-                  "primary": {"models": {"xgboost_production": {
+        target = {"label": "F_clean_path_5d", "horizon_days": 5}
+        binding = {"target": target, "git_sha": "abc", "providers": {"xgboost": {"seed": 1}},
+                   "feature_sets": ["production"], "training_slice_fingerprint": "slice",
+                   "train_ids_sha256": "ids", "library_versions": {"xgboost": "test"}, "engine_version": "v4"}
+        report = {"evaluation_version": "hsf-ml-v4-eval-1", "binding": binding, "holdout_claim": "claim",
+                  "dataset": {"dataset_version": "ds1", "dataset_fingerprint": "fp"},
+                  "primary": {"target": target, "models": {"xgboost_production": {
                       "fold_auc": {"mean": 0.6}, "holdout": {"raw": {"n": 120}},
                       "serving_calibrator": {"method": "sigmoid", "a": 1, "b": 0}}}},
                   "head_to_head_ai_confidence": {"comparisons": {"xgboost_production": {"walk_forward": {}}}}}
-        man = {"provider": "xgboost", "feature_set": "production", "dataset_version": "ds1"}
+        man = {"provider": "xgboost", "feature_set": "production", "dataset_version": "ds1",
+               "dataset_fingerprint": "fp", "evaluation_binding": binding, "target": target,
+               "git_sha": "abc", "params": {"seed": 1}, "training_slice_fingerprint": "slice",
+               "train_ids_sha256": "ids", "library_versions": {"xgboost": "test"}, "engine_version": "v4"}
         metrics, cal = R.evaluation_for(report, man)
         self.assertEqual((metrics["evaluation_version"], cal["method"]), ("hsf-ml-v4-eval-1", "sigmoid"))
-        self.assertEqual(R.evaluation_for(report, {**man, "dataset_version": "other"}), (None, None))
-        self.assertEqual(R.evaluation_for(report, {**man, "provider": "catboost"}), (None, None))
+        for field, value in (("dataset_version", "other"), ("dataset_fingerprint", "wrong"),
+                             ("provider", "catboost"), ("git_sha", "other"), ("params", {"seed": 9}),
+                             ("target", {"label": "A_return_gt_0", "horizon_days": 5})):
+            with self.subTest(field=field), self.assertRaises(SystemExit):
+                R.evaluation_for(report, {**man, field: value})
+        with self.assertRaises(SystemExit):
+            R.evaluation_for({**report, "holdout_claim": None}, man)
         self.assertEqual(R.evaluation_for(None, man), (None, None))
 
 

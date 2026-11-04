@@ -23,7 +23,7 @@ from db.engine import get_neon_conn, schema_once
 from db.signal_outcomes import _SCANNER_SUPERSEDES_BRIEF
 
 OPTIONAL_OUTCOME_COLUMNS = ("benchmark_return_1d", "benchmark_return_3d", "benchmark_return_5d")
-_BASE_COLUMNS = ("id", "ticker", "fired_at", "setup_score", "prebreakout_prob", "indicators", "raw_signal",
+_BASE_COLUMNS = ("id", "ticker", "fired_at", "setup_score", "ai_confidence", "prebreakout_prob", "indicators", "raw_signal",
                  "return_1d", "return_3d", "return_5d", "mfe_5d", "mae_5d", "outcome_computed_at", "created_at")
 # Scan-record fields the research snapshot reads; everything else stays in the DB.
 _SCAN_JSON_PG = (

@@ -67,18 +67,40 @@ def evaluation_for(report: dict, manifest: dict):
     """(metrics, calibration) for one manifest from an evaluation report, or (None, None)."""
     if not report:
         return None, None
+    expected = manifest.get("evaluation_binding")
+    if not expected or report.get("binding") != expected:
+        raise SystemExit("Evaluation binding mismatch: dataset, target, settings, code and library versions must match training")
+    target = {k: manifest.get("target", {}).get(k) for k in ("label", "horizon_days")}
+    if (expected.get("target") != target or expected.get("git_sha") != manifest.get("git_sha")
+            or expected.get("providers", {}).get(manifest.get("provider")) != manifest.get("params")
+            or manifest.get("feature_set") not in expected.get("feature_sets", [])
+            or expected.get("training_slice_fingerprint") != manifest.get("training_slice_fingerprint")
+            or expected.get("train_ids_sha256") != manifest.get("train_ids_sha256")
+            or expected.get("library_versions") != manifest.get("library_versions")
+            or expected.get("engine_version") != manifest.get("engine_version")):
+        raise SystemExit("Training manifest does not match its evaluation binding")
+    if not report.get("holdout_claim"):
+        raise SystemExit("Registration needs a completed final-test ledger claim, not a development report")
     ds = (report.get("dataset") or {}).get("dataset_version")
     if ds != manifest.get("dataset_version"):
-        return None, None
+        raise SystemExit("Evaluation dataset version mismatch")
+    if (report.get("dataset") or {}).get("dataset_fingerprint") != manifest.get("dataset_fingerprint"):
+        raise SystemExit("Evaluation dataset fingerprint mismatch")
+    actual_target = {k: (report.get("primary") or {}).get("target", {}).get(k) for k in ("label", "horizon_days")}
+    if actual_target != target:
+        raise SystemExit("Evaluation target mismatch")
     name = f"{manifest.get('provider')}_{manifest.get('feature_set')}"
     res = ((report.get("primary") or {}).get("models") or {}).get(name)
     if not res:
-        return None, None
+        raise SystemExit("Evaluation is missing the trained provider / feature set")
+    if not ((res.get("holdout") or {}).get("raw") or {}).get("n"):
+        raise SystemExit("Evaluation has no scored final test")
     h2h = ((report.get("head_to_head_ai_confidence") or {}).get("comparisons") or {}).get(name)
     metrics = {"evaluation_version": report.get("evaluation_version"), "dataset_version": ds,
+               "evaluation_binding": expected, "holdout_claim": report["holdout_claim"],
                "dataset_fingerprint": (report.get("dataset") or {}).get("dataset_fingerprint"),
                "evaluated_as": name, "evaluated_at": report.get("generated_at"),
-               "matched_by": "provider + feature set + dataset version",
+               "matched_by": "exact evaluation binding + provider + feature set",
                **{k: res.get(k) for k in ("fold_auc", "walk_forward_raw", "walk_forward_calibrated", "holdout")
                   if k in res},
                "vs_ai_confidence_as_served": h2h,
@@ -106,6 +128,13 @@ def main(argv=None) -> int:
         raise SystemExit("--actor is required (who registered these models)")
 
     report = json.loads(Path(args.evaluation).read_text(encoding="utf-8")) if args.evaluation else None
+    # Validate every manifest before the first registration can write anything.
+    for man in manifests:
+        evaluation_for(report, man)
+    if report and not args.dry_run:
+        from db.ml_holdout_evaluations import verify_completed
+
+        verify_completed(report["holdout_claim"], report["binding"], report)
     results = []
     for man in manifests:
         metrics, calibration = evaluation_for(report, man)

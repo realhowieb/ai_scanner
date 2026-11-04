@@ -160,7 +160,10 @@ jobs:
           python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml-v4.txt -r requirements-dev.txt fastapi==0.141.1 -c requirements.lock
 
       - name: Run ML v4 and walk-forward tests
-        run: python -m pytest tests/test_ml_v4_providers.py tests/test_ml_v4_evaluation.py tests/test_ml_v4_lifecycle.py tests/test_ml_v4_shadow.py tests/test_ml_v3_audit.py -v --tb=short
+        run: python -m pytest tests/test_ml_v4_providers.py tests/test_ml_v4_evaluation.py tests/test_ml_v4_lifecycle.py tests/test_ml_v4_shadow.py tests/test_ml_v4_preflight.py tests/test_ml_holdout_ledger.py tests/test_ml_v3_audit.py -v --tb=short
+
+      - name: Rehearse training, final evaluation reuse and shadow scoring offline
+        run: python scripts/ml_v4_rehearsal.py --out "$RUNNER_TEMP/ml-rehearsal"
 
   core-dependency-import-smoke:
     runs-on: ubuntu-24.04

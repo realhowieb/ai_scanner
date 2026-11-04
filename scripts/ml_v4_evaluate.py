@@ -2,13 +2,15 @@
 
     workflow_dispatch "ML v4 Train & Evaluate" (mode=evaluate)   or   python scripts/ml_v4_evaluate.py
 
-Read-only, like the training dry run: SELECTs a finalized research dataset
+Read-only by default: SELECTs a finalized research dataset
 version (as it stood at its freeze instant), the frozen AI Confidence value per
 observation, and SPY daily closes for regime labels. Writes report files to
---out only; never writes to the database, never saves or swaps a model.
+--out only; never saves or swaps a model. Explicit --final-holdout writes a
+durable claim and completed report in ml_holdout_evaluations BEFORE exposing
+final-test performance. An exact completed report is reused on subsequent runs.
 
 Three evaluations, all leakage-safe (purged, embargoed walk-forward folds, a
-final holdout evaluated once, calibrators fitted only on earlier folds):
+reserved final holdout withheld by default, calibrators fitted only on earlier folds):
   1. primary target, every provider x feature set + baselines, all eligible rows;
   2. head-to-head with production AI Confidence AS SERVED, on the rows where
      that frozen value exists (identical rows for every model);
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import sys
 import time
@@ -44,28 +47,9 @@ def _ensure_ml_libs() -> None:
         importlib.invalidate_caches()
 
 
-def _served_ai_confidence(ids) -> dict:
-    """SELECT only: the AI Confidence % frozen on each observation at fire time."""
-    from db.engine import get_neon_conn
-
-    conn = get_neon_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT id, ai_confidence FROM signal_outcomes WHERE id = ANY(%s) AND ai_confidence IS NOT NULL",
-                    ([int(i) for i in ids],))
-        cols = [d[0] for d in cur.description]
-        out = {}
-        for r in cur.fetchall():
-            r = dict(r) if isinstance(r, dict) else dict(zip(cols, r))
-            out[int(r["id"])] = float(r["ai_confidence"])
-        return out
-    except Exception as e:
-        conn.rollback()
-        T._log(f"AI Confidence read failed ({type(e).__name__}); head-to-head skipped")
-        return {}
-    finally:
-        cur.close()
-        conn.close()
+def _served_ai_confidence(rows) -> dict:
+    """Use the same frozen rows already verified by preflight; no second DB read."""
+    return {int(r["id"]): float(r["ai_confidence"]) for r in rows if r.get("ai_confidence") is not None}
 
 
 def _spy_closes() -> dict:
@@ -89,6 +73,9 @@ def main(argv=None) -> int:
     ap.add_argument("--feature-sets", default=os.getenv("ML_V4_FEATURE_SETS") or "production,leakage_safe")
     ap.add_argument("--cost-bps", type=float, default=float(os.getenv("ML_V4_COST_BPS") or 20.0))
     ap.add_argument("--out", default=None)
+    ap.add_argument("--git-sha", default=os.getenv("GITHUB_SHA"))
+    ap.add_argument("--final-holdout", action="store_true", default=os.getenv("ML_V4_FINAL_HOLDOUT") == "true",
+                    help="Explicit database write: reserve the final test in the durable ledger before scoring it")
     args = ap.parse_args(argv)
     _ensure_ml_libs()
 
@@ -110,9 +97,23 @@ def main(argv=None) -> int:
         raise SystemExit(f"{out} is not empty; reports are never overwritten")
 
     t0 = time.time()
-    loaded = T.load_audit_rows(args.dataset_version)
+    from analytics import ml_v4_preflight as PF
+
+    try:
+        loaded = T.load_audit_rows(args.dataset_version)
+    except PF.PreparationError as e:
+        PF.write_load_failure(out, e, args.dataset_version)
+        raise
+    preparation, split, evaluation_binding = PF.prepare(loaded, providers, feature_sets, git_sha=args.git_sha)
+    # Costs affect report selection too; include them in the immutable binding.
+    evaluation_binding["cost_bps"] = args.cost_bps
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "ml_v4_preflight.json").write_text(A.dumps(preparation) + "\n")
+    (out / "ml_v4_preflight.md").write_text(PF.markdown(preparation))
+    print(PF.markdown(preparation))
+    PF.require_ready(preparation)
     rows, entry = loaded["audit_rows"], loaded["entry"]
-    served = _served_ai_confidence([r.observation_id for r in rows])
+    served = _served_ai_confidence(loaded["raw_rows"])
     matched = E.attach_served(rows, served)
     spy = _spy_closes()
     regime = A.spy_regime_by_day(spy, sorted({r.entry_day for r in rows})) if spy else None
@@ -123,26 +124,63 @@ def main(argv=None) -> int:
     common = dict(cost_bps=args.cost_bps, regime_by_day=regime)
     T._log(f"evaluating {target.label}@{target.horizon}d on {len(data)} eligible signal-days")
     ensembles = E.default_ensembles(providers=providers, feature_sets=feature_sets)
-    primary = E.evaluate(data, E.default_models(providers=providers, feature_sets=feature_sets),
-                         ensembles=ensembles, **common)
+    primary_models = E.default_models(providers=providers, feature_sets=feature_sets)
+    head_models = E.default_models(providers=providers, feature_sets=feature_sets, include_champion=True)
+    # Freeze a single final-test boundary for every comparison. Exclude it even
+    # when the served-probability subset is too small to reserve its own test.
+    holdout_ids = split["holdout"]["ids"]
+    claim_key, cached = None, None
+    if args.final_holdout:
+        from db import ml_holdout_evaluations as ledger
+
+        claim_key, cached = ledger.reserve(evaluation_binding, holdout_ids,
+                                           run_id=os.getenv("GITHUB_RUN_ID") or args.git_sha)
+    if cached:
+        report = cached
+    else:
+        report = _evaluate_report(E, P, A, data, rows, primary_models, head_models, ensembles, common,
+                                  loaded, entry, args, evaluation_binding, t0, split)
+        if claim_key:
+            report = json.loads(A.dumps(report))
+            report["holdout_claim"] = claim_key
+            ledger.complete(claim_key, evaluation_binding, report)
+    _write_report(out, report, E, A)
+    return 0
+
+
+def _evaluate_report(E, P, A, data, rows, primary_models, head_models, ensembles, common,
+                     loaded, entry, args, evaluation_binding, t0, split):
+    from analytics.ml_v4_preflight import PreparationError
+
+    primary = E.evaluate(data, primary_models, ensembles=ensembles,
+                         evaluate_holdout=args.final_holdout, reserved_holdout=split["holdout"], **common)
+    if (primary["sample"]["common_rows"] != len(data)
+            or primary["training_slice_fingerprint"] != evaluation_binding["training_slice_fingerprint"]):
+        raise PreparationError("Evaluation drops rows used by artifact training; refuse to attach mismatched evidence")
     T._log("head-to-head with AI Confidence as served")
-    h2h = E.evaluate(data, E.default_models(providers=providers, feature_sets=feature_sets, include_champion=True),
-                     reference="ai_confidence_as_served", ensembles=ensembles, **common)
+    h2h = E.evaluate(data, head_models, reference="ai_confidence_as_served", ensembles=ensembles,
+                     evaluate_holdout=args.final_holdout, reserved_holdout=split["holdout"], **common)
     T._log("secondary targets by horizon")
-    secondary = E.evaluate_targets(rows, P.SECONDARY_TARGETS,
-                                   E.default_models(providers=providers, feature_sets=feature_sets), **common)
+    # Secondary questions use development folds only, never the primary final test.
+    secondary_rows = [r for r in rows if r.window_end[P.PRIMARY_TARGET.horizon].isoformat() < split["holdout"]["start"]]
+    secondary = E.evaluate_targets(secondary_rows, P.SECONDARY_TARGETS, primary_models, evaluate_holdout=False, **common)
 
     report = {
         "evaluation_version": E.EVALUATION_VERSION, "engine_version": P.ENGINE_VERSION,
-        "mode": "read-only (no database writes, no model saved)",
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(), "git_sha": os.getenv("GITHUB_SHA"),
+        "mode": "final holdout (durable ledger)" if args.final_holdout else "development (final test withheld)",
+        "binding": evaluation_binding,
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(), "git_sha": args.git_sha,
         "dataset": {"dataset_version": entry["dataset_version"], "dataset_fingerprint": entry.get("fingerprint"),
                     "frozen_at": str(loaded["frozen_at"]), "members": len(loaded["members"])},
         "library_versions": P.library_versions(),
         "primary": primary, "head_to_head_ai_confidence": h2h, "secondary_targets": secondary,
         "seconds": round(time.time() - t0, 1),
     }
-    out.mkdir(parents=True, exist_ok=True)
+    return report
+
+
+def _write_report(out, report, E, A):
+    primary, h2h, secondary = report["primary"], report["head_to_head_ai_confidence"], report["secondary_targets"]
     md = "\n".join([
         E.render_markdown(primary, title="ML v4 evaluation: all models, all eligible rows"),
         E.render_markdown(h2h, title="ML v4 evaluation: head-to-head with AI Confidence as served"),
@@ -158,9 +196,8 @@ def main(argv=None) -> int:
         fh.write(A.dumps(report) + "\n")
     with open(out / "ml_v4_evaluation.md", "x", encoding="utf-8") as fh:
         fh.write(md)
-    T._log(f"wrote reports to {out} in {report['seconds']}s")
+    T._log(f"wrote reports to {out}")
     print(md)
-    return 0
 
 
 if __name__ == "__main__":
