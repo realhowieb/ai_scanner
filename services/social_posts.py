@@ -1,9 +1,11 @@
 """Weekly social posts, written by HSF and sent to Buffer as drafts for an admin to approve.
 
-Four posts a week, each to every Buffer channel (Instagram, Threads, LinkedIn, ...):
+Six posts a week, each to every Buffer channel (Instagram, Threads, LinkedIn, ...):
 
     earnings   Mon 8:30am ET   the week's biggest reporters (api/earnings_week)
+    spotlight  Tue noon ET     one of SPOTLIGHT_POSTS (a feature), in turn by week
     product    Wed noon ET     one of PRODUCT_POSTS, in turn by week
+    explainer  Thu noon ET     one of EXPLAINER_POSTS (a term or idea), in turn by week
     founding   Fri noon ET     Founding 100 seats left (skipped when closed or sold out)
     recap      Sat 10am ET     the top 3 from the public weekly recap (api/public_recap)
 
@@ -37,9 +39,12 @@ log = logging.getLogger("hsf.social_posts")
 
 UTC = dt.timezone.utc
 BUFFER_API = "https://api.buffer.com"
-KINDS = ("earnings", "product", "founding", "recap")
+KINDS = ("earnings", "spotlight", "product", "explainer", "founding", "recap")
 # kind -> (weekday, hour, minute) of the post, ET
-POST_AT = {"earnings": (0, 8, 30), "product": (2, 12, 0), "founding": (4, 12, 0), "recap": (5, 10, 0)}
+POST_AT = {"earnings": (0, 8, 30), "spotlight": (1, 12, 0), "product": (2, 12, 0), "explainer": (3, 12, 0),
+           "founding": (4, 12, 0), "recap": (5, 10, 0)}
+# First week a kind is sent automatically (earlier weeks were written by hand in Buffer).
+START_WEEK = {"spotlight": "2026-W48", "explainer": "2026-W47"}
 MAX_ATTEMPTS = 3
 PREVIEW_TTL_S = 600
 LEAD = dt.timedelta(hours=2)  # automatic drafts stop this long before the post time
@@ -73,6 +78,86 @@ PRODUCT_POSTS = (
               "in plain English."),
      "points": ["The reasons behind each score", "The risks to watch", "In plain English"],
      "cta": "See how HSF works", "page": "/how-hsf-works"},
+)
+
+# Tuesday: one feature at a time.
+SPOTLIGHT_POSTS = (
+    {"headline": "The day's movers, ranked live.",
+     "body": ("Market hours move fast. HSF's Day Trader ranks the session's movers live, each with a DT score, "
+              "relative volume and where it trades against VWAP.\n\n"
+              "It also flags stair-steppers: stocks climbing or sliding in a tight, straight line on the 1-minute "
+              "chart. It describes the path so far, not where it goes next."),
+     "points": ["A DT score for every mover", "Relative volume and VWAP", "Stair-steppers, minute by minute"],
+     "cta": "See it", "page": "/"},
+    {"headline": "Gappers, before the bell.",
+     "body": ("Before the open: which stocks are gapping?\n\n"
+              "HSF lists the pre-market gappers across the whole U.S. market, with pre-market volume next to each "
+              "one, so you start the day with a short list instead of a blank screen. Pre-market prints usually "
+              "show up from about 8:00 AM ET."),
+     "points": ["Every U.S. stock, before the open", "Pre-market volume for each", "From about 8:00 AM ET"],
+     "cta": "Part of Pro", "page": "/pricing"},
+    {"headline": "Ask your scan a question.",
+     "body": ("A scan full of names and no time to read them all? Ask it.\n\n"
+              "HSF's AI research answers plain-English questions about a scan: which setups have the most "
+              "confirming signals, which names report earnings soon, what the top three have in common. It uses "
+              "only that scan's data and never tells you to buy or sell."),
+     "points": ["Plain-English questions", "Answers from that scan only", "Never says buy or sell"],
+     "cta": "Part of Premium", "page": "/pricing"},
+    {"headline": "Rankings, on the record.",
+     "body": ("Hindsight makes every stock list look smart. So HSF keeps a public record instead.\n\n"
+              "Every Saturday, the week's most-ranked setups are saved exactly as they were ranked, and never "
+              "edited afterward."),
+     "points": ["Saved every Saturday", "Never edited afterward", "Free to browse, no sign-up"],
+     "cta": "Browse any week, no sign-up needed", "page": "/weekly"},
+    {"headline": "Your watchlist, scored.",
+     "body": ("Add the stocks you follow to a watchlist and see them in the Scanner next to their HSF Score.\n\n"
+              "On Premium, watchlist stocks the scan didn't rank get scored too, so nothing you follow is left "
+              "blank."),
+     "points": ["Your stocks in the Scanner", "An HSF Score for each", "Unranked names scored on Premium"],
+     "cta": "Start a watchlist", "page": "/"},
+)
+
+# Thursday: one term or idea, explained.
+EXPLAINER_POSTS = (
+    {"headline": "What's behind a score.",
+     "body": ("A score on its own doesn't tell you much.\n\n"
+              "Every stock HSF ranks shows why it's there: the setup it fits, how today's volume compares to "
+              "normal, how it has traded over the last 20 sessions, and the risks to watch."),
+     "points": ["The setup it fits", "Volume against normal", "The risks to watch"],
+     "cta": "How the HSF Score works", "page": "/how-hsf-works"},
+    {"headline": "Setups, sorted.",
+     "body": ("Not every setup is the same idea. HSF tags each stock it ranks by setup:\n\n"
+              "Breakout: pushing through a recent high\n"
+              "Gapper: opening well away from yesterday's close\n"
+              "Golden cross: 50-day average crossing above the 200-day\n"
+              "Earnings: reporting soon"),
+     "points": ["Breakout: a new recent high", "Gapper: away from the close", "Golden cross: 50-day over 200"],
+     "cta": "Filter the scanner down to the one you trade", "page": "/"},
+    {"headline": "What RVOL tells you.",
+     "body": ("RVOL, or relative volume, compares a stock's volume today with its usual volume. An RVOL of 2 "
+              "means about twice the usual.\n\n"
+              "HSF shows it next to every stock it ranks, because a move on heavy volume reads differently from "
+              "one on light volume."),
+     "points": ["Today's volume vs its usual", "2 means about twice the usual", "On every ranked stock"],
+     "cta": "How HSF works", "page": "/how-hsf-works"},
+    {"headline": "Above or below VWAP?",
+     "body": ("VWAP is the average price paid for a stock today, weighted by volume. Day traders watch whether "
+              "a stock trades above or below it.\n\n"
+              "HSF's Day Trader shows where each mover trades against VWAP, live through the session."),
+     "points": ["Volume-weighted average price", "Starts fresh every session", "Live in Day Trader"],
+     "cta": "See Day Trader", "page": "/"},
+    {"headline": "What's a stair-stepper?",
+     "body": ("A stair-stepper is a stock moving in a tight, straight line on the 1-minute chart.\n\n"
+              "HSF measures it with R²: how closely the recent bars fit a straight line, where 1.0 is "
+              "perfectly straight. It describes the path so far, not where it goes next."),
+     "points": ["A tight line, minute by minute", "Measured with R²", "Describes, doesn't predict"],
+     "cta": "See it in Day Trader", "page": "/"},
+    {"headline": "A score from 0 to 100.",
+     "body": ("The HSF Score ranks how strongly a stock's technical evidence lines up right now, from 0 to "
+              "100.\n\n"
+              "Higher means more of the evidence agrees. It's a ranking to start your research, not a forecast."),
+     "points": ["0 to 100", "How strongly the evidence agrees", "A ranking, not a forecast"],
+     "cta": "How the HSF Score works", "page": "/how-hsf-works"},
 )
 
 # Performance claims never go out (see the module docstring).
@@ -117,7 +202,8 @@ def next_week_for(kind: str, now: dt.datetime) -> str:
     today = now.astimezone(_et()).date()
     monday = today - dt.timedelta(days=today.weekday())
     week = week_key(monday)
-    return week if now < post_time(kind, week) else week_key(monday + dt.timedelta(days=7))
+    week = week if now < post_time(kind, week) else week_key(monday + dt.timedelta(days=7))
+    return max(week, START_WEEK.get(kind, week))
 
 
 def due(kind: str, now: dt.datetime) -> Optional[str]:
@@ -179,7 +265,21 @@ def compose_product(week: str) -> Dict[str, Any]:
     n = int(week.split("-W")[1])
     p = PRODUCT_POSTS[n % len(PRODUCT_POSTS)]
     return {"kind": "product", "week": week, "body": p["body"], "cta": p["cta"], "page": p["page"],
-            "image": {"kicker": "HSFinest.AI", "headline": p["headline"], "points": p["points"]}}
+            "image": {"kicker": "What HSF does", "headline": p["headline"], "points": p["points"]}}
+
+
+def _rotating(kind: str, week: str, posts, kicker: str) -> Dict[str, Any]:
+    p = posts[int(week.split("-W")[1]) % len(posts)]
+    return {"kind": kind, "week": week, "body": p["body"], "cta": p["cta"], "page": p["page"],
+            "image": {"kicker": kicker, "headline": p["headline"], "points": p["points"]}}
+
+
+def compose_spotlight(week: str) -> Dict[str, Any]:
+    return _rotating("spotlight", week, SPOTLIGHT_POSTS, "Product spotlight")
+
+
+def compose_explainer(week: str) -> Dict[str, Any]:
+    return _rotating("explainer", week, EXPLAINER_POSTS, "How it works")
 
 
 def compose_founding(week: str, status: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
@@ -227,6 +327,10 @@ def compose(kind: str, week: str) -> Optional[Dict[str, Any]]:
         return compose_earnings(week)
     if kind == "product":
         return compose_product(week)
+    if kind == "spotlight":
+        return compose_spotlight(week)
+    if kind == "explainer":
+        return compose_explainer(week)
     if kind == "founding":
         return compose_founding(week)
     if kind == "recap":

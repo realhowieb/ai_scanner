@@ -49,12 +49,14 @@ Copy rules (finance): describe what the scanner ranked and why; never say a pick
 
 ### Automatic weekly drafts (services/social_posts.py)
 
-With `BUFFER_API_KEY` set on hsf-api-v1 (a personal key from publish.buffer.com/settings/api), HSF writes four posts a week and sends each one to every Buffer channel **as a draft**. Nothing publishes until you approve it in Buffer.
+With `BUFFER_API_KEY` set on hsf-api-v1 (a personal key from publish.buffer.com/settings/api), HSF writes six posts a week and sends each one to every Buffer channel **as a draft**. Nothing publishes until you approve it in Buffer.
 
 | Post | Goes out (ET) | Drafted from |
 |---|---|---|
 | Earnings this week | Mon 8:30am | Sun 6pm |
+| Product spotlight (5 rotating features; automatic from Nov 24) | Tue noon | Mon 6pm |
 | What HSF does (4 rotating posts) | Wed noon | Tue 6pm |
+| Explainer (6 rotating terms like RVOL, VWAP, setups; automatic from Nov 19) | Thu noon | Wed 6pm |
 | Founding 100 seats left (skipped when closed) | Fri noon | Thu 6pm |
 | Weekly recap top 3 | Sat 10am | Sat 1am |
 

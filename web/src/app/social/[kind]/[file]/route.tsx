@@ -6,7 +6,7 @@ import { upstream } from "@/server/upstream";
 
 export const dynamic = "force-dynamic";
 
-const KINDS = new Set(["earnings", "product", "founding", "recap"]);
+const KINDS = new Set(["earnings", "spotlight", "product", "explainer", "founding", "recap"]);
 const FILE_RE = /^(\d{4}-W\d{2})\.png$/;
 const W = 1080;
 const H = 1350;

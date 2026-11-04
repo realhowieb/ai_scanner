@@ -120,7 +120,7 @@ def register(app: FastAPI) -> None:
                         headers={"content-disposition": f'attachment; filename="hsf-email-list-{status}.csv"',
                                  "cache-control": "no-store"})
 
-    _KIND = r"^(earnings|product|founding|recap)$"
+    _KIND = r"^(earnings|spotlight|product|explainer|founding|recap)$"
 
     @app.get("/v1/public/social/{kind}/{week}", response_model=models.PublicSocialPost,
              responses={404: {"description": "No such post"}}, summary="What a weekly social post's image shows (public)")
