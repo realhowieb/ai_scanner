@@ -15,7 +15,7 @@ import { siteOrigin } from "@/lib/seo";
 
 type Report = Schemas["AdminMarketing"];
 type Social = Schemas["AdminSocial"];
-const KIND_LABEL: Record<string, string> = { earnings: "Earnings this week", product: "What HSF does", founding: "Founding 100", recap: "Weekly recap" };
+const KIND_LABEL: Record<string, string> = { earnings: "Earnings this week", spotlight: "Product spotlight", product: "What HSF does", explainer: "Explainer", founding: "Founding 100", recap: "Weekly recap" };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET";
 const PERIODS = [[7, "7 days"], [30, "30 days"], [90, "90 days"], [365, "1 year"]] as const;
 const fmt = (n: number) => n.toLocaleString("en-US");

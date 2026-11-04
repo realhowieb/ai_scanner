@@ -21221,7 +21221,7 @@
       "name": "kind",
       "required": true,
       "schema": {
-       "pattern": "^(earnings|product|founding|recap)$",
+       "pattern": "^(earnings|spotlight|product|explainer|founding|recap)$",
        "title": "Kind",
        "type": "string"
       }
@@ -29443,7 +29443,7 @@
       "name": "kind",
       "required": true,
       "schema": {
-       "pattern": "^(earnings|product|founding|recap)$",
+       "pattern": "^(earnings|spotlight|product|explainer|founding|recap)$",
        "title": "Kind",
        "type": "string"
       }
