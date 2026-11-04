@@ -196,9 +196,9 @@ class ReportTests(unittest.TestCase):
         col = mr.build_report(rows, [], now=ts("2026-10-02T00:00:00"))["collection"]
         msw = col["missing_scan_windows"]
         self.assertEqual((msw["count"], msw["of"]), (0, 3))
-        for slot in ("12:35", "20:35", "21:35"):   # pre-market / after-hours: no snapshot expected
+        for slot in ("08:35", "16:35", "17:35"):   # pre-market / after-hours (ET): no snapshot expected
             self.assertEqual(msw["per_slot"][slot]["expected"], 0)
-        self.assertEqual(msw["per_slot"]["16:35"], {"expected": 1, "with_snapshot": 1})
+        self.assertEqual(msw["per_slot"]["12:35"], {"expected": 1, "with_snapshot": 1})
 
     def test_lookahead_and_recorded_before_timestamp_are_pit_violations(self):
         row = {**opp(1, "AAA", "2026-10-01T16:40:00"), "created_at": ts("2026-10-01T10:00:00")}
@@ -387,8 +387,11 @@ class SnapshotSlotTests(unittest.TestCase):
 
     def test_regular_hours_slots_follow_dst_and_early_closes(self):
         self.assertEqual(self.hhmm(dt.date(2026, 10, 16)), ["13:35", "16:35", "19:35"])   # EDT
-        self.assertEqual(self.hhmm(dt.date(2026, 11, 9)), ["16:35", "19:35", "20:35"])    # EST
-        self.assertEqual(self.hhmm(dt.date(2026, 11, 27)), ["16:35"])                     # 13:00 ET close
+        # New York slots: 9:35, 12:35 and 15:35 ET all year, so the UTC times move.
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 9)), ["14:35", "17:35", "20:35"])    # EST
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 27)), ["14:35", "17:35"])            # 13:00 ET close
+        # Before the jobs moved to New York time, the fixed UTC slots are what ran.
+        self.assertEqual(self.hhmm(dt.date(2026, 11, 3)), ["16:35", "19:35", "20:35"])
         self.assertEqual(self.hhmm(dt.date(2026, 10, 17)), [])                            # Saturday
 
 
