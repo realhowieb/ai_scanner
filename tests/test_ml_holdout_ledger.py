@@ -1,8 +1,12 @@
 """SQLite transaction exercises of the same durable claim/reuse policy as Postgres."""
 import sqlite3
+import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    raise unittest.SkipTest("needs pytest")
 
 from db import ml_holdout_evaluations as L
 

@@ -2,12 +2,11 @@
 import unittest
 from dataclasses import replace
 
-import pytest
-
 try:
+    import pytest
     import sklearn  # noqa: F401
 except ImportError:
-    raise unittest.SkipTest("needs ML libraries")
+    raise unittest.SkipTest("needs pytest and ML libraries")
 
 from analytics import ml_v4_preflight as PF
 from analytics import ml_v4_providers as P
