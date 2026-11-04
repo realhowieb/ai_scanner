@@ -157,10 +157,10 @@ the research-validation lifecycle, not this one.
 Expected scan slots are New York times (`SCAN_SLOTS_ET` in
 `analytics/market_calendar.py`): 08:35, 09:35, 12:35, 15:35, 16:35 and 17:35 ET.
 The cron-job.org scan jobs must use the **America/New_York** time zone so they
-keep those market times through daylight saving changes. Until 2026-11-04 the
+keep those market times through daylight saving changes. Until 2026-11-03 the
 jobs ran on fixed UTC times, which after DST ended (2026-11-01) put every scan an
 hour early and left no scan between 12:00 and 14:00 ET; days before
-`SCAN_SLOTS_ET_SINCE` (2026-11-05) are judged against those UTC times. If a job
+`SCAN_SLOTS_ET_SINCE` (2026-11-04) are judged against those UTC times. If a job
 is ever set back to UTC, the health plane will report missed scans in winter.
 The yearly calendar update is due before 2028.
 

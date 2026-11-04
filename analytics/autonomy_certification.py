@@ -1081,7 +1081,7 @@ def gate_x_thirty_days() -> Dict[str, Any]:
 
 def info_schedule_timezone() -> Dict[str, Any]:
     """Informational (non-blocking): expected scan slots are New York times
-    (cron-job.org jobs in America/New_York since 2026-11-05), so their UTC times
+    (cron-job.org jobs in America/New_York since 2026-11-04), so their UTC times
     follow daylight saving time. Days before then use the old fixed-UTC slots."""
     return _gate("WARN", {"scan_slots_et": [f"{h:02d}:{m:02d}" for h, m in mc.SCAN_SLOTS_ET],
                           "et_since": mc.SCAN_SLOTS_ET_SINCE.isoformat(),

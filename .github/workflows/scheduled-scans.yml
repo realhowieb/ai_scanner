@@ -22,7 +22,7 @@ on:
   # scheduler: it dispatches this workflow on main (force=false, session=auto)
   # at 08:35, 09:35, 12:35, 15:35, 16:35 and 17:35 New York time on weekdays (jobs
   # set to the America/New_York time zone, so UTC times move with DST; before
-  # 2026-11-05 they were fixed UTC, see analytics/market_calendar.py). GitHub's own
+  # 2026-11-04 they were fixed UTC, see analytics/market_calendar.py). GitHub's own
   # cron fired hours late (e.g. the 21:10 UTC slot at 00:27 UTC) and duplicated
   # those slots; a late run after UTC midnight sent the morning digest at night.
 
