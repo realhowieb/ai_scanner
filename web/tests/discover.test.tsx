@@ -33,10 +33,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const wrap = (ui: React.ReactNode, plan: "basic" | "pro" | "premium") => render(<SessionProvider initialMe={me(plan)}>{ui}</SessionProvider>);
-const route = (map: Record<string, () => Response>) => fetchMock.mockImplementation(async (req: Request) => {
-  const p = new URL(req.url).pathname.replace(/^\/api\/hsf/, "");
+const route = (map: Record<string, (url: URL) => Response>) => fetchMock.mockImplementation(async (req: Request) => {
+  const url = new URL(req.url);
+  const p = url.pathname.replace(/^\/api\/hsf/, "");
   const hit = Object.entries(map).find(([k]) => p === k);
-  return hit ? hit[1]() : jsonResponse({ detail: `no fake for ${p}` }, 404);
+  return hit ? hit[1](url) : jsonResponse({ detail: `no fake for ${p}` }, 404);
 });
 
 const brief = (over: Partial<Schemas["Brief"]> = {}): Schemas["Brief"] => ({
@@ -102,12 +103,17 @@ describe("Market Brief", () => {
     route({
       "/v1/brief": () => jsonResponse(brief({ prebreakout_locked: false, prebreakout_picks: [{ ticker: "PB", prob: 41.6 }] })),
       "/v1/earnings": () => jsonResponse([]),
-      "/v1/ai/brief-narrative": () => jsonResponse({ text: "Tech led today.", run_id: null, snapshot_time: null, ticker: null }),
+      // The initial saved-only lookup has no narrative. Only the user-requested
+      // generation returns text; otherwise its response races the button lookup.
+      "/v1/ai/brief-narrative": (url) => jsonResponse({ text: url.searchParams.get("saved") === "true" ? null : "Tech led today.", run_id: null, snapshot_time: null, ticker: null }),
     });
     wrap(<BriefView />, "premium");
     expect(await screen.findByText("42%")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Write narrative" }));
+    await waitFor(() => expect(urls().some((u) => u.pathname.endsWith("/ai/brief-narrative") && u.searchParams.get("saved") === "true")).toBe(true));
+    expect(urls().filter((u) => u.pathname.endsWith("/ai/brief-narrative")).every((u) => u.searchParams.get("saved") === "true")).toBe(true);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Write narrative" }));
     expect(await screen.findByText("Tech led today.")).toBeInTheDocument();
+    expect(urls().some((u) => u.pathname.endsWith("/ai/brief-narrative") && !u.searchParams.has("saved"))).toBe(true);
   });
 
   it("keeps the Pulse and Radar available when earnings fails", async () => {

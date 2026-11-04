@@ -63,11 +63,11 @@ A custom-domain change must update `APP_BASE_URL`, `API_CORS_ORIGINS` and
 ## 5. Cost and safety backstops
 
 - [ ] Anthropic console: set a monthly spend limit and alert (AI is also capped per user by `AI_DAILY_LIMIT`)
-- [ ] Neon: the restore window is 1 day on the current plan. Before paid users grow, raise it
-      (paid plan) so a problem noticed after a weekend can still be undone
-- [ ] Neon: mark branch `live` as protected
-- [ ] Run the **Database restore drill** workflow once (Actions → Database restore drill → Run) and
-      note the timings in `docs/PROVIDER_FAILOVER_AND_RESTORE.md`; repeat monthly
+- [x] Neon: restore window extended from 1 to 7 days on the existing Launch plan
+      (owner approved storage costs; verified 2026-11-04)
+- [x] Neon: branch `live` protected and verified (2026-11-04)
+- [x] Run the **Database restore drill** workflow once (Actions → Database restore drill → Run) and
+      note the timings in `docs/PROVIDER_FAILOVER_AND_RESTORE.md` (2026-10-29 and 2026-11-04 passed); repeat monthly
 
 ## 6. After each promote
 

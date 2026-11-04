@@ -102,6 +102,34 @@ class SavedAnswerTests(_Store):
 
 
 class JobTimingTests(unittest.TestCase):
+    def test_empty_brief_releases_claim_for_retry(self):
+        from services import premium_auto as pa
+
+        with mock.patch.object(pa, "brief_due", return_value=True), \
+                mock.patch.object(pa, "_ai_ready", return_value=True), \
+                mock.patch("api.market._brief_core", return_value={"data": {"snapshot_time": "scan-1"}}), \
+                mock.patch("api.ai.stored", return_value=None), \
+                mock.patch("api.ai.brief_narrative", return_value={"text": None}):
+            release = mock.Mock()
+            out = pa.run_brief(dt.datetime.now(UTC), claim=lambda *a: True, release=release)
+        self.assertFalse(out["written"])
+        release.assert_called_once_with("auto_brief", "scan-1")
+
+    def test_failed_stock_note_retries_the_scan(self):
+        from services import premium_auto as pa
+
+        obs = {"run_id": 9, "previous_run_id": 8, "previous_ranked": {}, "ranked": {"AAA": {"rank": 1}}}
+        with mock.patch.object(pa, "_ai_ready", return_value=True), \
+                mock.patch("api.watchlist_intel.market_observation", return_value=obs), \
+                mock.patch.object(pa, "_watchlists", return_value=[{"items": [{"ticker": "AAA"}]}]), \
+                mock.patch("api.ai.ticker_note", side_effect=[RuntimeError("provider"), {"text": "note"}]), \
+                mock.patch("db.premium_auto.prune"):
+            release = mock.Mock()
+            first = pa.run_notes(dt.datetime.now(UTC), claim=lambda *a: True, release=release, accounts=["p@x.com"])
+            second = pa.run_notes(dt.datetime.now(UTC), claim=lambda *a: True, release=release, accounts=["p@x.com"])
+        self.assertEqual((first["written"], second["written"]), (0, 1))
+        release.assert_called_once_with("auto_notes", "9")
+
     def test_due_windows(self):
         from services import premium_auto as pa
 
@@ -149,6 +177,23 @@ class JobTimingTests(unittest.TestCase):
 
 
 class EmailTests(unittest.TestCase):
+    def test_weekly_email_needs_verification_and_opt_in_before_claiming_or_generating(self):
+        from services import premium_auto as pa
+
+        for verified, opted_in in ((False, True), (True, False)):
+            with self.subTest(verified=verified, opted_in=opted_in), \
+                    mock.patch.object(pa, "_ai_ready", return_value=True), \
+                    mock.patch("db.email_verification.is_email_verified", return_value=verified), \
+                    mock.patch("db.email_prefs.wants_email", return_value=opted_in), \
+                    mock.patch("db.referrals.claim_email") as claim, \
+                    mock.patch("api.ai.watchlist_note") as note, \
+                    mock.patch.object(pa, "_send") as send:
+                out = pa.run_watchlist_email(dt.datetime(2026, 11, 8, 22, tzinfo=UTC), accounts=["p@x.com"])
+            self.assertEqual(out["skipped"], {"no_email": 1})
+            claim.assert_not_called()
+            note.assert_not_called()
+            send.assert_not_called()
+
     def test_paragraphs(self):
         from services.premium_auto import paragraphs
 
@@ -205,6 +250,45 @@ class EmailTests(unittest.TestCase):
         html = send.call_args[0][4]
         self.assertIn("Core", html)
         self.assertNotIn("Tech", html)
+
+
+class JournalDeliveryTests(_Store):
+    def test_failed_send_reuses_saved_coaching_and_retries_until_delivered(self):
+        from api import ai
+        from services import premium_auto as pa
+
+        now = dt.datetime(2026, 11, 6, 22, 0, tzinfo=UTC)
+        claims = set()
+
+        def claim(email, job, key):
+            entry = (email, job, key)
+            if entry in claims:
+                return False
+            claims.add(entry)
+            return True
+
+        def coach(email):
+            ai.store(email, "journal_coach", "latest", "Saved coaching", closed=6, trades_hash="h1")
+            return {"text": "Saved coaching", "closed": 6}
+
+        with mock.patch.object(pa, "_ai_ready", return_value=True), \
+                mock.patch.object(pa, "_can_email", return_value=True), \
+                mock.patch("db.referrals.claim_email", side_effect=claim), \
+                mock.patch("db.referrals.release_email", side_effect=lambda *args: claims.discard(args)), \
+                mock.patch("services.lifecycle_emails._base_url", return_value="https://app"), \
+                mock.patch("api.ai_premium.journal_trades_hash", return_value="h1"), \
+                mock.patch("api.ai_premium.journal_coach", side_effect=coach) as generate, \
+                mock.patch.object(pa, "_send", side_effect=[False, True]) as send:
+            first = pa.run_journal_email(now, accounts=["p@x.com"])
+            second = pa.run_journal_email(now, accounts=["p@x.com"])
+            third = pa.run_journal_email(now, accounts=["p@x.com"])
+            next_week = pa.run_journal_email(now + dt.timedelta(days=7), accounts=["p@x.com"])
+        self.assertEqual(first["skipped"], {"email_failed": 1})
+        self.assertEqual(second["sent"], 1)
+        self.assertEqual(third["skipped"], {"already_sent": 1})
+        self.assertEqual(next_week["skipped"], {"no_new_trades": 1})
+        self.assertEqual(generate.call_count, 1)
+        self.assertEqual(send.call_count, 2)
 
 
 class ScheduledScanAITests(unittest.TestCase):
@@ -294,6 +378,17 @@ class TradeAlertTests(_Store):
                 mock.patch.object(trade_alerts, "_stop_pct", return_value=None), \
                 mock.patch("api.user_data.create_alert", side_effect=user_data.LimitReached("full")):
             self.assertIsNone(trade_alerts.add_for_trade("p@x.com", "AAA", 100.0))
+        self.assertEqual(trade_alerts.for_journal("p@x.com"), {})
+
+    def test_one_remaining_slot_does_not_report_a_pair_or_leave_a_partial_alert(self):
+        from api import trade_alerts, user_data
+
+        with mock.patch.object(trade_alerts, "_entitlements", return_value=self._ent()), \
+                mock.patch.object(trade_alerts, "_stop_pct", return_value=None), \
+                mock.patch("api.user_data.create_alert", side_effect=[{"id": 12}, user_data.LimitReached("full")]), \
+                mock.patch("api.user_data.delete_alert") as delete:
+            self.assertIsNone(trade_alerts.add_for_trade("p@x.com", "AAA", 100.0))
+        delete.assert_called_once_with("p@x.com", 12)
         self.assertEqual(trade_alerts.for_journal("p@x.com"), {})
 
 

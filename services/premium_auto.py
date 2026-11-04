@@ -144,6 +144,8 @@ def run_brief(now: dt.datetime, *, claim=None, release=None) -> Dict[str, Any]:
     except Exception as e:
         release("auto_brief", str(ts))
         return {"error": type(e).__name__}
+    if not out.get("text"):
+        release("auto_brief", str(ts))
     return {"written": bool(out.get("text")), "snapshot_time": str(ts)}
 
 
@@ -167,13 +169,14 @@ def pick_note_tickers(new: List[str], watched: Dict[str, int], cap: int) -> List
     return hits[:cap]
 
 
-def run_notes(now: dt.datetime, *, claim=None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+def run_notes(now: dt.datetime, *, claim=None, release=None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
     if not _ai_ready():
         return {"skipped": "ai_off"}
-    from api import ai, watchlist_intel
+    from api import watchlist_intel
     from services import ops_notify
 
     claim = claim or ops_notify.once
+    release = release or ops_notify.release
     obs = watchlist_intel.market_observation()
     if not obs:
         return {"skipped": "no_scan"}
@@ -181,13 +184,31 @@ def run_notes(now: dt.datetime, *, claim=None, accounts: Optional[List[str]] = N
     new = newly_ranked(obs)
     if not new or not claim("auto_notes", rid):
         return {"skipped": "nothing_new" if not new else "done"}
+    # A failed discovery or generation must not consume this scan's only attempt.
+    # ticker_note reuses saved answers, so retries don't regenerate successful notes.
+    try:
+        out = _write_notes(now, obs, new, accounts)
+        if out["retry"]:
+            release("auto_notes", rid)
+        return out
+    except Exception:
+        release("auto_notes", rid)
+        raise
+
+
+def _write_notes(now: dt.datetime, obs: Dict[str, Any], new: List[str],
+                 accounts: Optional[List[str]]) -> Dict[str, Any]:
+    from api import ai
+
     watched: Dict[str, int] = {}
+    failed = False
     for email in accounts if accounts is not None else premium_accounts():
         try:
             for wl in _watchlists(email):
                 for t in {str(i["ticker"]).upper() for i in wl.get("items") or []}:
                     watched[t] = watched.get(t, 0) + 1
         except Exception:
+            failed = True
             continue
     picks = pick_note_tickers(new, watched, _int_env("HSF_AUTO_NOTES_PER_SCAN", 15))
     written = 0
@@ -195,7 +216,10 @@ def run_notes(now: dt.datetime, *, claim=None, accounts: Optional[List[str]] = N
         try:
             if (ai.ticker_note(None, t) or {}).get("text"):
                 written += 1
+            else:
+                failed = True
         except Exception as e:
+            failed = True
             log.info(json.dumps({"event": "auto_note_failed", "ticker": t, "error": type(e).__name__}))
     try:
         from db import premium_auto
@@ -203,7 +227,8 @@ def run_notes(now: dt.datetime, *, claim=None, accounts: Optional[List[str]] = N
         premium_auto.prune("ticker_note", now - dt.timedelta(days=NOTE_KEEP_DAYS))
     except Exception:
         pass
-    return {"run_id": rid, "newly_ranked": len(new), "on_watchlists": len(picks), "written": written}
+    return {"run_id": str(obs["run_id"]), "newly_ranked": len(new), "on_watchlists": len(picks),
+            "written": written, "retry": failed}
 
 
 # ---- email pieces ---------------------------------------------------------------------------------
@@ -365,13 +390,20 @@ def run_journal_email(now: dt.datetime, accounts: Optional[List[str]] = None) ->
 
     def each(email: str) -> str:
         saved = ai.stored(email, "journal_coach", "latest") or {}
-        if saved.get("trades_hash") and saved["trades_hash"] == ai_premium.journal_trades_hash(email):
+        sent = ai.stored(email, "journal_coach_email", "latest") or {}
+        trades_hash = ai_premium.journal_trades_hash(email)
+        if sent.get("trades_hash") == trades_hash:
             return "no_new_trades"
-        out = ai_premium.journal_coach(email)
+        # Generation saves the note before SMTP runs. Reuse it after a failed send;
+        # only successful delivery advances the fingerprint used to skip a journal.
+        out = saved if saved.get("trades_hash") == trades_hash else ai_premium.journal_coach(email)
         if not out.get("text"):
             return "too_few_trades"
         subject, text, html, glance = compose_journal(out["text"], int(out.get("closed") or 0), base_url=url)
-        return "sent" if _send(email, "weekly", subject, text, html, glance, "Journal coaching · this week") else "email_failed"
+        if not _send(email, "weekly", subject, text, html, glance, "Journal coaching · this week"):
+            return "email_failed"
+        ai.store(email, "journal_coach_email", "latest", out["text"], trades_hash=trades_hash)
+        return "sent"
 
     return {"week": week, **_per_account("auto_journal_email", week, accounts, each)}
 
