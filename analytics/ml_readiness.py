@@ -768,10 +768,41 @@ def build_report(raw_rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapp
                        "recent_window_trading_days": RECENT_TRADING_DAYS,
                        "recent_due": len(due_recent), "recent_labeled": len(labeled_recent)},
         "collection": collection, "point_in_time": pit, "feature_integrity": features,
+        "capture_health": feature_capture_health(rows, records, now),
         "projection": project(gates, metrics, collection, recent_coverage),
         "spec": {"fold": FOLD_SPEC, "holdout": HOLDOUT_SPEC, "near_progress": NEAR_PROGRESS,
                  "cron_min_age_days": CRON_MIN_AGE.days, "maturation_grace_trading_days": MATURATION_GRACE_TRADING_DAYS},
     }
+
+
+def feature_capture_health(rows, records, now):
+    """Aggregate capture evidence without changing the population or gate thresholds."""
+    joins = {int(r["observation"]["observation_id"]): r["features"].join.get("status") for r in records}
+    window_start = _day_close_utc(_trading_days_ago(now, RECENT_TRADING_DAYS))
+    current_start = _day_close_utc(_trading_days_ago(now, 5))
+    recent = [r for r in rows if rd.to_dt(r.get("fired_at")) and rd.to_dt(r["fired_at"]) >= window_start]
+    result = []
+    for gate in ("scan_feature_join_rate", "ai_confidence_frozen"):
+        def reason(r):
+            if gate == "scan_feature_join_rate":
+                status = joins.get(int(r["id"]), rd.JOIN_MISSING)
+                return None if status == rd.JOIN_MATCHED else status
+            if _num(r.get("ai_confidence")) is not None:
+                return None
+            prediction = (rd._json(r.get("raw_signal")).get("models") or {}).get("ai_confidence") or {}
+            return prediction.get("reason") or rd._json(r.get("raw_signal")).get("ai_confidence_capture_reason") or "historical_reason_not_recorded"
+        failures = [r for r in recent if reason(r)]
+        last_failure = max((rd.to_dt(r["fired_at"]) for r in failures), default=None)
+        healthy = [r for r in recent if not reason(r) and (last_failure is None or rd.to_dt(r["fired_at"]) > last_failure)]
+        current = [r for r in recent if rd.to_dt(r["fired_at"]) >= current_start]
+        result.append({"gate": gate, "window_start": window_start.isoformat(), "window_trading_days": RECENT_TRADING_DAYS,
+                       "total": len(recent), "captured": len(recent) - len(failures), "missing": len(failures),
+                       "last_failure_at": last_failure.isoformat() if last_failure else None,
+                       "healthy_since": min((rd.iso(r["fired_at"]) for r in healthy), default=None),
+                       "healthy_rows": len(healthy), "current_window_trading_days": 5,
+                       "current_total": len(current), "current_captured": sum(not reason(r) for r in current),
+                       "failure_reasons": dict(Counter(reason(r) for r in failures))})
+    return result
 
 
 def api_view(report: Mapping[str, Any]) -> Dict[str, Any]:
@@ -810,6 +841,7 @@ def api_view(report: Mapping[str, Any]) -> Dict[str, Any]:
                       "scan_join_rate_recent": m["recent_scan_join_rate"],
                       "model_version_rate_recent": m["recent_model_version_rate"],
                       "ai_confidence_rate_recent": m["recent_ai_confidence_rate"]},
+        "capture_health": report.get("capture_health", []),
         "gates": [{k: g[k] for k in ("gate", "category", "kind", "metric", "value", "operator", "threshold",
                                      "status", "progress", "why")} for g in report["gates"]],
         "blocking_reasons": list(report["blocking_reasons"]),

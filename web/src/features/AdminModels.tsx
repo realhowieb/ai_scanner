@@ -14,6 +14,7 @@ import { frac } from "@/features/AdminAnalytics";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
+import { MlNextSteps } from "@/features/MlNextSteps";
 
 type Status = "candidate" | "validated" | "shadow" | "champion" | "retired";
 type Target = Exclude<Status, "candidate">;
@@ -239,10 +240,43 @@ function MonitoringCard() {
   );
 }
 
+type Production = {
+  configured_model: { model_version: string; trained_at: string | null; dataset_version: string | null } | null;
+  latest_capture: { signal_at: string; inferred_at: string | null; artifact_sha256: string | null; model_version: string | null } | null;
+};
+
+function ModelSummary() {
+  const production = useApi("admin-ml-production", (signal) => unwrap(api.GET("/v1/admin/ml/production", { signal })) as unknown as Promise<Production>);
+  const registry = useApi("admin-ml-summary", (signal) => unwrap(api.GET("/v1/admin/ml/models", { signal })) as unknown as Promise<{ models: Model[] }>);
+  return <Card title="What is trained and running?">
+    {production.error ? <ErrorState error={production.error} onRetry={production.reload} what="production confidence evidence" /> : !production.data ? <Skeleton rows={2} label="Loading production confidence" /> : <>
+      <h3 className="h3">Production AI Confidence</h3>
+      <p>Configured database model: <strong>{production.data.configured_model?.model_version ?? "No active database model recorded"}</strong>.</p>
+      <p className="cap">Trained: {etTime(production.data.configured_model?.trained_at)} · dataset: {production.data.configured_model?.dataset_version ?? "Not recorded"}.</p>
+      <p>Latest recorded confidence: {production.data.latest_capture ? `${production.data.latest_capture.model_version ?? "Model version not recorded"} · signal ${etTime(production.data.latest_capture.signal_at)}` : "No saved confidence found"}.</p>
+      <p className="cap">Inference time: {etTime(production.data.latest_capture?.inferred_at)} · artifact checksum: <span className="mono">{production.data.latest_capture?.artifact_sha256 ?? "Not recorded on this signal"}</span>.</p>
+      <p className="cap">The configured model and latest recorded prediction are separate evidence. A local fallback may be used; an unrecorded value is unknown.</p>
+    </>}
+    <h3 className="h3">ML v4 challengers</h3>
+    {registry.error ? <ErrorState error={registry.error} onRetry={registry.reload} what="challenger training records" /> : !registry.data ? <Skeleton rows={3} label="Loading challengers" /> : <div className="table-wrap"><table className="table">
+      <thead><tr><th scope="col">Model</th><th scope="col">Training evidence</th><th scope="col">Dataset</th><th scope="col">Evaluation</th><th scope="col">Stage / app use</th></tr></thead>
+      <tbody>{["xgboost", "lightgbm", "catboost"].map((provider) => {
+        const models = registry.data!.models.filter((m) => m.provider === provider);
+        if (!models.length) return <tr key={provider}><th scope="row">{provider}</th><td colSpan={4}>No registered training record. An unregistered workflow artifact may still exist.</td></tr>;
+        return models.map((m) => <tr key={m.id}><th scope="row">{provider}<div className="cap">{m.model_version}</div></th>
+          <td>{m.trained_at ? etTime(m.trained_at) : "Training time not recorded"}<div className="cap">Artifact: {m.has_artifact ? "Registered" : "Not recorded"}</div></td>
+          <td>{m.dataset_version ?? "Not recorded"}</td><td>{m.metrics?.evaluation_version ? "Report recorded" : "No report recorded"}</td>
+          <td>{m.status}<div className="cap">{["shadow", "champion"].includes(m.status) ? "Eligible for scheduled shadow scoring" : "Not enabled for shadow scoring"}. Not connected to production AI Confidence.</div></td></tr>);
+      })}</tbody></table></div>}
+  </Card>;
+}
+
 export function ModelsTab() {
   return (
     <div className="stack">
       <p className="notice">ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
+      <ModelSummary />
+      <MlNextSteps />
       <MonitoringCard />
       <ShadowResults />
       <Registry />

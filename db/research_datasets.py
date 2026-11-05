@@ -193,6 +193,7 @@ _READINESS_RAW_PG = (
     "'primary_setup', raw_signal->'primary_setup', 'status', raw_signal->'status', "
     "'prebreakout_model_version', raw_signal->'prebreakout_model_version', "
     "'model_version', raw_signal->'model_version', "
+    "'ai_confidence_capture_reason', raw_signal->'models'->'ai_confidence'->'reason', "
     "'source_scan_id', raw_signal->'source_scan_id', "
     "'models_prebreakout_version', raw_signal->'models'->'prebreakout'->'loaded_artifact'->'version')"
 )

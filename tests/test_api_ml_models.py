@@ -41,12 +41,22 @@ class MlModelsApiTests(ApiTestCase):
 
     def test_admin_only(self):
         pro = self.auth(self.login().json()["access_token"])
-        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow"):
+        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow", "/v1/admin/ml/production"):
             self.assertEqual(self.client.get(path, headers=pro).status_code, 403, path)
             self.assertEqual(self.client.get(path).status_code, 401, path)
         r = self.client.post("/v1/admin/ml/models/1/transition", headers=pro,
                              json={"to_status": "retired", "reason": "nope"})
         self.assertEqual(r.status_code, 403)
+
+    def test_production_evidence_is_read_only_and_failure_is_explicit(self):
+        value = {"configured_model": {"model_version": "xgb", "trained_at": None}, "latest_capture": None}
+        with mock.patch("db.ml_operations.production_confidence", return_value=value):
+            r = self.client.get("/v1/admin/ml/production", headers=self.boss)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), value)
+        from db.ml_model_registry import RegistryUnavailable
+        with mock.patch("db.ml_operations.production_confidence", side_effect=RegistryUnavailable("down")):
+            self.assertEqual(self.client.get("/v1/admin/ml/production", headers=self.boss).status_code, 503)
 
     def test_list_and_detail_hide_artifact_location(self):
         r = self.client.get("/v1/admin/ml/models", headers=self.boss)

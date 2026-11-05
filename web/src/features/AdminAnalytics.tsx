@@ -11,6 +11,7 @@ import type { Schemas } from "@/api/client";
 import { Card, Empty, ErrorState, Pill, Skeleton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
+import { MlNextSteps } from "@/features/MlNextSteps";
 
 type Group = Schemas["AdminPerfGroup"];
 const PERIODS = [[7, "7 days"], [30, "30 days"], [90, "90 days"], [365, "1 year"]] as const;
@@ -374,6 +375,14 @@ function MlReadiness() {
     <Card title="ML v4 readiness" id="ml" aside={`Computed ${etTime(m.generated_at)}`}>
       <p><StatusPill status={m.status} /> {m.recommendation}</p>
       {m.blocking_reasons.length > 0 && <p className="notice">Review required: {m.blocking_reasons.join("; ")}</p>}
+      {(m.capture_health ?? []).map((h) => <section key={h.gate} aria-label={`${h.gate.replaceAll("_", " ")} capture health`}>
+        <h3 className="h3">{h.gate === "scan_feature_join_rate" ? "Scan feature matching" : "AI confidence capture"}</h3>
+        <p>Rolling {h.window_trading_days} trading days: <strong>{frac(h.total ? h.captured / h.total : null)}</strong> ({fmt(h.captured)} of {fmt(h.total)}); {fmt(h.missing)} missing.</p>
+        <p>Last {h.current_window_trading_days} trading days: <strong>{frac(h.current_total ? h.current_captured / h.current_total : null)}</strong> ({fmt(h.current_captured)} of {fmt(h.current_total)}).</p>
+        {h.healthy_rows > 0 && <p className="cap">{fmt(h.healthy_rows)} consecutive captured records since {etTime(h.healthy_since)}. This streak does not replace the rolling readiness gate.</p>}
+        <p className="cap">Last missing record in this window: {h.last_failure_at ? etTime(h.last_failure_at) : "None recorded"}.</p>
+        {Object.keys(h.failure_reasons).length > 0 && <details><summary>Missing-record reasons</summary><ul>{Object.entries(h.failure_reasons).map(([reason, count]) => <li key={reason}>{reason.replaceAll("_", " ")}: {fmt(count)}</li>)}</ul></details>}
+      </section>)}
       <Tiles items={[["Matured signal-days", fmt(m.matured_signal_days)], ["Trading-day coverage", fmt(m.matured_trading_days)],
         ["Unique symbols", fmt(m.matured_symbols)], ["Outcome coverage (recent)", frac(m.outcome_coverage_recent)], ["Walk-forward folds", fmt(m.walk_forward_folds)]]} />
       <div className="table-wrap"><table className="table">
@@ -399,7 +408,7 @@ export function ResearchTab() {
       <Signals key={days} days={days} />
       <details className="research-section"><summary>Research evidence</summary><Evidence days={days} /></details>
       <details className="research-section"><summary>Stair-Stepper evidence</summary><StairStepper days={days} /></details>
-      <details className="research-section"><summary>ML v4 readiness and validation gates</summary><MlReadiness /></details>
+      <details className="research-section"><summary>ML v4 readiness and validation gates</summary><MlReadiness /><MlNextSteps /></details>
     </div>
   );
 }
