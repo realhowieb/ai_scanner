@@ -265,6 +265,13 @@ class FreezeProvenanceTests(unittest.TestCase):
         ):
             self.assertEqual(ofz.freeze_run(run), 2)
 
+    def test_frozen_row_retains_exact_confidence_evidence(self):
+        prediction = {"status": "captured", "inferred_at": "2026-10-16T19:50:01Z",
+                      "loaded_artifact": {"version": "v1", "sha256": "actual-artifact-hash"}}
+        _, rows, _ = self._freeze(self._df(), {"NVDA": {"value": 61.5, "model_version": "v1", "prediction": prediction}})
+        self.assertEqual(rows["NVDA"]["raw_signal"]["models"]["ai_confidence"], prediction)
+        self.assertEqual(rows["AMD"]["raw_signal"]["models"]["ai_confidence"]["reason"], "ticker_not_scored")
+
     def test_no_scan_id_when_run_mixes_scans(self):
         from analytics import opportunity_freeze as ofz
         df = self._df()
@@ -280,14 +287,26 @@ class FreezeProvenanceTests(unittest.TestCase):
         def fake_score(frame):
             out = frame.copy()
             out["AI Confidence"] = [55.0 if t == "NVDA" else float("nan") for t in out["Ticker"]]
+            out["ModelProvenance"] = [{"ai_confidence": {
+                "status": "captured" if t == "NVDA" else "unavailable",
+                "reason": None if t == "NVDA" else "required_feature_columns_missing",
+                "inferred_at": "2026-10-16T19:50:01Z",
+                "loaded_artifact": {"version": "actual-inference-version", "sha256": "original-hash"},
+            }} for t in out["Ticker"]]
             return out
 
         with (
             mock.patch("scan.ai_confidence.score_ai_confidence", side_effect=fake_score) as sc,
             mock.patch("scan.ai_confidence.load_ai_confidence_bundle",
-                       return_value=(object(), {"model_version": "ai-confidence-xgb-v1"}, None)),
+                       return_value=(object(), {"model_version": "ai-confidence-xgb-v1"}, None)) as reload_model,
         ):
             out = ofz.ai_confidence_by_ticker(self._df(), ["NVDA", "AMD"])
-        self.assertEqual(out, {"NVDA": {"value": 55.0, "model_version": "ai-confidence-xgb-v1"}})
+        reload_model.assert_not_called()
+        self.assertEqual(out["NVDA"]["value"], 55.0)
+        self.assertEqual(out["NVDA"]["model_version"], "actual-inference-version")
+        self.assertEqual(out["NVDA"]["prediction"]["loaded_artifact"]["sha256"], "original-hash")
+        self.assertEqual(out["NVDA"]["prediction"]["inferred_at"], "2026-10-16T19:50:01Z")
+        self.assertIsNone(out["AMD"]["value"])
+        self.assertEqual(out["AMD"]["prediction"]["reason"], "required_feature_columns_missing")
         self.assertEqual(sorted(sc.call_args[0][0]["Ticker"]), ["AMD", "NVDA"])
         self.assertEqual(ofz.ai_confidence_by_ticker(pd.DataFrame(), ["NVDA"]), {})

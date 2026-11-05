@@ -43,7 +43,8 @@ class CoverageGapTests(unittest.TestCase):
                 patch("ui.market_scans._run_df_uncached", return_value=df), \
                 patch("db.signal_outcomes.freeze_signal", return_value=True) as save:
             self.assertEqual(ofz.freeze_latest_opportunities(), 1)
-        self.assertEqual(save.call_args.kwargs["raw_signal"]["models"], models)
+        self.assertEqual(save.call_args.kwargs["raw_signal"]["models"]["prebreakout"], models["prebreakout"])
+        self.assertIn("ai_confidence", save.call_args.kwargs["raw_signal"]["models"])
         self.assertIsNone(save.call_args.kwargs["prebreakout_prob"])
         self.assertEqual(save.call_args.kwargs["fired_at"], snapshot)
 

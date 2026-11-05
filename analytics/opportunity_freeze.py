@@ -16,7 +16,13 @@ Read-safe: returns 0 and never raises when data/DB is unavailable.
 """
 from __future__ import annotations
 
+import json
+import logging
+import math
+from collections import Counter
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger(__name__)
 
 # Ranked Scanner setups frozen per run: what a Basic plan sees in the Scanner
 # (config.TIERS_CONFIG basic max_results). Deeper than the Brief's top 5, so the
@@ -56,31 +62,36 @@ def _ticker_col(df: Any) -> Optional[str]:
 def ai_confidence_by_ticker(df: Any, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
     """AI Confidence for the frozen tickers only, scored from the same saved scan
     row the Scanner ranked (no new data). Returns {ticker: {value, model_version}}
-    for tickers the model could score; missing model or feature columns leave the
-    ticker out, so nothing is filled in. Never touches the saved run."""
+    with prediction-time identity or an explicit failure reason. Missing scores
+    stay null. Never touches the saved run or reloads the model to guess identity."""
     col = _ticker_col(df) if df is not None and not getattr(df, "empty", True) else None
     want = {str(t).upper() for t in tickers if t}
     if col is None or not want:
         return {}
-    from scan.ai_confidence import CONFIDENCE_COL, load_ai_confidence_bundle, score_ai_confidence
+    from analytics.prediction_provenance import models_from_row
+    from scan.ai_confidence import CONFIDENCE_COL, score_ai_confidence
 
     sub = df[df[col].astype(str).str.strip().str.upper().isin(want)]
     if sub.empty:
         return {}
     scored = score_ai_confidence(sub.drop(columns=[CONFIDENCE_COL], errors="ignore").reset_index(drop=True))
-    if CONFIDENCE_COL not in scored.columns:
-        return {}
-    _model, meta, _warn = load_ai_confidence_bundle()
-    version = (meta or {}).get("model_version")
     out: Dict[str, Dict[str, Any]] = {}
     for _, row in scored.iterrows():
         t = str(row.get(col) or "").strip().upper()
+        prediction = models_from_row(row).get("ai_confidence") or {}
         try:
-            v = float(row.get(CONFIDENCE_COL))
+            value = float(row.get(CONFIDENCE_COL))
+            if not math.isfinite(value):
+                value = None
         except (TypeError, ValueError):
-            continue
-        if t and t not in out and v == v:
-            out[t] = {"value": v, "model_version": str(version) if version else None}
+            value = None
+        if not prediction:
+            prediction = {"status": "unavailable", "reason": "prediction_evidence_not_recorded"}
+        if value is None and prediction.get("status") == "captured":
+            prediction = {**prediction, "status": "unavailable", "reason": "non_numeric_confidence"}
+        artifact = prediction.get("loaded_artifact") or {}
+        if t and t not in out:
+            out[t] = {"value": value, "model_version": artifact.get("version"), "prediction": prediction}
     return out
 
 
@@ -109,20 +120,33 @@ def freeze_run(run: Dict[str, Any], top_n: int = FREEZE_TOP_N, *, score_confiden
     df = _run_df_uncached(int(run["id"]))
     opps = top_setups(df, n=top_n)
     if not opps:
+        log.warning(json.dumps({"event": "opportunity_freeze_empty", "run_id": run["id"]}))
         return 0
     sid = source_scan_id(df)
     conf: Dict[str, Dict[str, Any]] = {}
+    failure_reason = "historical_backfill_not_scored" if not score_confidence else "ticker_not_scored"
     if score_confidence:
         try:
             conf = ai_confidence_by_ticker(df, [o.get("ticker") for o in opps])
         except Exception as e:  # noqa: BLE001 - research extra; the freeze still happens
-            print(f"[opportunity_freeze] AI Confidence unavailable: {type(e).__name__}")
+            failure_reason = "scoring_exception"
+            log.warning(json.dumps({"event": "ai_confidence_capture_error", "run_id": run["id"],
+                                    "reason": failure_reason, "exception_type": type(e).__name__}))
+    reasons: Counter = Counter()
     for o in opps:
         o["source_scan_id"] = sid
         o["prebreakout_model_version"] = prebreakout_version(o)
         c = conf.get(str(o.get("ticker") or "").upper())
         o["ai_confidence"] = c["value"] if c else None
         o["ai_confidence_model_version"] = c["model_version"] if c else None
+        prediction = (c or {}).get("prediction") or {"status": "unavailable", "reason": failure_reason}
+        o["models"] = {**(o.get("models") or {}), "ai_confidence": prediction}
+        if o["ai_confidence"] is None:
+            reasons[prediction.get("reason") or "confidence_unavailable"] += 1
+    event = {"event": "ai_confidence_capture", "run_id": run["id"], "snapshot_time": str(ts),
+             "attempted": len(opps), "scored": sum(o["ai_confidence"] is not None for o in opps),
+             "missing": sum(reasons.values()), "failure_reasons": dict(reasons), "historical_backfill": not score_confidence}
+    log.log(logging.WARNING if reasons and score_confidence else logging.INFO, json.dumps(event))
     return freeze_opportunities(ts, opps, signal_type=SCANNER_SIGNAL_TYPE)
 
 
@@ -135,6 +159,7 @@ def freeze_latest_opportunities() -> int:
     try:
         runs = market_runs(limit=5)
         return freeze_run(runs[0]) if runs else 0
-    except Exception:
+    except Exception as exc:
+        log.warning(json.dumps({"event": "opportunity_freeze_failed", "exception_type": type(exc).__name__}))
         return 0
 

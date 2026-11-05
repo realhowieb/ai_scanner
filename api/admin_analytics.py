@@ -574,5 +574,6 @@ def ml_readiness() -> Dict[str, Any]:
                    "needs": f"{g['operator']} {g['threshold']}", "status": g["status"],
                    "progress": round(float(g["progress"] or 0), 3), "why": g.get("why")} for g in view["gates"]],
         "blocking_reasons": list(view["blocking_reasons"]),
+        "capture_health": view.get("capture_health", []),
         "estimate_trading_days": (view.get("projection") or {}).get("estimate_trading_days_to_accumulating_targets"),
     }

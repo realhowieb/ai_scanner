@@ -1959,6 +1959,22 @@ class AdminMlGate(BaseModel):
     why: Optional[str] = None
 
 
+class MlCaptureHealth(BaseModel):
+    gate: str
+    window_start: str
+    window_trading_days: int
+    total: int
+    captured: int
+    missing: int
+    last_failure_at: Optional[str] = None
+    healthy_since: Optional[str] = None
+    healthy_rows: int
+    current_window_trading_days: int
+    current_total: int
+    current_captured: int
+    failure_reasons: Dict[str, int]
+
+
 class AdminMlReadiness(BaseModel):
     status: str
     recommendation: str
@@ -1970,6 +1986,7 @@ class AdminMlReadiness(BaseModel):
     outcome_coverage_recent: Optional[float] = None
     walk_forward_folds: int
     gates: List[AdminMlGate]
+    capture_health: List[MlCaptureHealth] = Field(default_factory=list)
     blocking_reasons: List[str]
     estimate_trading_days: Optional[int] = None
 

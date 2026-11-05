@@ -1704,6 +1704,13 @@
       "title": "Blocking Reasons",
       "type": "array"
      },
+     "capture_health": {
+      "items": {
+       "$ref": "#/components/schemas/MlCaptureHealth"
+      },
+      "title": "Capture Health",
+      "type": "array"
+     },
      "estimate_trading_days": {
       "anyOf": [
        {
@@ -9564,6 +9571,94 @@
      "message"
     ],
     "title": "Message",
+    "type": "object"
+   },
+   "MlCaptureHealth": {
+    "properties": {
+     "captured": {
+      "title": "Captured",
+      "type": "integer"
+     },
+     "current_captured": {
+      "title": "Current Captured",
+      "type": "integer"
+     },
+     "current_total": {
+      "title": "Current Total",
+      "type": "integer"
+     },
+     "current_window_trading_days": {
+      "title": "Current Window Trading Days",
+      "type": "integer"
+     },
+     "failure_reasons": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "Failure Reasons",
+      "type": "object"
+     },
+     "gate": {
+      "title": "Gate",
+      "type": "string"
+     },
+     "healthy_rows": {
+      "title": "Healthy Rows",
+      "type": "integer"
+     },
+     "healthy_since": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Healthy Since"
+     },
+     "last_failure_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Failure At"
+     },
+     "missing": {
+      "title": "Missing",
+      "type": "integer"
+     },
+     "total": {
+      "title": "Total",
+      "type": "integer"
+     },
+     "window_start": {
+      "title": "Window Start",
+      "type": "string"
+     },
+     "window_trading_days": {
+      "title": "Window Trading Days",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "gate",
+     "window_start",
+     "window_trading_days",
+     "total",
+     "captured",
+     "missing",
+     "healthy_rows",
+     "current_window_trading_days",
+     "current_total",
+     "current_captured",
+     "failure_reasons"
+    ],
+    "title": "MlCaptureHealth",
     "type": "object"
    },
    "MlRollback": {
@@ -21654,6 +21749,48 @@
      }
     ],
     "summary": "[Internal \u00b7 admin] ML v4 monitoring: shadow scoring freshness, labels, drift, calibration",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/production": {
+   "get": {
+    "operationId": "ml_production_v1_admin_ml_production_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Production V1 Admin Ml Production Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Production AI Confidence: configured model and latest capture",
     "tags": [
      "ml models (internal, admin only)"
     ],
