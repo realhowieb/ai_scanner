@@ -10,7 +10,16 @@ const performance = { as_of: "2026-11-05", benchmark: "SPY", summary: null, item
   { ticker: "ABC", base_date: "2026-10-01", base_price: 10, last: 11, change_pct: 10, vs_benchmark: 8 },
 ] };
 const fetchMock = vi.fn();
-beforeEach(() => { clearApiCache(); fetchMock.mockReset(); vi.stubGlobal("fetch", fetchMock); });
+beforeEach(() => {
+  clearApiCache();
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", vi.fn((request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/watchlists/4/performance")) return fetchMock(request);
+    if (path.endsWith("/symbols/names")) return Promise.resolve(jsonResponse({ names: { ABC: "ABC Company" } }));
+    throw new Error(`Unexpected request: ${path}`);
+  }));
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Watchlist performance loading and recovery", () => {
