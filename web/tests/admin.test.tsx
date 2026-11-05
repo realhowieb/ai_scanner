@@ -77,6 +77,9 @@ async function handle(input: Request | string, init?: RequestInit): Promise<Resp
   if (path === "/v1/admin/stair-stepper") return jsonResponse({ days: 30, observations: 0, horizons: ["+5m", "+10m"], windows: [], best_window: null, verdict_reason: "Requires 30 matured outcomes." });
   if (path === "/v1/admin/ml-readiness") return jsonResponse({ status: "NOT_READY", recommendation: "Keep collecting.", matured_signal_days: 134, matured_rows: 600,
     matured_trading_days: 12, matured_symbols: 80, outcome_coverage_recent: 0.9, walk_forward_folds: 0, blocking_reasons: ["Matured signal-days 134 < 1000"],
+    capture_health: [{ gate: "scan_feature_join_rate", window_start: "2026-09-15T20:00:00Z", window_trading_days: 20,
+      total: 1000, captured: 790, missing: 210, last_failure_at: "2026-10-01T17:00:00Z", healthy_since: "2026-10-02T17:00:00Z",
+      healthy_rows: 700, current_window_trading_days: 5, current_total: 375, current_captured: 375, failure_reasons: { ONLY_LATER_SCANS: 210 } }],
     gates: [{ gate: "Matured signal-days", kind: "Accumulating", value: 134, needs: ">= 1000", status: "FAIL", progress: 0.134 }] });
   return jsonResponse({ detail: `no fake for ${req.method} ${path}` }, 404);
 }
@@ -94,6 +97,18 @@ afterEach(() => vi.unstubAllGlobals());
 const wrap = (m: Schemas["Me"]) => render(<SessionProvider initialMe={m}><AdminView /></SessionProvider>);
 
 describe("Admin page", () => {
+  it("separates old capture gaps from healthy current collection without removing blockers", async () => {
+    wrap(admin());
+    await userEvent.click(screen.getByRole("tab", { name: "Research" }));
+    await userEvent.click(screen.getByText("ML v4 readiness and validation gates"));
+    expect(await screen.findByText(/Rolling 20 trading days/)).toHaveTextContent("79.0%");
+    expect(screen.getByText(/Last 5 trading days/)).toHaveTextContent("100.0%");
+    expect(screen.getByText(/700 consecutive captured records/)).toBeInTheDocument();
+    expect(screen.getByText(/Passing readiness makes the data eligible/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Matured signal-days 134 < 1000/).length).toBeGreaterThan(0);
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+
   it("is for admins only, and only admins see it in the account menu", async () => {
     const u = userEvent.setup();
     const { unmount } = wrap(me("pro"));

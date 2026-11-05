@@ -35,6 +35,10 @@ beforeEach(() => {
     const path = new URL(r.url).pathname.replace(/^\/api\/(hsf|public)/, "");
     const body = r.method === "GET" ? null : JSON.parse((await r.text()) || "null");
     calls.push({ path, method: r.method, body });
+    if (path === "/v1/admin/ml/production") return jsonResponse({
+      configured_model: { model_version: "production-xgb", trained_at: "2026-09-09T20:55:40Z", dataset_version: null },
+      latest_capture: { model_version: "captured-local-xgb", signal_at: "2026-11-05T17:00:00Z", inferred_at: null, artifact_sha256: null },
+    });
     if (path === "/v1/admin/ml/models") return jsonResponse({ models: [shadowModel, candidate], count: 2 });
     if (path === "/v1/admin/ml/models/1") return jsonResponse({ model: candidate, events: [{ id: 1, from_status: null, to_status: "candidate", actor: "ci", reason: "registered after training", created_at: "2026-11-13T20:00:00Z" }], shadow: { scored: 0, labeled: 0, entry_days: 0, last_scored_at: null }, promotion_gates: null });
     if (path === "/v1/admin/ml/models/1/transition") return jsonResponse({ id: 1, from: "candidate", to: "validated", superseded: null });
@@ -59,6 +63,17 @@ describe("Admin > Models", () => {
     const registry = screen.getByRole("heading", { name: "Model registry" }).closest("section")!;
     expect(await within(registry).findByText("2 models")).toBeInTheDocument();
     expect(registry).not.toHaveTextContent("github-release://");
+  });
+
+  it("distinguishes production configuration, captured identity and unregistered challengers", async () => {
+    render(<ModelsTab />);
+    const summary = screen.getByRole("heading", { name: "What is trained and running?" }).closest("section")!;
+    expect(await within(summary).findByText("production-xgb")).toBeInTheDocument();
+    expect(await within(summary).findByText(/captured-local-xgb/)).toBeInTheDocument();
+    expect(await within(summary).findByText(/An unregistered workflow artifact may still exist/)).toBeInTheDocument();
+    expect(within(summary).getAllByText(/Not connected to production AI Confidence/)).toHaveLength(2);
+    expect(screen.getByText(/An older saved dataset keeps its original gaps/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
   });
 
   it("moves a model to its next stage with a reason", async () => {
