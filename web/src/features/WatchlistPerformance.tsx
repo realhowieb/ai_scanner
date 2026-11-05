@@ -3,11 +3,11 @@
 // How my stocks did: each ticker's move since it was added to this watchlist, next to SPY
 // over the same span. The API picks the starting price (the price saved when added, else
 // the last daily close at that moment) and the latest daily close; nothing is estimated
-// here. Hidden when the API has no such route.
+// here. Loading, missing history and request failures remain visible.
 import { useState } from "react";
 
 import { watchlists } from "@/api/userData";
-import { Card, TickerLink } from "@/components/ui";
+import { Card, ErrorState, Skeleton, TickerLink } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { pct, price, shortDate } from "@/lib/format";
 
@@ -18,11 +18,22 @@ export function WatchlistPerformanceCard({ id, version = 0 }: { id: number; vers
   const perf = useApi(`wl-perf:${id}`, (signal) => watchlists.performance(id, signal), version);
   const [all, setAll] = useState(false);
   const d = perf.data;
-  if (perf.error || !d || !Array.isArray(d.items) || !d.items.length) return null;
+  if (!d || !Array.isArray(d.items) || !d.items.length) return (
+    <Card title="How your stocks did" id="wl-perf">
+      {perf.error ? <ErrorState error={perf.error} onRetry={perf.reload} what="watchlist performance" />
+        : !d ? <Skeleton rows={3} label="Loading watchlist performance" />
+        : <p className="cap">No price history is available for this watchlist yet. Once prices are available, you can compare changes since each stock was added.</p>}
+    </Card>
+  );
   const rows = all ? d.items : d.items.slice(0, SHOWN);
   const s = d.summary;
   return (
     <Card title="How your stocks did" id="wl-perf" aside={d.as_of ? `Daily closes through ${shortDate(d.as_of)}` : undefined}>
+      {perf.error && <>
+        <ErrorState error={perf.error} onRetry={perf.reload} what="watchlist performance" />
+        <p className="cap">Showing the last loaded results. They may be out of date.</p>
+      </>}
+      {perf.refreshing && <p className="cap" role="status">Refreshing watchlist performance…</p>}
       {s ? (
         <div className="metric-strip" aria-label="Watchlist performance summary">
           <span><strong className={`mono ${tone(s.avg_change_pct)}`}>{pct(s.avg_change_pct)}</strong> average</span>
