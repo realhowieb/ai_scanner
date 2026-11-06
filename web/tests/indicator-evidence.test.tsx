@@ -29,7 +29,7 @@ it("shows the exact saved scan separately from newer chart readings", async () =
   params.set("scan", id);
   fetchMock.mockResolvedValue(jsonResponse(saved()));
   render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG", indicator_evidence: { ...evidence, bar_date: "2026-11-06", rsi_14: 54, rebound_candidate: false } })} />);
-  expect(await screen.findByText("Rebound candidate")).toBeInTheDocument();
+  expect(await screen.findByText("Rebound candidate: passed")).toBeInTheDocument();
   const region = screen.getByRole("region", { name: "Selected scan RSI and MACD evidence" });
   expect(within(region).getByText("27.1 on 2026-11-03")).toBeInTheDocument();
   expect(within(region).getByText("39.4")).toBeInTheDocument();
@@ -65,6 +65,19 @@ it("shows missing history as needs data and makes no scan request for a direct v
     rsi_previous: null, prior_5_rsi_low: null, sma50: null, relative_volume: null, macd_histogram: null,
     macd_previous_histogram: null, rebound_candidate: false, macd_bullish_cross: false, macd_above_signal: false } })} />);
   expect(screen.getAllByText("Needs data").length).toBeGreaterThan(0);
-  expect(screen.getByText("Rebound not confirmed")).toBeInTheDocument();
+  expect(screen.getByText("Rebound candidate: not confirmed")).toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("highlights the selected pullback and keeps other setup statuses in collapsed details", async () => {
+  params.set("scan", id);
+  const e = { ...evidence, rebound_candidate: false, uptrend_pullback: true, rsi_14: 47.8, rsi_previous: 47.7 };
+  fetchMock.mockResolvedValue(jsonResponse({ ...saved("NOC", e), params: { uptrend_pullback: true } }));
+  render(<StockIndicatorEvidence s={stockDetail({ ticker: "NOC" })} />);
+  const selected = await screen.findByText("Uptrend pullback: passed");
+  expect(selected.closest("details")).toBeNull();
+  for (const label of ["Rebound candidate: not confirmed", "Momentum recovery: not confirmed"]) {
+    const other = screen.getByText(label);
+    expect(other.closest("details")).not.toHaveAttribute("open");
+  }
 });
