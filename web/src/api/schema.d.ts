@@ -31,13 +31,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Readyz
-         * @description Readiness: the database answers, plus the latest market scan's age for
-         *     freshness monitoring. /healthz stays the liveness check. One failed database
-         *     ping is retried after READYZ_RETRY_S: a database waking from idle shouldn't
-         *     page an uptime monitor. db_ping_ms is the time of the answered ping.
-         */
+        /** Readyz */
         get: operations["readyz_readyz_get"];
         put?: never;
         post?: never;
@@ -710,6 +704,23 @@ export interface paths {
         };
         /** Live checks: database, Alpaca, FMP, Finnhub, billing */
         get: operations["admin_providers_v1_admin_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness Diagnostics */
+        get: operations["readiness_diagnostics_v1_admin_readiness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9244,8 +9255,8 @@ export interface components {
              */
             timezone: string;
         };
-        /** Ready */
-        Ready: {
+        /** ReadinessDiagnostics */
+        ReadinessDiagnostics: {
             /**
              * Build
              * @description Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match
@@ -9328,6 +9339,20 @@ export interface components {
              * Stale
              * @description A scheduled full-market scan was missed (see Market.stale)
              */
+            stale?: boolean | null;
+        };
+        /** Ready */
+        Ready: {
+            /** Build */
+            build?: string | null;
+            /**
+             * Database
+             * @constant
+             */
+            database: "ok";
+            /** Ok */
+            ok: boolean;
+            /** Stale */
             stale?: boolean | null;
         };
         /** Recap */
@@ -10851,6 +10876,8 @@ export interface components {
         TrackRecord: {
             /** Disclaimer */
             disclaimer: string;
+            /** Methodology */
+            methodology: string;
             /** Min Sample Size */
             min_sample_size: number;
             /**
@@ -10873,9 +10900,13 @@ export interface components {
             avg_excess_return?: number | null;
             /** Day */
             day: string;
+            /** Methodology */
+            methodology: string;
         };
         /** TrackRecordSummary */
         TrackRecordSummary: {
+            /** Avg Absolute Return */
+            avg_absolute_return?: number | null;
             /**
              * Avg Excess Return
              * @description Mean return vs SPY (0.012 = +1.2%)
@@ -10886,12 +10917,56 @@ export interface components {
              * @default SPY
              */
             benchmark: string;
+            /** Benchmark Outperformance Rate */
+            benchmark_outperformance_rate?: number | null;
             /** Computed At */
             computed_at?: string | null;
+            /** Coverage Pct */
+            coverage_pct?: number | null;
+            /** Entry Policy */
+            entry_policy: string;
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            /**
+             * Excluded Count
+             * @default 0
+             */
+            excluded_count: number;
+            /**
+             * Exclusions
+             * @default {}
+             */
+            exclusions: {
+                [key: string]: number;
+            };
             /** Horizon Days */
             horizon_days: number;
+            /** Median Absolute Return */
+            median_absolute_return?: number | null;
             /** Median Excess Return */
             median_excess_return?: number | null;
+            /** Methodology */
+            methodology: string;
+            /**
+             * Observation Count
+             * @default 0
+             */
+            observation_count: number;
+            /**
+             * Observations
+             * @default []
+             */
+            observations: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Positive Return Rate
+             * @description Share with absolute return >0; zero counts false
+             */
+            positive_return_rate?: number | null;
             /**
              * Ranking
              * @enum {string}
@@ -10899,10 +10974,35 @@ export interface components {
             ranking: "breakout" | "prebreakout";
             /** Ranking Label */
             ranking_label: string;
+            /**
+             * Ranking Unavailable Snapshots
+             * @default 0
+             */
+            ranking_unavailable_snapshots: number;
             /** Runs Used */
             runs_used?: number | null;
             /** Sample Size */
             sample_size?: number | null;
+            /**
+             * Selected Count
+             * @default 0
+             */
+            selected_count: number;
+            /**
+             * Selected Unique Ticker Count
+             * @default 0
+             */
+            selected_unique_ticker_count: number;
+            /**
+             * Signal Date Count
+             * @default 0
+             */
+            signal_date_count: number;
+            /**
+             * Snapshots Considered
+             * @default 0
+             */
+            snapshots_considered: number;
             /**
              * Sufficient
              * @description False while sample_size < min_sample_size (show 'still building')
@@ -10911,8 +11011,13 @@ export interface components {
             /** Top N */
             top_n?: number | null;
             /**
+             * Unique Ticker Count
+             * @default 0
+             */
+            unique_ticker_count: number;
+            /**
              * Win Rate
-             * @description Share of picks that beat SPY
+             * @description Deprecated alias for benchmark_outperformance_rate; strict >0 excess, ties count false
              */
             win_rate?: number | null;
         };
@@ -11617,7 +11722,6 @@ export interface operations {
     readyz_readyz_get: {
         parameters: {
             query?: {
-                /** @description Answer 503 when a scheduled full-market scan was missed, so an outside uptime monitor alerts on stale data as well as on a database outage */
                 strict?: boolean;
             };
             header?: never;
@@ -11644,7 +11748,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
-            /** @description Database unavailable, or (strict=true) a scheduled scan was missed */
+            /** @description Database unavailable or a scheduled scan was missed */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -13497,6 +13601,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    readiness_diagnostics_v1_admin_readiness_get: {
+        parameters: {
+            query?: {
+                strict?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessDiagnostics"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };

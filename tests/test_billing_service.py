@@ -128,7 +128,7 @@ class BillingServiceImportTest(unittest.TestCase):
 
     def test_health_endpoint_reports_missing_env_and_db(self):
         bm = _load_billing_module()
-        result = bm.health()
+        result = bm._health_details()
         self.assertEqual(result.status_code, 503)
         body = json.loads(result.body.decode("utf-8"))
         self.assertFalse(body["ok"])
@@ -147,7 +147,7 @@ class BillingServiceImportTest(unittest.TestCase):
             db_reachable=True,
         )
 
-        result = bm.health()
+        result = bm._health_details()
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["missing_env"], [])

@@ -122,10 +122,38 @@ class BillingPreflightTest(unittest.TestCase):
 
     def test_debug_status_includes_preflight(self):
         bm = _module()
-        with patch.dict("os.environ", dict(ENV, BILLING_DEBUG_STATUS="1")):
+        with patch.dict("os.environ", dict(ENV, BILLING_DEBUG_STATUS="1")), patch.object(bm, "_diagnostic_admin"):
             body = _client(bm).get("/debug/status").json()
         self.assertIn("billing_preflight", body)
         self.assertTrue(body["billing_preflight"]["ok"])
+
+    def test_debug_flag_does_not_authorize_anonymous_or_non_admin(self):
+        from fastapi import HTTPException
+        bm = _module()
+        with patch.dict("os.environ", {"BILLING_DEBUG_STATUS": "1"}):
+            client = _client(bm)
+            self.assertEqual(client.get("/debug/status").status_code, 401)
+            with patch.object(bm, "_diagnostic_admin", side_effect=HTTPException(403, "Admins only")):
+                self.assertEqual(client.get("/debug/status", headers={"X-HSF-Auth": "user-token"}).status_code, 403)
+            with patch.object(bm, "_db_status", return_value={"reachable": False, "error": "private database error"}):
+                response = client.get("/health")
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json(), {"ok": False})
+
+    def test_diagnostic_role_and_active_status_are_checked_after_authentication(self):
+        from fastapi import HTTPException
+        bm = _module()
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        with patch.object(bm, "_authenticated_user", return_value="operator@example.test"), patch.object(bm, "_db_conn", return_value=connection):
+            for flags in ((False, True), (True, False), None):
+                cursor.fetchone.return_value = flags
+                with self.assertRaises(HTTPException) as error:
+                    bm._diagnostic_admin(MagicMock())
+                self.assertEqual(error.exception.status_code, 403)
+            cursor.fetchone.return_value = (True, True)
+            bm._diagnostic_admin(MagicMock())
+        cursor.execute.assert_called_with("SELECT is_admin, is_active FROM users WHERE username = %s", ("operator@example.test",))
 
     def test_expected_amounts_match_config(self):
         import config

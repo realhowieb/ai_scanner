@@ -9,7 +9,7 @@ import { SessionProvider } from "@/session/SessionProvider";
 
 import { SymbolLine } from "@/features/OutcomeEvidence";
 
-import { me } from "./fixtures";
+import { me, trackDefaults } from "./fixtures";
 import oc from "./fixtures/outcomes.json";
 import { jsonResponse } from "./helpers";
 
@@ -273,7 +273,7 @@ describe("Account", () => {
 });
 
 const summary = (horizon: number, ranking: "breakout" | "prebreakout", n: number, extra: Partial<Schemas["TrackRecordSummary"]> = {}): Schemas["TrackRecordSummary"] => ({
-  ranking, ranking_label: ranking === "breakout" ? "BreakoutScore" : "PreBreakoutProb", horizon_days: horizon,
+  ...trackDefaults, ranking, ranking_label: ranking === "breakout" ? "BreakoutScore" : "PreBreakoutProb", horizon_days: horizon,
   avg_excess_return: 0.0123, median_excess_return: -0.004, win_rate: 0.56, sample_size: n, runs_used: 40, top_n: 10,
   benchmark: "SPY", computed_at: "2026-10-07T22:00:00+00:00", sufficient: n >= 25, ...extra,
 });
@@ -331,7 +331,7 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
 });
 
 describe("Track record", () => {
-  const record = { disclaimer: "Historical research: backtested on saved scan snapshots.", min_sample_size: 25,
+  const record = { methodology: "track-v2-next-open", disclaimer: "Historical research: backtested on saved scan snapshots.", min_sample_size: 25,
     summaries: [summary(5, "breakout", 300), summary(1, "breakout", 310), summary(20, "breakout", 12), summary(5, "prebreakout", 80, { avg_excess_return: 0.031 })] };
 
   it("is locked below Pro without asking the API", () => {
@@ -343,7 +343,7 @@ describe("Track record", () => {
   it("shows rates only where the sample is large enough, with the disclaimer and the daily series", async () => {
     routes.unshift(
       on("GET", "/v1/track-record", () => jsonResponse(record)),
-      on("GET", "/v1/track-record/daily", () => jsonResponse([{ day: "2026-10-01", avg_excess_return: 0.01 }, { day: "2026-10-02", avg_excess_return: -0.02 }, { day: "2026-10-03", avg_excess_return: null }])),
+      on("GET", "/v1/track-record/daily", () => jsonResponse([{ day: "2026-10-01", avg_excess_return: 0.01, methodology: "track-v2-next-open" }, { day: "2026-10-02", avg_excess_return: -0.02, methodology: "track-v2-next-open" }, { day: "2026-10-03", avg_excess_return: null }])),
     );
     const u = user();
     wrap(<TrackRecordView />, me("pro"));
@@ -376,4 +376,24 @@ describe("Track record", () => {
     expect(signedPct(-0.0005)).toBe("-0.05%");
     expect(signedPct(null)).toBe("—");
   });
+});
+
+it("separates an absolute loss from benchmark outperformance and discloses coverage", async () => {
+  routes.unshift(on("GET", "/v1/track-record", () => jsonResponse({ methodology: "track-v2-next-open", disclaimer: "Beating SPY can still mean losing money.", min_sample_size: 25,
+    summaries: [summary(5, "breakout", 40, { avg_absolute_return: -0.02, avg_excess_return: 0.03, positive_return_rate: 0, benchmark_outperformance_rate: 1 })] })),
+    on("GET", "/v1/track-record/daily", () => jsonResponse([])));
+  wrap(<TrackRecordView />, me("pro"));
+  expect(await screen.findByText("-2.00%")).toBeInTheDocument();
+  expect(screen.getByText("+3.00%")).toBeInTheDocument();
+  expect(screen.getByText("40 / 50")).toBeInTheDocument();
+  expect(screen.getByText("80.0%")).toBeInTheDocument();
+  expect(screen.getByText(/overlapping windows are not independent trades/)).toBeInTheDocument();
+});
+
+it("does not display old-method cached summaries as the current ranking study", async () => {
+  routes.unshift(on("GET", "/v1/track-record", () => jsonResponse({ methodology: "old", disclaimer: "Old result.", min_sample_size: 25,
+    summaries: [summary(5, "breakout", 40, { methodology: "old", avg_excess_return: 0.9 })] })));
+  wrap(<TrackRecordView />, me("pro"));
+  expect(await screen.findByText("No track record computed for this ranking yet.")).toBeInTheDocument();
+  expect(screen.queryByText("+90.00%")).not.toBeInTheDocument();
 });

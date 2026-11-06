@@ -64,7 +64,13 @@ class HistoryTests(PaidApiTestCase):
     def test_track_record(self):
         rows = {(5, "breakout"): {"horizon_days": 5, "avg_return": 0.012, "median_return": 0.01, "win_rate": 0.55,
                                   "sample_size": 40, "runs_used": 20, "computed_at": None, "benchmark": "SPY",
-                                  "top_n": 10, "ranking": "breakout"}}
+                                  "top_n": 10, "ranking": "breakout", "methodology": "track-v2-next-open",
+                                  "entry_policy": "first_session_open_strictly_after_snapshot",
+                                  "avg_excess_return": .012, "median_excess_return": .01,
+                                  "observation_count": 40, "selected_count": 50, "evaluated_count": 40, "excluded_count": 10,
+                                  "coverage_pct": 80, "exclusions": {"MISSING_SYMBOL_BARS": 10},
+                                  "unique_ticker_count": 20, "selected_unique_ticker_count": 25, "signal_date_count": 20,
+                                  "snapshots_considered": 20, "ranking_unavailable_snapshots": 0, "observations": []}}
         with mock.patch("db.track_record.load_latest_track_records", return_value=list(rows.values())), \
                 mock.patch("db.track_record.load_daily_excess", return_value=[("2026-10-01", 0.004)]):
             tr = self.get("pro@example.com", "/v1/track-record").json()
@@ -73,7 +79,7 @@ class HistoryTests(PaidApiTestCase):
         self.assertEqual(len(tr["summaries"]), 1)
         self.assertTrue(tr["summaries"][0]["sufficient"])
         self.assertIn("not evidence", tr["disclaimer"])
-        self.assertEqual(daily, [{"day": "2026-10-01", "avg_excess_return": 0.004}])
+        self.assertEqual(daily, [{"day": "2026-10-01", "avg_excess_return": 0.004, "methodology": "track-v2-next-open"}])
         self.assertEqual(bad.status_code, 422)
 
 

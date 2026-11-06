@@ -1138,7 +1138,7 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
             }
         )
 
-        labeled = ml_prebreakout.add_forward_return_labels(df)
+        labeled = ml_prebreakout.add_forward_return_labels_variant(df, target_kind="terminal_return")
 
         self.assertEqual(list(labeled["ForwardReturnHit"]), [1, 0])
         self.assertEqual(list(labeled["Return_5D"]), [0.05, -0.01])
@@ -1185,7 +1185,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
             ]
         )
 
-        labeled = ml_prebreakout.add_prebreakout_target_label(df)
+        forward = df.assign(ForwardReturnHit=(df["Return_5D"] >= 0.04).astype(int))
+        with patch.object(ml_prebreakout, "add_forward_return_labels", return_value=forward):
+            labeled = ml_prebreakout.add_prebreakout_target_label(df)
 
         by_symbol = {row["Symbol"]: row["FutureQualitySetupHit"] for _, row in labeled.iterrows()}
         self.assertEqual(by_symbol, {"AAA": 1, "BBB": 0})
@@ -1214,7 +1216,9 @@ class PrebreakoutModelPersistenceTests(unittest.TestCase):
             ]
         )
 
-        labeled = ml_prebreakout.add_prebreakout_target_label(df)
+        forward = df.assign(ForwardReturnHit=(df["Return_5D"] >= 0.04).astype(int))
+        with patch.object(ml_prebreakout, "add_forward_return_labels", return_value=forward):
+            labeled = ml_prebreakout.add_prebreakout_target_label(df)
 
         self.assertEqual(list(labeled["FutureQualitySetupHit"]), [0])
 

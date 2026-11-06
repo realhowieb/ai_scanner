@@ -1,4 +1,4 @@
-"""P1-39 — the billing service's /health reports its email settings without secrets.
+"""P1-39 — internal billing email diagnostics report settings without secrets.
 
 Runs in the billing-contract CI job (FastAPI installed); skipped elsewhere.
 """
@@ -22,7 +22,7 @@ class BillingEmailHealthTests(unittest.TestCase):
         from unittest.mock import patch
 
         with patch.dict(os.environ, env):
-            body = bm.health()
+            body = bm._health_details()
         return body if isinstance(body, dict) else json.loads(body.body)
 
     def test_verified_sender_reported_by_domain_only(self):

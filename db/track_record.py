@@ -6,8 +6,10 @@ cursor + commit + close pattern used elsewhere in db/.
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
+from analytics.track_method import METHOD
 from db.engine import get_neon_conn, schema_once
 
 # Separate stored results from the old method that re-scored historical scans.
@@ -15,14 +17,24 @@ from db.engine import get_neon_conn, schema_once
 PREBREAKOUT_SNAPSHOT = "prebreakout_snapshot_v1"
 
 
-def _stored_ranking(ranking):
+def _stored_ranking(ranking, methodology=None):
+    if methodology:
+        return f"{methodology}:{ranking}"
     return PREBREAKOUT_SNAPSHOT if ranking == "prebreakout" else ranking
 
 
 def _public_summary(row):
     out = dict(row)
-    if out.get("ranking") == PREBREAKOUT_SNAPSHOT:
-        out["ranking"] = "prebreakout"
+    payload = out.pop("details", None)
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict) or payload.get("methodology") != METHOD:
+        return None
+    stored = out.get("ranking") or ""
+    if stored not in {f"{METHOD}:breakout", f"{METHOD}:prebreakout"}:
+        return None
+    out.update(payload)
+    out['ranking'] = stored.split(':', 1)[1]
     return out
 
 
@@ -50,6 +62,7 @@ def _ensure_schema(conn) -> None:
     # Which ranking produced the top-N: 'breakout' (BreakoutScore) or
     # 'prebreakout' (PreBreakout model). Lets us A/B the two signals.
     cur.execute("ALTER TABLE signal_track_record ADD COLUMN IF NOT EXISTS ranking TEXT")
+    cur.execute("ALTER TABLE signal_track_record ADD COLUMN IF NOT EXISTS details JSONB")
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_track_record_horizon_computed "
         "ON signal_track_record (horizon_days, computed_at DESC)"
@@ -58,7 +71,7 @@ def _ensure_schema(conn) -> None:
     cur.close()
 
 
-def save_daily_excess(ranking: str, horizon_days: int, daily) -> int:
+def save_daily_excess(ranking: str, horizon_days: int, daily, *, methodology=None) -> int:
     """Upsert per-scan-day mean excess rows (for the calendar heatmap)."""
     if not daily:
         return 0
@@ -90,7 +103,7 @@ def save_daily_excess(ranking: str, horizon_days: int, daily) -> int:
                           n_picks = EXCLUDED.n_picks,
                           computed_at = NOW()
             """,
-            (day, _stored_ranking(ranking), int(horizon_days), float(avg_excess), int(n_picks)),
+            (day, _stored_ranking(ranking, methodology), int(horizon_days), float(avg_excess), int(n_picks)),
         )
         saved += 1
     conn.commit()
@@ -113,7 +126,7 @@ def load_daily_excess(ranking: str = "breakout", horizon_days: int = 5, days: in
               AND day >= CURRENT_DATE - make_interval(days => %s)
             ORDER BY day ASC
             """,
-            (_stored_ranking(ranking), int(horizon_days), int(days)),
+            (_stored_ranking(ranking, METHOD), int(horizon_days), int(days)),
         )
         rows = cur.fetchall() or []
     except Exception:
@@ -146,6 +159,7 @@ def save_track_record(
     benchmark: Optional[str] = None,
     top_n: Optional[int] = None,
     ranking: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Insert a fresh track-record summary row. Returns False if Neon is down.
 
@@ -162,8 +176,8 @@ def save_track_record(
         """
         INSERT INTO signal_track_record
             (horizon_days, avg_return, median_return, win_rate, sample_size,
-             runs_used, benchmark, top_n, ranking)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+             runs_used, benchmark, top_n, ranking, details)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             int(horizon_days),
@@ -174,7 +188,8 @@ def save_track_record(
             int(runs_used),
             benchmark,
             int(top_n) if top_n is not None else None,
-            _stored_ranking(ranking),
+            _stored_ranking(ranking, (details or {}).get("methodology")),
+            json.dumps({k: v for k, v in details.items() if k != "daily"}, default=str, allow_nan=False) if details else None,
         ),
     )
     conn.commit()
@@ -184,37 +199,38 @@ def save_track_record(
 
 
 _SUMMARY_COLS = ("horizon_days", "avg_return", "median_return", "win_rate", "sample_size",
-                 "runs_used", "computed_at", "benchmark", "top_n", "ranking")
+                 "runs_used", "computed_at", "benchmark", "top_n", "ranking", "details")
 
 
 def load_latest_track_records() -> List[Dict[str, Any]]:
     """The most recent summary for every horizon + ranking, in one query.
 
-    Same rule as load_latest_track_record: a NULL ranking (pre-A/B) counts as
-    'breakout'. The API's track record page used to run one query per pair.
+    Only the current methodology namespace and a matching payload are public.
+    Older rows remain stored for audit and are never relabeled at read time.
     """
     conn = get_neon_conn()
     if conn is None:
         return []
     try:
-        _ensure_schema(conn)
         cur = conn.cursor()
         cur.execute(
             """
             SELECT DISTINCT ON (horizon_days, COALESCE(ranking, 'breakout'))
                    horizon_days, avg_return, median_return, win_rate,
                    sample_size, runs_used, computed_at, benchmark, top_n,
-                   COALESCE(ranking, 'breakout') AS ranking
+                   ranking, details
             FROM signal_track_record
-            WHERE ranking IS NULL OR ranking != 'prebreakout'
+            WHERE ranking IN (%s, %s)
             ORDER BY horizon_days, COALESCE(ranking, 'breakout'), computed_at DESC
-            """
+            """, (_stored_ranking('breakout', METHOD), _stored_ranking('prebreakout', METHOD))
         )
         rows = cur.fetchall()
         cur.close()
+    except Exception:
+        rows = []  # old schema/results are not new-method evidence
     finally:
         conn.close()
-    return [_public_summary(r if isinstance(r, dict) else dict(zip(_SUMMARY_COLS, r))) for r in rows]
+    return [v for r in rows if (v := _public_summary(r if isinstance(r, dict) else dict(zip(_SUMMARY_COLS, r))))]
 
 
 def load_latest_track_record(
@@ -222,42 +238,7 @@ def load_latest_track_record(
 ) -> Optional[Dict[str, Any]]:
     """Return the most recent summary for a horizon + ranking, or None.
 
-    Older rows may have NULL ranking (pre-A/B); treat those as 'breakout' so the
-    default display keeps working during the transition.
+    No compatibility fallback to old methodology rows.
     """
-    conn = get_neon_conn()
-    if conn is None:
-        return None
-    _ensure_schema(conn)
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT horizon_days, avg_return, median_return, win_rate,
-               sample_size, runs_used, computed_at, benchmark, top_n, ranking
-        FROM signal_track_record
-        WHERE horizon_days = %s
-          AND (ranking = %s OR (ranking IS NULL AND %s = 'breakout'))
-        ORDER BY computed_at DESC
-        LIMIT 1
-        """,
-        (int(horizon_days), _stored_ranking(ranking), _stored_ranking(ranking)),
-    )
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if not row:
-        return None
-    if isinstance(row, dict):
-        return _public_summary(row)
-    return _public_summary({
-        "horizon_days": row[0],
-        "avg_return": row[1],
-        "median_return": row[2],
-        "win_rate": row[3],
-        "sample_size": row[4],
-        "runs_used": row[5],
-        "computed_at": row[6],
-        "benchmark": row[7],
-        "top_n": row[8],
-        "ranking": row[9],
-    })
+    return next((r for r in load_latest_track_records()
+                 if r.get("horizon_days") == horizon_days and r.get("ranking") == ranking), None)

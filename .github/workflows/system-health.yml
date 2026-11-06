@@ -50,6 +50,8 @@ jobs:
         id: health
         env:
           GH_TOKEN: ${{ github.token }}
+          ACC_ADMIN_EMAIL: ${{ secrets.ACC_ADMIN_EMAIL }}
+          ACC_ADMIN_PASSWORD: ${{ secrets.ACC_ADMIN_PASSWORD }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
