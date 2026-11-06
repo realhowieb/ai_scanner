@@ -319,6 +319,8 @@ class Today(BaseModel):
 
 # ---- step 5: scans and stock detail --------------------------------------------------------------
 class IndicatorEvidence(BaseModel):
+    history_bars: Optional[int] = Field(None, description="Number of daily bars used in this calculation")
+    history_start: Optional[str] = Field(None, description="First daily bar used to seed indicator smoothing")
     rule_version: str
     bar_date: Optional[str] = None
     rsi_14: Optional[float] = None

@@ -80,3 +80,23 @@ unowned or older scans without evidence receive an unavailable message. A
 stock absent from the selected scan also receives no historical qualification.
 Ordinary ticker links continue to work without scan context. No database
 migration, model retraining, or changes to HSF score/confidence gates are needed.
+
+### Comparing calculation histories
+
+New evidence records also include `history_bars` and `history_start`. Older
+records leave these fields unknown. The scanner price fetch defaults to 60d;
+the stock chart requests up to 260 displayed bars (backed by a two-year provider
+fetch). Cache hits can supply different history lengths. Both paths call the
+same indicator helper, but Wilder RSI and EMA-based MACD depend on the initial
+history used to seed their smoothing. Identical final closes and even identical
+recent bars need not yield identical RSI/MACD when the earlier input differs.
+Revised bars can also matter. The displayed history count and first date expose
+this difference for future records; they do not establish the cause of a
+particular legacy difference without its original input history.
+
+The evidence table applies the app's standard table styles, row headings,
+column padding, wrapping, and horizontal scrolling on narrow screens. For a
+selected setup, required rules appear first. Other indicator checks are in a
+separate collapsed section and explicitly are not required for that scan.
+A selected MACD confirmation remains in the required table. Saved qualification
+is not recalculated or overwritten by newer chart readings.

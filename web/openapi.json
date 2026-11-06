@@ -8213,6 +8213,30 @@
       ],
       "title": "Close"
      },
+     "history_bars": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Number of daily bars used in this calculation",
+      "title": "History Bars"
+     },
+     "history_start": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "First daily bar used to seed indicator smoothing",
+      "title": "History Start"
+     },
      "macd_above_signal": {
       "title": "Macd Above Signal",
       "type": "boolean"

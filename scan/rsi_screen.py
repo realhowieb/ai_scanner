@@ -61,6 +61,7 @@ def indicator_evidence(df, *, relative_volume=None):
     crossover = bullish and prior_histogram is not None and prior_histogram <= 0
     return {
         "rule_version": "daily-indicators-v1", "bar_date": str(df.index[-1])[:10] if len(df) else None,
+        "history_bars": len(df), "history_start": str(df.index[0])[:10] if len(df) else None,
         "rsi_14": value, "rsi_previous": previous, "prior_5_rsi_low": low, "prior_5_rsi_low_date": low_date,
         "close": close, "previous_close": prev_close,
         "change_pct": (close / prev_close - 1) * 100 if close is not None and prev_close else None,
