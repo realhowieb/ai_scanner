@@ -316,7 +316,7 @@ def test_regime_uses_only_prior_closes():
     assert A.spy_regime_by_day(spiked, [day])[day] == base
 
 
-def test_legacy_future_breakout_label_matches_reference_definition():
+def test_legacy_reproduction_preserves_bleed_but_reusable_helper_is_fixed():
     pd = pytest.importorskip("pandas")
     from ml_prebreakout import add_future_breakout_label
 
@@ -326,7 +326,7 @@ def test_legacy_future_breakout_label_matches_reference_definition():
                        "IsBreakout": [0, 0, 0, 1, 0, 1, 0, 0]})
     ours = A.future_breakout_label(df).sort_values(["Symbol", "Timestamp"]).reset_index(drop=True)
     ref = add_future_breakout_label(df.copy())
-    assert list(ours["FutureBreakout"]) == list(ref["FutureBreakout"])
+    assert ref.loc[3, "FutureBreakout"] == 0  # corrected helper isolates symbols
     # the reference reads the next 3 rows of the whole frame: A's last-but-one row is
     # labelled 1 from B's breakout (cross-symbol bleed), and the reproduction keeps it
     assert ours.loc[3, "FutureBreakout"] == 1 and ours.loc[3, "Symbol"] == "A"

@@ -380,15 +380,22 @@ API_BASE_URL = "https://hsf-api-v1.onrender.com"
 
 
 def api_ready() -> Dict[str, Any]:
-    """The live API's /readyz (memory now and peak since restart). Read-only, one call."""
+    """Authenticated operator diagnostics; never restore public detail access."""
     import requests
 
     base = (os.getenv("HSF_API_BASE_URL") or API_BASE_URL).strip().rstrip("/")
-    r = requests.get(f"{base}/readyz", timeout=60)
+    email, password = os.getenv("ACC_ADMIN_EMAIL"), os.getenv("ACC_ADMIN_PASSWORD")
+    if not email or not password:
+        return {"status": None, "diagnostics_available": False, "reason": "admin_credentials_missing"}
+    login = requests.post(f"{base}/v1/auth/login", json={"email": email, "password": password}, timeout=30)
+    login.raise_for_status()
+    token = login.json()["access_token"]
+    r = requests.get(f"{base}/v1/admin/readiness", headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    r.raise_for_status()
     body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     keys = ("rss_mb", "rss_peak_mb", "container_mb", "container_peak_mb", "memory_limit_mb",
             "memory_warn_mb", "memory_warning", "price_cache_entries", "cache_counts")
-    return {"status": r.status_code, **{k: body.get(k) for k in keys}}
+    return {"status": r.status_code, "diagnostics_available": True, **{k: body.get(k) for k in keys}}
 
 
 def collect(now: _dt.datetime) -> Dict[str, Any]:

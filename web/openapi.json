@@ -14625,7 +14625,7 @@
     "title": "QuietHours",
     "type": "object"
    },
-   "Ready": {
+   "ReadinessDiagnostics": {
     "properties": {
      "build": {
       "anyOf": [
@@ -14827,6 +14827,47 @@
        }
       ],
       "description": "A scheduled full-market scan was missed (see Market.stale)",
+      "title": "Stale"
+     }
+    },
+    "required": [
+     "ok",
+     "database"
+    ],
+    "title": "ReadinessDiagnostics",
+    "type": "object"
+   },
+   "Ready": {
+    "properties": {
+     "build": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Build"
+     },
+     "database": {
+      "const": "ok",
+      "title": "Database",
+      "type": "string"
+     },
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     },
+     "stale": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
       "title": "Stale"
      }
     },
@@ -20633,17 +20674,14 @@
   },
   "/readyz": {
    "get": {
-    "description": "Readiness: the database answers, plus the latest market scan's age for\nfreshness monitoring. /healthz stays the liveness check. One failed database\nping is retried after READYZ_RETRY_S: a database waking from idle shouldn't\npage an uptime monitor. db_ping_ms is the time of the answered ping.",
     "operationId": "readyz_readyz_get",
     "parameters": [
      {
-      "description": "Answer 503 when a scheduled full-market scan was missed, so an outside uptime monitor alerts on stale data as well as on a database outage",
       "in": "query",
       "name": "strict",
       "required": false,
       "schema": {
        "default": false,
-       "description": "Answer 503 when a scheduled full-market scan was missed, so an outside uptime monitor alerts on stale data as well as on a database outage",
        "title": "Strict",
        "type": "boolean"
       }
@@ -20671,7 +20709,7 @@
       "description": "Invalid request fields"
      },
      "503": {
-      "description": "Database unavailable, or (strict=true) a scheduled scan was missed"
+      "description": "Database unavailable or a scheduled scan was missed"
      }
     },
     "summary": "Readyz"
@@ -22667,6 +22705,55 @@
      }
     ],
     "summary": "Live checks: database, Alpaca, FMP, Finnhub, billing",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/readiness": {
+   "get": {
+    "operationId": "readiness_diagnostics_v1_admin_readiness_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "strict",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Strict",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReadinessDiagnostics"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Readiness Diagnostics",
     "tags": [
      "admin (admins only)"
     ],

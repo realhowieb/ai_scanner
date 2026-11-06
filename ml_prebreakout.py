@@ -492,24 +492,25 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
 
 
 def add_future_breakout_label(df: pd.DataFrame, horizon_scans: int = 3) -> pd.DataFrame:
+    """Label only breakouts in the next scans of the same symbol.
+
+    Historical cross-symbol bleed is reproduced only in the legacy audit,
+    never by this reusable training helper.
     """
-    Mark each row y=1 if the same symbol has a breakout within the next horizon_scans rows.
-    Assumes df sorted by (Symbol, Timestamp).
-    """
+    if horizon_scans < 1:
+        raise ValueError("horizon_scans must be positive")
     if df.empty:
-        return df
-
-    df = df.sort_values(["Symbol", "Timestamp"]).reset_index(drop=True)
-    df["FutureBreakout"] = 0
-
-    for i in range(len(df)):
-        sym = df.at[i, "Symbol"]
-        end_i = min(i + horizon_scans, len(df) - 1)
-        future_slice = df.iloc[i+1:end_i+1]
-        if (future_slice["Symbol"] == sym).any() and (future_slice["IsBreakout"] == 1).any():
-            df.at[i, "FutureBreakout"] = 1
-
-    return df
+        return df.copy()
+    out = df.copy()
+    out["Symbol"] = out["Symbol"].astype(str).str.upper()
+    out = sort_symbol_history(out).reset_index(drop=True)
+    flags = out["IsBreakout"].apply(_as_bool)
+    groups = out["Symbol"].astype(str).str.upper()
+    future = pd.Series(False, index=out.index)
+    for step in range(1, horizon_scans + 1):
+        future |= flags.groupby(groups).shift(-step).eq(True)
+    out["FutureBreakout"] = future.astype(int)
+    return out
 
 
 def _run_date(value):
@@ -574,40 +575,9 @@ def _forward_path_hit(
     hit_threshold: float = UPSIDE_HIT_THRESHOLD,
     stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
 ) -> bool | None:
-    """True when +4% is reached before -2%; None when path data is incomplete."""
-    try:
-        if "Close" not in getattr(bars, "columns", []):
-            return None
-        closes = bars["Close"].dropna()
-        if closes.empty:
-            return None
-        entry_pos = None
-        for pos, ts in enumerate(closes.index):
-            d = ts.date() if hasattr(ts, "date") else ts
-            if d >= run_date:
-                entry_pos = pos
-                break
-        if entry_pos is None:
-            return None
-        end_pos = entry_pos + int(horizon_days)
-        if end_pos >= len(closes):
-            return None
-        entry = float(closes.iloc[entry_pos])
-        if entry <= 0:
-            return None
-
-        highs = bars["High"].reindex(closes.index) if "High" in bars.columns else closes
-        lows = bars["Low"].reindex(closes.index) if "Low" in bars.columns else closes
-        for pos in range(entry_pos + 1, end_pos + 1):
-            high_ret = (float(highs.iloc[pos]) - entry) / entry
-            low_ret = (float(lows.iloc[pos]) - entry) / entry
-            if low_ret <= float(stop_threshold):
-                return False
-            if high_ret >= float(hit_threshold):
-                return True
-        return False
-    except Exception:
-        return None
+    """Path label, or None when the full OHLC window is unavailable."""
+    stats = _forward_path_stats(bars, run_date, horizon_days, hit_threshold, stop_threshold)
+    return stats["hit"] if stats is not None else None
 
 
 def _forward_path_stats(
@@ -621,8 +591,8 @@ def _forward_path_stats(
     try:
         if "Close" not in getattr(bars, "columns", []):
             return None
-        closes = bars["Close"].dropna()
-        if closes.empty:
+        closes = pd.to_numeric(bars["Close"], errors="coerce")
+        if closes.empty or int(horizon_days) < 1 or not closes.index.is_monotonic_increasing or not closes.index.is_unique:
             return None
         entry_pos = None
         for pos, ts in enumerate(closes.index):
@@ -640,8 +610,14 @@ def _forward_path_stats(
         if entry <= 0:
             return None
 
-        highs = bars["High"].reindex(closes.index) if "High" in bars.columns else closes
-        lows = bars["Low"].reindex(closes.index) if "Low" in bars.columns else closes
+        if not {"High", "Low"}.issubset(bars.columns):
+            return None
+        highs = bars["High"].reindex(closes.index)
+        lows = bars["Low"].reindex(closes.index)
+        window = np.asarray([closes.iloc[entry_pos:end_pos + 1],
+                             highs.iloc[entry_pos:end_pos + 1], lows.iloc[entry_pos:end_pos + 1]], dtype=float)
+        if not np.isfinite(window).all() or (window <= 0).any() or (window[1] < window[2]).any():
+            return None
         mfe = float("-inf")
         mae = float("inf")
         hit = False
@@ -653,14 +629,13 @@ def _forward_path_stats(
             low_ret = (float(lows.iloc[pos]) - entry) / entry
             mfe = max(mfe, high_ret)
             mae = min(mae, low_ret)
-            if low_ret <= float(stop_threshold):
-                stopped = True
-                stopped_day = pos - entry_pos
-                break
-            if high_ret >= float(hit_threshold):
-                hit = True
-                hit_day = pos - entry_pos
-                break
+            if not hit and not stopped:
+                if low_ret <= float(stop_threshold):
+                    stopped = True
+                    stopped_day = pos - entry_pos
+                elif high_ret >= float(hit_threshold):
+                    hit = True
+                    hit_day = pos - entry_pos
         return {
             "hit": bool(hit and not stopped),
             "stopped": bool(stopped),
@@ -697,63 +672,16 @@ def add_forward_return_labels(
     stop_threshold: float = DOWNSIDE_STOP_THRESHOLD,
     lookback_days: int = 90,
 ) -> pd.DataFrame:
+    """Path target only: upside reached before stop, stop wins same-bar ties.
+
+    Cached terminal returns cannot establish barrier order. Incomplete OHLC
+    paths remain unlabeled, even when a cached return is present.
     """
-    Add money-based labels:
-      - Return_5D: forward close-to-close return over horizon_days.
-      - ForwardReturnHit: 1 when +4% is reached before -2% within horizon_days.
-
-    If full path data is unavailable, the hit label falls back to Return_5D >= +4%.
-    """
-    if df.empty:
-        return df
-
-    out = sort_symbol_history(df).reset_index(drop=True).copy()
-    out[TARGET_COLUMN] = np.nan
-
-    if RETURN_COLUMN in out.columns:
-        out[RETURN_COLUMN] = pd.to_numeric(out[RETURN_COLUMN], errors="coerce")
-        out = out[out[RETURN_COLUMN].notna()].reset_index(drop=True)
-        out[TARGET_COLUMN] = (out[RETURN_COLUMN] >= float(hit_threshold)).astype(int)
-        return out
-    out[RETURN_COLUMN] = np.nan
-
-    symbols = sorted({str(s).upper() for s in out.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
-    bars_by_symbol = _download_label_bars(symbols, lookback_days=lookback_days) if symbols else {}
-    if not bars_by_symbol:
-        print("[ml_prebreakout] No price bars available for forward-return labels.")
-        return out.iloc[0:0].copy()
-
-    try:
-        from analytics.track_record import _bars_for, _forward_return
-    except Exception:
-        _bars_for = lambda bars, sym: bars.get(sym)  # type: ignore[assignment]
-        _forward_return = None  # type: ignore[assignment]
-
-    keep = []
-    for idx, row in out.iterrows():
-        run_date = _run_date(row.get("Timestamp") or row.get("run_time"))
-        sym = str(row.get("Symbol") or "").upper()
-        bars = _bars_for(bars_by_symbol, sym)
-        if run_date is None or bars is None or _forward_return is None:
-            continue
-        ret = _forward_return(bars, run_date, int(horizon_days), entry_mode="close")
-        if ret is None:
-            continue
-        path_hit = _forward_path_hit(
-            bars,
-            run_date,
-            int(horizon_days),
-            hit_threshold=float(hit_threshold),
-            stop_threshold=float(stop_threshold),
-        )
-        out.at[idx, RETURN_COLUMN] = float(ret)
-        out.at[idx, TARGET_COLUMN] = int(path_hit if path_hit is not None else ret >= float(hit_threshold))
-        keep.append(idx)
-
-    labeled = out.loc[keep].reset_index(drop=True)
-    if labeled.empty:
-        print("[ml_prebreakout] No rows had complete forward-return labels.")
-    return labeled
+    return add_forward_return_labels_variant(
+        df, horizon_days=horizon_days, hit_threshold=hit_threshold,
+        stop_threshold=stop_threshold, lookback_days=lookback_days,
+        return_column=RETURN_COLUMN, label_column=TARGET_COLUMN, target_kind="path",
+    )
 
 
 def add_prebreakout_target_label(
@@ -827,8 +755,17 @@ def add_forward_return_labels_variant(
     mae_column: str | None = None,
     bars_by_symbol: dict | None = None,
     force_path: bool = False,
+    target_kind: str = "path",
 ) -> pd.DataFrame:
-    """Configurable forward-label builder for Run #17 target experiments."""
+    """Explicit path or terminal-return objective; never infer it from columns.
+
+    ``force_path`` remains accepted for existing callers. A terminal-return
+    experiment must opt in and is recorded as a different label definition.
+    """
+    if target_kind not in {"path", "terminal_return"}:
+        raise ValueError("target_kind must be path or terminal_return")
+    if force_path and target_kind != "path":
+        raise ValueError("force_path conflicts with terminal_return target")
     if df.empty:
         return df
 
@@ -836,16 +773,21 @@ def add_forward_return_labels_variant(
     mfe_column = mfe_column or f"MFE_{int(horizon_days)}D"
     mae_column = mae_column or f"MAE_{int(horizon_days)}D"
     out = sort_symbol_history(df).reset_index(drop=True).copy()
+    cached_returns = pd.to_numeric(out[return_column], errors="coerce") if return_column in out else None
     out[label_column] = np.nan
     out[return_column] = np.nan
     out[mfe_column] = np.nan
     out[mae_column] = np.nan
 
-    if not force_path and horizon_days == RETURN_HORIZON_DAYS and RETURN_COLUMN in out.columns:
-        returns = pd.to_numeric(out[RETURN_COLUMN], errors="coerce")
-        out[return_column] = returns
-        out[label_column] = np.where(returns.notna(), (returns >= float(hit_threshold)).astype(int), np.nan)
-        return out[out[label_column].notna()].reset_index(drop=True)
+    definition = (f"path_first_hit_v1:h={int(horizon_days)}:up={float(hit_threshold):g}:"
+                  f"stop={float(stop_threshold):g}:same_bar=stop" if target_kind == "path" else
+                  f"terminal_return_v1:h={int(horizon_days)}:threshold={float(hit_threshold):g}")
+    out[f"{label_column}_definition"] = definition
+    if target_kind == "terminal_return" and cached_returns is not None:
+        valid = cached_returns.notna() & np.isfinite(cached_returns)
+        out[return_column] = cached_returns
+        out.loc[valid, label_column] = (cached_returns[valid] >= float(hit_threshold)).astype(int)
+        return out.loc[valid].reset_index(drop=True)
 
     symbols = sorted({str(s).upper() for s in out.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
     if bars_by_symbol is None:
@@ -875,13 +817,14 @@ def add_forward_return_labels_variant(
             stop_threshold=float(stop_threshold),
         )
         ret = stats.get("forward_return") if stats else None
-        if ret is None and _forward_return is not None:
+        if target_kind == "terminal_return" and ret is None and _forward_return is not None:
             ret = _forward_return(bars, run_date, int(horizon_days), entry_mode="close")
-        if ret is None:
+        if ret is None or (target_kind == "path" and stats is None):
             continue
         out.at[idx, return_column] = float(ret)
         if stats:
-            out.at[idx, label_column] = int(bool(stats["hit"]))
+            out.at[idx, label_column] = (int(bool(stats["hit"])) if target_kind == "path" else
+                                         int(float(ret) >= float(hit_threshold)))
             out.at[idx, mfe_column] = float(stats["mfe"])
             out.at[idx, mae_column] = float(stats["mae"])
         else:
@@ -3853,7 +3796,8 @@ def _run17_target_rule(spec: dict) -> str:
     return (
         f"Eligible rows use unchanged PreBreakout candidate rules; positive when a quality setup appears within "
         f"1-{int(spec['lead_days'])} trading days and then hits +{float(spec['upside']) * 100:.1f}% "
-        f"before {float(spec['downside']) * 100:.1f}% over {int(spec['economic_horizon'])} trading days."
+        f"before {float(spec['downside']) * 100:.1f}% over {int(spec['economic_horizon'])} trading days; "
+        "path_first_hit_v1, complete OHLC, same-bar stop wins."
     )
 
 
@@ -3865,9 +3809,9 @@ def _run17_target_audit_description() -> dict:
         "stop_threshold": DOWNSIDE_STOP_THRESHOLD,
         "order_of_events": "_forward_path_hit checks future Low stop before High target inside each future bar",
         "same_bar_profit_stop": "stop wins because low_ret is checked before high_ret",
-        "neither_threshold": "label is 0 unless close-return fallback exceeds upside threshold",
+        "neither_threshold": "label is 0; no terminal-return fallback",
         "missing_future_prices": "rows without complete forward labels are dropped",
-        "high_low_or_close": "High/Low path when bars exist; existing Return_5D close-return fallback otherwise",
+        "high_low_or_close": "Complete finite OHLC path required; cached Return_5D never substitutes",
         "observation_day_leakage": "future path loop starts at entry_pos + 1; candidate features are computed before label join",
     }
 
@@ -4819,7 +4763,7 @@ def train_prebreakout_model(
         "target_rule": (
             "Eligible rows are not broken out, BreakoutScore < 8, and below the 20-day high; "
             "positive when a high-quality setup appears within 1-3 trading days and then hits "
-            "the +4% before -2% economic target."
+            "the +4% before -2% economic target (path_first_hit_v1; complete OHLC; same-bar stop wins)."
         ),
         "candidate_rule": "IsBreakout is false, BreakoutScore < 8, price below 20-day high",
         "feature_notes": {
