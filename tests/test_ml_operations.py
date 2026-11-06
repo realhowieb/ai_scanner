@@ -108,3 +108,48 @@ class PrebreakoutEvidenceTests(unittest.TestCase):
                 production_prebreakout()
         conn.cursor.return_value.close.assert_called_once()
         conn.close.assert_called_once()
+
+
+class ProductionCaptureTests(unittest.TestCase):
+    def test_health_separates_missing_predictions_identity_and_lag(self):
+        from db.ml_operations import capture_summary
+        now = ts('2026-11-06T20:00:00')
+        rows = [{'role': 'ai_confidence', 'total': 10, 'present': 10, 'identity': 2,
+                 'latest_observation': now, 'latest_prediction': now},
+                {'role': 'prebreakout', 'total': 10, 'present': 8, 'identity': 8,
+                 'latest_observation': now, 'latest_prediction': ts('2026-11-05T20:00:00')}]
+        a, b = capture_summary(rows, now=now, since=now)['models']
+        self.assertEqual((a['status'], a['missing_predictions'], a['identity_missing']), ('WATCH', 0, 8))
+        self.assertFalse(a['behind_latest_observation'])
+        self.assertEqual((b['missing_predictions'], b['identity_missing']), (2, 0))
+        self.assertTrue(b['behind_latest_observation'])
+        rows[0]['identity'] = 10
+        self.assertEqual(capture_summary(rows, now=now, since=now)['models'][0]['status'], 'HEALTHY')
+        self.assertEqual(capture_summary([], now=now, since=now)['models'][0]['status'], 'UNKNOWN')
+
+    def test_bounded_read_handles_percent_units_and_closes_connection(self):
+        from db.ml_operations import production_capture_health
+        conn = MagicMock()
+        cur = conn.cursor.return_value
+        cur.fetchone.return_value = ('signal_outcomes',)
+        cur.fetchall.return_value = [('prebreakout', 10, 10, 10, None, None, ['pb-v1'])]
+        with patch('db.ml_operations.get_neon_conn', return_value=conn):
+            result = production_capture_health(now=ts('2026-11-06T20:00:00'))
+        self.assertEqual(result['models'][1]['status'], 'HEALTHY')
+        query, bounds = cur.execute.call_args.args
+        self.assertEqual(len(bounds), 2)
+        self.assertIn("'prebreakout_model_version', 100.0", query)
+        self.assertNotIn('model_bytes', query)
+        cur.close.assert_called_once()
+        conn.close.assert_called_once()
+
+    def test_database_failure_is_unavailable_and_closes_resources(self):
+        from db.ml_model_registry import RegistryUnavailable
+        from db.ml_operations import production_capture_health
+        conn = MagicMock()
+        conn.cursor.return_value.execute.side_effect = RuntimeError('private database detail')
+        with patch('db.ml_operations.get_neon_conn', return_value=conn):
+            with self.assertRaises(RegistryUnavailable):
+                production_capture_health()
+        conn.cursor.return_value.close.assert_called_once()
+        conn.close.assert_called_once()

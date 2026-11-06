@@ -90,3 +90,86 @@ def production_prebreakout():
         if cur is not None:
             cur.close()
         conn.close()
+
+
+def capture_summary(rows, *, now, since):
+    """Capture health relative to the observation stream, never model quality."""
+    by_role = {r['role']: r for r in rows}
+    models = []
+    for role in ('ai_confidence', 'prebreakout'):
+        r = by_role.get(role, {})
+        total, present, identity = (int(r.get(k) or 0) for k in ('total', 'present', 'identity'))
+        latest, predicted = r.get('latest_observation'), r.get('latest_prediction')
+        missing = total - present
+        identity_missing = present - identity
+        # These values come from MAX(fired_at), so direct comparison shares a type/timezone.
+        behind = bool(latest and (not predicted or predicted < latest))
+        status = 'UNKNOWN' if not total else 'WATCH' if missing or identity_missing or behind else 'HEALTHY'
+        models.append({'role': role, 'status': status, 'observations': total, 'predictions': present,
+                       'missing_predictions': missing, 'identity_missing': identity_missing,
+                       'latest_observation_at': latest, 'latest_prediction_at': predicted,
+                       'behind_latest_observation': behind, 'model_versions': r.get('versions') or []})
+    return {'generated_at': now, 'since': since, 'models': models,
+            'note': 'Capture completeness and identity only, not predictive quality or a process heartbeat. '
+                    'Freshness is compared with the latest saved opportunity; scanner cadence is monitored separately.'}
+
+
+def production_capture_health(now=None):
+    import datetime as dt
+
+    from analytics.ml_readiness import _day_close_utc, _trading_days_ago
+    from db.signal_outcomes import _SCANNER_SUPERSEDES_BRIEF
+
+    now = now or dt.datetime.now(dt.timezone.utc)
+    since = _day_close_utc(_trading_days_ago(now, 5))
+    conn = None
+    cur = None
+    try:
+        conn = get_neon_conn()
+        if conn is None:
+            raise RegistryUnavailable('database unavailable')
+        cur = conn.cursor()
+        cur.execute("SELECT to_regclass('signal_outcomes') AS signals")
+        if not _values(cur.fetchone())[0]:
+            return capture_summary([], now=now, since=since)
+        # A single bounded aggregate. No model bytes, raw matrices, tickers or secrets leave the DB.
+        query = """WITH observations AS (
+          SELECT fired_at, ai_confidence, prebreakout_prob, raw_signal
+          FROM signal_outcomes WHERE source='opportunity' AND fired_at >= %s AND fired_at <= %s
+          """ + _SCANNER_SUPERSEDES_BRIEF + """
+        ), values_by_role AS (
+          SELECT fired_at, x.* FROM observations CROSS JOIN LATERAL (VALUES
+            ('ai_confidence', ai_confidence, raw_signal->'models'->'ai_confidence',
+             raw_signal->>'ai_confidence_model_version', 100.0),
+            ('prebreakout', prebreakout_prob, raw_signal->'models'->'prebreakout',
+             raw_signal->>'prebreakout_model_version', 100.0)
+          ) AS x(role, value, provenance, legacy_version, ceiling)
+        ), classified AS (
+          SELECT *, (value BETWEEN 0 AND ceiling
+            AND (provenance->>'status' IS NULL OR provenance->>'status'='captured')
+            AND (role='ai_confidence' OR provenance->>'status'='captured'
+              OR (provenance->>'status' IS NULL AND NULLIF(legacy_version,'') IS NOT NULL AND value>0))) IS TRUE AS present,
+            (provenance->>'status'='captured'
+              AND NULLIF(provenance->'loaded_artifact'->>'version','') IS NOT NULL
+              AND (provenance->'loaded_artifact'->>'sha256') ~ '^[a-fA-F0-9]{64}$'
+              AND NULLIF(provenance->>'inferred_at','') IS NOT NULL) IS TRUE AS identity
+          FROM values_by_role
+        ) SELECT role, COUNT(*) AS total, COUNT(*) FILTER (WHERE present) AS present,
+          COUNT(*) FILTER (WHERE present AND identity) AS identity,
+          MAX(fired_at) AS latest_observation, MAX(fired_at) FILTER (WHERE present) AS latest_prediction,
+          array_agg(DISTINCT COALESCE(NULLIF(provenance->'loaded_artifact'->>'version',''), legacy_version))
+            FILTER (WHERE present AND COALESCE(provenance->'loaded_artifact'->>'version', legacy_version) IS NOT NULL) AS versions
+          FROM classified GROUP BY role ORDER BY role"""
+        cur.execute(query, (since, now))
+        names = ('role', 'total', 'present', 'identity', 'latest_observation', 'latest_prediction', 'versions')
+        rows = [dict(r) if isinstance(r, dict) else dict(zip(names, r)) for r in cur.fetchall()]
+        return capture_summary(rows, now=now, since=since)
+    except RegistryUnavailable:
+        raise
+    except Exception as exc:
+        raise RegistryUnavailable('production prediction capture unavailable') from exc
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()

@@ -140,7 +140,7 @@ def fetch_scan_records(tickers: Iterable[str], start: _dt.datetime, end: _dt.dat
     Callers widen `start` by the join's max lag so the backward join can see
     the scan just before the first observation. Works on Neon (slim JSON
     projection) and on the local SQLite fallback used by tests."""
-    from db.hsf_observations import _ensure_schema, _resolve_conn
+    from db.hsf_observations import _resolve_conn
 
     syms = sorted({str(t).upper() for t in tickers if t})
     if not syms:
@@ -149,7 +149,6 @@ def fetch_scan_records(tickers: Iterable[str], start: _dt.datetime, end: _dt.dat
     if c is None:
         raise ResearchDataUnavailable("database unavailable")
     try:
-        _ensure_schema(c, is_sqlite)
         cur = c.cursor()
         out: List[Dict[str, Any]] = []
         if is_sqlite:

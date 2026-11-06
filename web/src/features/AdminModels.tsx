@@ -54,7 +54,7 @@ function StagePill({ status }: { status: string }) {
 }
 
 function HealthPill({ status }: { status: string }) {
-  const tone = status === "OK" ? "up" : status === "WARNING" ? "down" : "warn";
+  const tone = (status === "OK" || status === "HEALTHY") ? "up" : status === "WARNING" ? "down" : "warn";
   return <Pill tone={tone}>{status === "WAITING" ? "Waiting for data" : status.toLowerCase().replace(/^./, (c) => c.toUpperCase())}</Pill>;
 }
 
@@ -245,6 +245,27 @@ type Production = {
   latest_capture: { signal_at: string; inferred_at: string | null; artifact_sha256: string | null; model_version: string | null } | null;
 };
 
+type CaptureHealth = {
+  generated_at: string; since: string; note: string;
+  models: { role: string; status: string; observations: number; predictions: number; missing_predictions: number;
+    identity_missing: number; latest_observation_at: string | null; latest_prediction_at: string | null;
+    behind_latest_observation: boolean; model_versions: string[] }[];
+};
+function ProductionCaptureHealth() {
+  const v = useApi("admin-production-capture", (signal) => unwrap(api.GET("/v1/admin/ml/production/health", { signal })) as unknown as Promise<CaptureHealth>);
+  return <Card title="Production prediction capture" aside={<button className="btn btn-sm" onClick={v.reload} disabled={v.refreshing}>Refresh capture checks</button>}>
+    {v.error ? <ErrorState error={v.error} onRetry={v.reload} what="production prediction capture" /> : !v.data ? <Skeleton rows={2} label="Loading production capture" /> : <>
+      <p className="cap">Recent five-trading-day window since {etTime(v.data.since)} · Checked {etTime(v.data.generated_at)}.</p>
+      <div className="table-wrap"><table className="table"><thead><tr><th>Model</th><th>Capture status</th><th>Predictions / observations</th><th>Missing predictions</th><th>Missing complete identity</th><th>Latest prediction</th></tr></thead><tbody>
+        {v.data.models.map((m) => <tr key={m.role}><th scope="row">{m.role === "prebreakout" ? "PreBreakout" : "AI Confidence"}</th>
+          <td><HealthPill status={m.status} /></td><td>{m.predictions} / {m.observations}</td><td>{m.missing_predictions}</td><td>{m.identity_missing}</td>
+          <td>{m.latest_prediction_at ? etTime(m.latest_prediction_at) : "Not recorded"}{m.behind_latest_observation && <div className="cap">Behind latest saved observation</div>}</td></tr>)}
+      </tbody></table></div>
+      <p className="cap">{v.data.note}</p>
+    </>}
+  </Card>;
+}
+
 function ModelSummary() {
   const production = useApi("admin-ml-production", (signal) => unwrap(api.GET("/v1/admin/ml/production", { signal })) as unknown as Promise<Production>);
   const prebreakout = useApi("admin-ml-prebreakout", (signal) => unwrap(api.GET("/v1/admin/ml/production/prebreakout", { signal })) as unknown as Promise<Production>);
@@ -288,6 +309,7 @@ export function ModelsTab() {
     <div className="stack">
       <p className="notice">PreBreakout and AI Confidence are separate production scorers. ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
       <ModelSummary />
+      <ProductionCaptureHealth />
       <MlNextSteps />
       <MonitoringCard />
       <ShadowResults />

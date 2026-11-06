@@ -680,10 +680,15 @@ def build_dataset(rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapping
     Y = [[_canon(v) for v in r["outcome"].vector()] for r in records]
     maturity = [r["outcome"].maturity.get("5d") for r in records]
     filt = {k: _canon(v) for k, v in f.items()}
-    fp = fingerprint({"feature_schema_version": int(feature_schema_version),
+    payload = {"feature_schema_version": int(feature_schema_version),
                       "label_schema_version": int(label_schema_version), "filters": filt,
                       "feature_columns": fnames, "label_columns": lnames, "observation_ids": ids,
-                      "observed_at": obs_at, "features": X, "labels": Y, "maturity": maturity})
+                      "observed_at": obs_at, "features": X, "labels": Y, "maturity": maturity}
+    fp = fingerprint(payload)
+    component_fingerprints = {key: fingerprint(payload[key]) for key in
+                              ("observation_ids", "observed_at", "features", "labels", "maturity")}
+    component_fingerprints["schema_filters_columns"] = fingerprint({key: payload[key] for key in
+        ("feature_schema_version", "label_schema_version", "filters", "feature_columns", "label_columns")})
     cov = coverage(records, feature_schema_version=feature_schema_version)
     quality = quality_report(rows, records)
     metadata = {
@@ -700,6 +705,7 @@ def build_dataset(rows: Sequence[Mapping[str, Any]], scan_rows: Iterable[Mapping
         "feature_coverage": cov["features"],
         "code_revision": code_revision,
         "fingerprint": fp,
+        "component_fingerprints": component_fingerprints,
         "fingerprint_method": "sha256 over canonical JSON of schema versions, filters, column names, "
                               "ordered observation ids + observed_at, feature and label matrices, 5d maturity",
     }
