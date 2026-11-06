@@ -9,10 +9,11 @@ import { etTime, num, pct, price } from "@/lib/format";
 
 type Evidence = Schemas["IndicatorEvidence"];
 type Stock = Schemas["StockDetail"];
+type Selection = Pick<Schemas["ScanParams"], "rebound" | "momentum_recovery" | "uptrend_pullback" | "macd_confirmation">;
 
 function flag(available: boolean, passed: boolean) { return !available ? "Needs data" : passed ? "Pass" : "Not met"; }
 
-export function IndicatorFacts({ e, label = "RSI and MACD evidence" }: { e: Evidence; label?: string }) {
+export function IndicatorFacts({ e, label = "RSI and MACD evidence", selection }: { e: Evidence; label?: string; selection?: Selection }) {
   const rsi = e.rsi_14;
   const previous = e.rsi_previous;
   const checks: [string, string, string][] = [
@@ -26,14 +27,24 @@ export function IndicatorFacts({ e, label = "RSI and MACD evidence" }: { e: Evid
     ["MACD above signal line", `${num(e.macd_line, 4)} / signal ${num(e.macd_signal, 4)}`, flag(e.macd_histogram != null, e.macd_above_signal)],
     ["Fresh MACD bullish crossover", `Histogram ${num(e.macd_previous_histogram, 4)} → ${num(e.macd_histogram, 4)}`, flag(e.macd_histogram != null && e.macd_previous_histogram != null, e.macd_bullish_cross)],
   ];
+  const statuses = [
+    { name: "Rebound candidate", passed: e.rebound_candidate, selected: selection?.rebound },
+    { name: "Momentum recovery", passed: e.momentum_recovery, selected: selection?.momentum_recovery },
+    { name: "Uptrend pullback", passed: e.uptrend_pullback, selected: selection?.uptrend_pullback },
+    { name: "Fresh MACD bullish crossover", passed: e.macd_bullish_cross, selected: selection?.macd_confirmation === "bullish_cross" },
+    { name: "MACD above signal line", passed: e.macd_above_signal, selected: selection?.macd_confirmation === "above_signal" },
+  ];
+  const highlighted = statuses.filter((s) => selection ? s.selected : s.passed);
   return <>
     <div className="row-actions">
-      <Pill>{e.rebound_candidate ? "Rebound candidate" : "Rebound not confirmed"}</Pill>
-      <Pill>{e.momentum_recovery ? "Momentum recovery" : "Momentum recovery not confirmed"}</Pill>
-      <Pill>{e.uptrend_pullback ? "Uptrend pullback" : "Uptrend pullback not confirmed"}</Pill>
+      {highlighted.map((s) => <Pill key={s.name} tone={s.passed ? "up" : "warn"}>{selection ? `${s.name}: ${s.passed ? "passed" : "not confirmed"}` : s.name}</Pill>)}
+      {!selection && highlighted.length === 0 && <span className="cap">No indicator setup confirmed.</span>}
     </div>
     <p className="body-sm">RSI {num(rsi)} · Prior five-bar low {num(e.prior_5_rsi_low)}{e.prior_5_rsi_low_date ? ` (${e.prior_5_rsi_low_date})` : ""} · Change {pct(e.change_pct)} · RVOL {num(e.relative_volume)}×</p>
     <details><summary>View rule-by-rule checks</summary>
+    <div className="row-actions">
+      {statuses.filter((s) => !s.selected).map((s) => <Pill key={s.name}>{s.name}: {s.passed ? "passed" : "not confirmed"}</Pill>)}
+    </div>
     <div className="table-scroll" role="region" aria-label={label} tabIndex={0}>
       <table><thead><tr><th>Condition</th><th>Reading</th><th>Check</th></tr></thead><tbody>
         {checks.map(([label, value, result]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{result}</td></tr>)}
@@ -58,14 +69,14 @@ export function StockIndicatorEvidence({ s }: { s: Stock }) {
   const selected = job ? [job.params.rebound && "Rebound", job.params.momentum_recovery && "Momentum recovery", job.params.uptrend_pullback && "Uptrend pullback",
     job.params.macd_confirmation === "bullish_cross" && "Fresh MACD bullish crossover", job.params.macd_confirmation === "above_signal" && "MACD above signal"].filter(Boolean).join(" · ") : "";
   return <Card title="RSI and MACD checks" id="indicators">
-    <Pill>Experimental research</Pill>
+    <div><Pill>Experimental research</Pill></div>
     {requested && <>
       <h3 className="h3">Selected custom scan</h3>
       {scanId && saved.loading && <p className="cap" role="status">Loading the saved scan evidence…</p>}
       <ErrorLine error={saved.error} />
       {snapshot ? <>
         <p className="cap">{selected || "Custom indicator filters"} · Scan {job?.started_at ? etTime(job.started_at) : "time unavailable"} · Daily bar {snapshot.bar_date ?? "date unavailable"}.</p>
-        <IndicatorFacts e={snapshot} label="Selected scan RSI and MACD evidence" />
+        <IndicatorFacts e={snapshot} selection={job?.params} label="Selected scan RSI and MACD evidence" />
         <p className="cap">These readings are saved from your selected scan. The chart and HSF score use their own snapshots and may differ.</p>
       </> : (!scanId || (!saved.loading && !saved.error)) && <p className="cap">Saved evidence is unavailable for this ticker. Older scans may not contain it; no past qualification is inferred from newer bars.</p>}
     </>}

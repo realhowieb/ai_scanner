@@ -50,6 +50,13 @@ const SESSIONS: { id: Session; label: string; feature?: string }[] = [
   { id: "premarket", label: "Pre-market", feature: "can_premarket" },
   { id: "afterhours", label: "After hours", feature: "can_afterhours" },
 ];
+type RsiSetup = "" | "rebound" | "momentum_recovery" | "uptrend_pullback";
+const RSI_HELP: Record<RsiSetup, string> = {
+  "": "No RSI setup filter. Choose one setup, or use the optional RSI limits below.",
+  rebound: "RSI touched 30 or below in the prior five daily bars and is now above 30 and at most 50, with an up close and relative volume of at least 1.0.",
+  momentum_recovery: "RSI crosses from 50 or below to above 50 on the latest daily bar, with an up close and relative volume of at least 1.0.",
+  uptrend_pullback: "Previous RSI was 40–50 and now turns up while staying at most 50, with price above its 50-day average, an up close and relative volume of at least 1.0.",
+};
 const TOP_N = [10, 25, 50, 100, 200];
 const PHASE_LABEL: Record<string, string> = {
   queued: "Queued, waiting for a scanner",
@@ -140,9 +147,10 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const [minGap, setMinGap] = useState("");
   const [minRsi, setMinRsi] = useState("");
   const [maxRsi, setMaxRsi] = useState("");
-  const [rebound, setRebound] = useState(false);
-  const [momentumRecovery, setMomentumRecovery] = useState(false);
-  const [uptrendPullback, setUptrendPullback] = useState(false);
+  const [rsiSetup, setRsiSetup] = useState<RsiSetup>("");
+  const rebound = rsiSetup === "rebound";
+  const momentumRecovery = rsiSetup === "momentum_recovery";
+  const uptrendPullback = rsiSetup === "uptrend_pullback";
   const [macdConfirmation, setMacdConfirmation] = useState<"" | "bullish_cross" | "above_signal">("");
   const [scoreAll, setScoreAll] = useState(!!link);
   const [earnWindow, setEarnWindow] = useState<EarnWindow>(link?.when ?? "today");
@@ -250,8 +258,8 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     setSession(v.session ?? "regular"); setTopN(v.top_n ?? 25); setMinPrice(v.min_price == null ? "" : String(v.min_price));
     setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
     setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
-    setMinRsi(v.min_rsi == null ? "" : String(v.min_rsi)); setMaxRsi(v.max_rsi == null ? "" : String(v.max_rsi)); setRebound(v.rebound ?? false);
-    setMomentumRecovery(v.momentum_recovery ?? false); setUptrendPullback(v.uptrend_pullback ?? false); setMacdConfirmation(v.macd_confirmation ?? "");
+    setMinRsi(v.min_rsi == null ? "" : String(v.min_rsi)); setMaxRsi(v.max_rsi == null ? "" : String(v.max_rsi)); setRsiSetup(v.rebound ? "rebound" : v.momentum_recovery ? "momentum_recovery" : v.uptrend_pullback ? "uptrend_pullback" : "");
+    setMacdConfirmation(v.macd_confirmation ?? "");
     setFormErr(null);
   };
 
@@ -352,10 +360,33 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               })}
             </div>
 
-            <details className="advanced-scan"><summary>Advanced filters</summary><p className="cap">Blank fields use the scanner’s server defaults. Set a value to override them.</p>
-            <div className="grid2">
-              <label className="field"><span>Min RSI (14, daily)</span><input type="number" min="0" max="100" step="any" value={minRsi} onChange={(e) => { setMinRsi(e.target.value); setScoreAll(false); }} placeholder="No lower bound" /></label>
-              <label className="field"><span>Max RSI (14, daily)</span><input type="number" min="0" max="100" step="any" value={maxRsi} onChange={(e) => { setMaxRsi(e.target.value); setScoreAll(false); }} placeholder="No upper bound" /></label>
+            <details className="advanced-scan"><summary>Advanced filters</summary>
+            <div className="stack" style={{ marginTop: 16 }}>
+              <div className="stack-sm">
+                <label className="field"><span>RSI setup (experimental)</span><select value={rsiSetup} aria-describedby="rsi-setup-help" onChange={(e) => { setRsiSetup(e.target.value as RsiSetup); setScoreAll(false); }}>
+                  <option value="">No RSI setup filter</option><option value="rebound">Rebound candidates</option><option value="momentum_recovery">Momentum recovery</option><option value="uptrend_pullback">Uptrend pullback</option>
+                </select></label>
+                <p className="cap" id="rsi-setup-help">{RSI_HELP[rsiSetup]}</p>
+              </div>
+              <div className="stack-sm">
+                <p className="strong">Additional RSI limits (optional)</p>
+                <p className="cap" id="rsi-bounds-help">These limits also apply to the selected setup. Leave both blank to use its rules alone. Daily Wilder RSI(14).</p>
+                <div className="grid2">
+              <label className="field"><span>Min RSI (14, daily)</span><input aria-describedby="rsi-bounds-help" type="number" min="0" max="100" step="any" value={minRsi} onChange={(e) => { setMinRsi(e.target.value); setScoreAll(false); }} placeholder="No lower bound" /></label>
+              <label className="field"><span>Max RSI (14, daily)</span><input aria-describedby="rsi-bounds-help" type="number" min="0" max="100" step="any" value={maxRsi} onChange={(e) => { setMaxRsi(e.target.value); setScoreAll(false); }} placeholder="No upper bound" /></label>
+                </div>
+              </div>
+              <div className="stack-sm">
+                <label className="field"><span>MACD confirmation (12, 26, 9 daily)</span><select value={macdConfirmation} aria-describedby="macd-help" onChange={(e) => { setMacdConfirmation(e.target.value as typeof macdConfirmation); setScoreAll(false); }}>
+                  <option value="">No MACD filter</option><option value="bullish_cross">Fresh bullish crossover</option><option value="above_signal">MACD above signal line</option>
+                </select></label>
+                <p className="cap" id="macd-help">{macdConfirmation === "bullish_cross" ? "MACD moves above its signal line on the latest daily bar." : macdConfirmation === "above_signal" ? "MACD is above its signal line; the histogram is positive. MACD itself can still be below zero." : "Optional: use MACD alone or combine it with the selected RSI setup."}</p>
+              </div>
+              <p className="cap">Experimental research candidates, not breakout predictions. The latest daily bar can change during the session.</p>
+              <div className="stack-sm">
+                <p className="strong">Price, volume and results</p>
+                <p className="cap">Blank fields use the scanner’s server defaults.</p>
+                <div className="grid2">
               <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Server default" /></label>
@@ -364,17 +395,9 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                   {TOP_N.map((n) => <option key={n} value={n} disabled={n > maxRows}>{n}{n > maxRows ? " (upgrade)" : ""}</option>)}
                 </select>
               </label>
+                </div>
+              </div>
             </div>
-            <label className="check"><input type="checkbox" checked={rebound} onChange={(e) => { setRebound(e.target.checked); setMomentumRecovery(false); setUptrendPullback(false); setScoreAll(false); }} /><span>Rebound candidates (experimental)</span></label>
-            <label className="check"><input type="checkbox" checked={momentumRecovery} onChange={(e) => { setMomentumRecovery(e.target.checked); setRebound(false); setUptrendPullback(false); setScoreAll(false); }} /><span>Momentum recovery (experimental)</span></label>
-            <p className="cap">RSI crosses from 50 or below to above 50 on the latest daily bar, with an up close and relative volume of at least 1.0.</p>
-            <label className="check"><input type="checkbox" checked={uptrendPullback} onChange={(e) => { setUptrendPullback(e.target.checked); setRebound(false); setMomentumRecovery(false); setScoreAll(false); }} /><span>Uptrend pullback (experimental)</span></label>
-            <p className="cap">Previous RSI was 40–50 and now turns up while staying at most 50, with price above its 50-day average, an up close and relative volume of at least 1.0. Choose one RSI setup.</p>
-            <label className="field"><span>MACD confirmation (12, 26, 9 daily)</span><select value={macdConfirmation} onChange={(e) => { setMacdConfirmation(e.target.value as typeof macdConfirmation); setScoreAll(false); }}>
-              <option value="">No MACD filter</option><option value="bullish_cross">Fresh bullish crossover</option><option value="above_signal">MACD above signal line</option>
-            </select></label>
-            <p className="cap">Fresh crossover: MACD moves above its signal line on the latest daily bar. Above signal: the histogram is positive; MACD itself can still be below zero. Use alone or with one RSI setup.</p>
-            <p className="cap">Rebound: RSI touched 30 or below in the prior five daily bars, is now above 30 and at most 50, the latest close is up, and relative volume is at least 1.0. Research candidates, not breakout predictions. RSI uses the latest daily bar, which can change during the session. Blank RSI bounds impose no RSI limit.</p>
             <label className={`check${can("can_unusual_volume") ? "" : " is-locked"}`}>
               <input type="checkbox" checked={unusual} disabled={!can("can_unusual_volume")} onChange={(e) => setUnusual(e.target.checked)} />
               <span>Unusual volume only{can("can_unusual_volume") ? "" : " · Pro"}</span>
