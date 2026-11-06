@@ -98,6 +98,12 @@ def register(app: FastAPI) -> None:
 
         return json_safe(_call(production_confidence))
 
+    @get("/v1/admin/ml/production/prebreakout", "Production PreBreakout: configured model and latest capture")
+    def ml_prebreakout_production(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.ml_operations import production_prebreakout
+
+        return json_safe(_call(production_prebreakout))
+
     @get("/v1/admin/ml/models", "ML v4 registry models")
     def ml_models(status: Optional[Literal["candidate", "validated", "shadow", "champion", "retired"]] = None,
                   target_label: Optional[str] = Query(None, pattern=_LABEL),
