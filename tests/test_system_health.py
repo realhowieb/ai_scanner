@@ -560,12 +560,14 @@ class ApiDiagnosticAccessTests(unittest.TestCase):
 
         from scripts.system_health import api_ready
         login, diagnostic = MagicMock(), MagicMock()
+        post, get = MagicMock(return_value=login), MagicMock(return_value=diagnostic)
+        requests = MagicMock(post=post, get=get)
         login.json.return_value = {'access_token': 'test-access'}
         diagnostic.json.return_value = {'rss_mb': 200, 'memory_warning': False}
         diagnostic.headers = {'content-type': 'application/json'}
         diagnostic.status_code = 200
         with patch.dict('os.environ', {'ACC_ADMIN_EMAIL': 'admin@example.test', 'ACC_ADMIN_PASSWORD': 'test-password'}), \
-                patch('requests.post', return_value=login) as post, patch('requests.get', return_value=diagnostic) as get:
+                patch.dict('sys.modules', {'requests': requests}):
             result = api_ready()
         self.assertTrue(post.call_args.args[0].endswith('/v1/auth/login'))
         self.assertTrue(get.call_args.args[0].endswith('/v1/admin/readiness'))
@@ -573,12 +575,13 @@ class ApiDiagnosticAccessTests(unittest.TestCase):
         self.assertEqual(result['rss_mb'], 200)
 
     def test_missing_credentials_fail_closed_without_public_fallback(self):
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         from scripts.system_health import api_ready
-        with patch.dict('os.environ', {'ACC_ADMIN_EMAIL': '', 'ACC_ADMIN_PASSWORD': ''}), patch('requests.get') as get:
+        requests = MagicMock()
+        with patch.dict('os.environ', {'ACC_ADMIN_EMAIL': '', 'ACC_ADMIN_PASSWORD': ''}), patch.dict('sys.modules', {'requests': requests}):
             result = api_ready()
-        get.assert_not_called()
+        requests.get.assert_not_called()
         self.assertFalse(result['diagnostics_available'])
         from analytics.system_health import api_memory_incident
         incident = api_memory_incident(result, WED)
