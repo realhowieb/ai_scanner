@@ -927,7 +927,7 @@ class TrackRecordSummary(BaseModel):
     horizon_days: int
     avg_excess_return: Optional[float] = Field(default=None, description="Mean return vs SPY (0.012 = +1.2%)")
     median_excess_return: Optional[float] = None
-    win_rate: Optional[float] = Field(default=None, description="Share of picks that beat SPY")
+    win_rate: Optional[float] = Field(default=None, description="Deprecated alias for benchmark_outperformance_rate; strict >0 excess, ties count false")
     sample_size: Optional[int] = None
     runs_used: Optional[int] = None
     top_n: Optional[int] = None
@@ -935,9 +935,29 @@ class TrackRecordSummary(BaseModel):
     computed_at: Optional[str] = None
     sufficient: bool = Field(description="False while sample_size < min_sample_size (show 'still building')")
 
+    methodology: str
+    entry_policy: str
+    avg_absolute_return: Optional[float] = None
+    median_absolute_return: Optional[float] = None
+    positive_return_rate: Optional[float] = Field(default=None, description="Share with absolute return >0; zero counts false")
+    benchmark_outperformance_rate: Optional[float] = None
+    observation_count: int = 0
+    selected_count: int = 0
+    evaluated_count: int = 0
+    excluded_count: int = 0
+    coverage_pct: Optional[float] = None
+    exclusions: Dict[str, int] = {}
+    unique_ticker_count: int = 0
+    selected_unique_ticker_count: int = 0
+    signal_date_count: int = 0
+    snapshots_considered: int = 0
+    ranking_unavailable_snapshots: int = 0
+    observations: List[Dict[str, Any]] = []
+
 
 class TrackRecord(BaseModel):
     disclaimer: str
+    methodology: str
     min_sample_size: int
     summary: Dict[str, Any] = Field(default={}, description="UI headline: best horizon, sample readiness and plain-language read")
     summaries: List[TrackRecordSummary] = []
@@ -945,6 +965,7 @@ class TrackRecord(BaseModel):
 
 class TrackRecordDay(BaseModel):
     day: str
+    methodology: str
     avg_excess_return: Optional[float] = None
 
 

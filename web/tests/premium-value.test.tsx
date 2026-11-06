@@ -9,7 +9,7 @@ import { trackRecordCsv } from "@/features/TrackRecordView";
 import { watchlistCsv } from "@/features/WatchlistsView";
 import { SessionProvider } from "@/session/SessionProvider";
 
-import { me } from "./fixtures";
+import { me, trackDefaults } from "./fixtures";
 import { jsonResponse } from "./helpers";
 
 vi.mock("next/navigation", () => ({
@@ -115,11 +115,15 @@ describe("Research CSV (Premium)", () => {
     const j = journalCsv([{ id: 1, ticker: "AAA", open: false, shares: 10, entry_price: 10, exit_price: 11, mark: 11, pnl: 10, pnl_pct: 10, source: "scan", entered_at: "a", closed_at: "b" }]);
     expect(j.rows[0]).toEqual(["AAA", "Closed", "scan", 10, 10, "a", 11, "b", 11, 10, 10]);
     const tr = trackRecordCsv([
-      { ranking: "breakout", ranking_label: "Breakout", horizon_days: 5, avg_excess_return: 0.0123, median_excess_return: 0.01, win_rate: 0.55, sample_size: 400, runs_used: 40, benchmark: "SPY", sufficient: true },
-      { ranking: "breakout", ranking_label: "Breakout", horizon_days: 20, avg_excess_return: 0.5, sample_size: 3, benchmark: "SPY", sufficient: false },
-    ], [{ day: "2026-10-30", avg_excess_return: -0.002 }], 5);
+      { ...trackDefaults, ranking: "breakout", ranking_label: "Breakout", horizon_days: 5, avg_excess_return: 0.0123, median_excess_return: 0.01, win_rate: 0.55, sample_size: 400, runs_used: 40, benchmark: "SPY", sufficient: true },
+      { ...trackDefaults, ranking: "breakout", ranking_label: "Breakout", horizon_days: 20, avg_excess_return: 0.5, sample_size: 3, benchmark: "SPY", sufficient: false },
+    ], [{ day: "2026-10-30", avg_excess_return: -0.002, methodology: "track-v2-next-open" }], 5);
     expect(tr.rows[0]!.slice(0, 7)).toEqual(["Summary", "Breakout", 5, "", 1.23, 1, 55]);
     expect(tr.rows[1]!.slice(4, 7)).toEqual([null, null, null]);   // still building: no rates
     expect(tr.rows[2]!.slice(0, 5)).toEqual(["Daily", "Breakout", 5, "2026-10-30", -0.2]);
+    expect(tr.rows.every((row) => row.length === tr.header.length)).toBe(true);
+    expect(tr.header).toContain("Coverage %");
+    expect(tr.rows[0]![11]).toBe("track-v2-next-open");
+    expect(tr.rows[0]![13]).toBe(-2); // absolute loss stays distinct from positive excess
   });
 });

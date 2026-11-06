@@ -1,20 +1,10 @@
-"""Diagnostic: is the negative track record entry-timing, regime, or selection?
+"""Read-only comparison of versioned historical signal research proxies.
 
-Recomputes the signal track record under two entry conventions and prints them
-side by side:
-
-  close — enter at the signal-day CLOSE (production default). For premarket
-          snapshots this discards the entire signal-day move.
-  open  — enter at the signal-day OPEN (the realistic premarket-signal fill),
-          which captures the move the breakout signal is designed to catch.
-
-If `open` flips the excess materially toward/above zero, the negative number is
-a methodology artifact (entering after the move). If both stay negative, it's
-regime/selection and a public track-record page should wait.
-
-Also dumps the 5D per-day excess series so a few dominant days (a regime blip)
-are distinguishable from a persistent drag. Read-only; run headless via the
-diagnostics workflow.
+Open/close means the first exchange open/close strictly after saved availability.
+They have different horizon conventions (see TRACK_RECORD_METHODOLOGY.md), not
+executable fill claims. A sign change alone is not proof of a methodology cause
+or investment quality. Report exclusions as well as returns. Never dispatched
+as part of the local historical-performance audit.
 """
 from __future__ import annotations
 
@@ -30,10 +20,12 @@ MODES = ("close", "open")
 
 
 def _fmt(summary) -> str:
+    if not summary.get('evaluated_count'):
+        return f"selected={summary.get('selected_count')} evaluated=0 exclusions={summary.get('exclusions')}"
     return (
         f"avg={summary['avg_return']:+.2%}  med={summary['median_return']:+.2%}  "
         f"beat={summary['win_rate']:.0%}  n={summary['sample_size']}  "
-        f"runs={summary['runs_used']}"
+        f"runs={summary['runs_used']} method={summary['methodology']} coverage={summary['coverage_pct']:.1f}%"
     )
 
 

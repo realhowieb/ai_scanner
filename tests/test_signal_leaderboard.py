@@ -51,10 +51,10 @@ class LeaderboardStoreTests(unittest.TestCase):
         rows = [
             {"signal": "breakout", "display": "Breakout score", "avg_excess": 0.03,
              "median_excess": 0.02, "win_rate": 0.6, "sample_size": 40,
-             "runs_used": 8, "benchmark": "SPY", "top_n": 5},
+             "runs_used": 8, "benchmark": "SPY", "top_n": 5, "methodology": "track-v2-next-open"},
             {"signal": "gap", "display": "Gap %", "avg_excess": -0.01,
              "median_excess": 0.0, "win_rate": 0.45, "sample_size": 40,
-             "runs_used": 8, "benchmark": "SPY", "top_n": 5},
+             "runs_used": 8, "benchmark": "SPY", "top_n": 5, "methodology": "track-v2-next-open"},
         ]
         # fetch=(1,) → the schema's PK-migration check sees entry_mode already
         # present and skips the ALTER path.
@@ -66,10 +66,10 @@ class LeaderboardStoreTests(unittest.TestCase):
         inserts = [c for c in save_conn.cur.calls if "INSERT INTO signal_leaderboard" in c[0]]
         self.assertEqual(len(inserts), 2)
         # entry_mode is the 3rd bound param on each insert
-        self.assertEqual(inserts[0][1][2], "open")
+        self.assertEqual(inserts[0][1][2], "track-v2-next-open:open")
 
         # load maps tuple rows to dicts in the declared column order (now with entry_mode)
-        tup = ("breakout", 5, "close", "Breakout score", 0.03, 0.02, 0.6, 40, 8, "SPY", 5, None)
+        tup = ("breakout", 5, "track-v2-next-close:close", "Breakout score", 0.03, 0.02, 0.6, 40, 8, "SPY", 5, None, {"methodology": "track-v2-next-close"})
         load_conn = _Conn(fetch=(1,), fetchall=[tup])
         with mock.patch.object(lb, "get_neon_conn", return_value=load_conn):
             out = lb.load_leaderboard(5, entry_mode="close")
@@ -99,23 +99,18 @@ class LeaderboardComputeTests(unittest.TestCase):
             "BreakoutScore": [90.0, 50.0, 10.0],
             "GapPct": [1.0, 2.0, 9.0],
         })
-        run_date = __import__("datetime").date(2026, 1, 5)
+        run_date = __import__("datetime").datetime(2026, 1, 5, 13, tzinfo=__import__("datetime").timezone.utc)
 
         # forward returns: AAA +10%, BBB 0, CCC -10%, SPY 0.
         fwd = {"AAA": 0.10, "BBB": 0.0, "CCC": -0.10, "SPY": 0.0}
 
-        def fake_forward(bars, rd, horizon, entry_mode="close"):
-            return fwd.get(bars)  # we stash the symbol string as "bars"
-
-        bars_by_symbol = {s: s for s in ("AAA", "BBB", "CCC", "SPY")}
+        bars_by_symbol = {s: pd.DataFrame({"Open": [100]*6, "Close": [100*(1+fwd[s])]*6}, index=pd.bdate_range("2026-01-05", periods=6)) for s in fwd}
 
         with mock.patch.object(sl, "TOP_N", 1), \
              mock.patch.object(sl, "_eligible_snapshots", return_value=[(run_date, df)]), \
-             mock.patch.object(sl, "_forward_return", side_effect=fake_forward), \
-             mock.patch.object(sl, "_bars_for", side_effect=lambda m, s: m.get(s)), \
              mock.patch("data.price_alpaca.download_multi_alpaca",
                         return_value=bars_by_symbol):
-            rows = sl.compute_signal_leaderboard(horizon_days=5, max_snapshots=1)
+            rows = sl.compute_signal_leaderboard(horizon_days=5, max_snapshots=1, entry_mode="open")
 
         self.assertIsNotNone(rows)
         by_sig = {r["signal"]: r for r in rows}

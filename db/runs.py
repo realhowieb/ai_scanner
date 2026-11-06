@@ -345,7 +345,7 @@ def list_runs(
         return []
 
 
-def list_snapshot_runs(days: int = 45, limit: int = 60) -> List[Dict[str, Any]]:
+def list_snapshot_runs(days: int = 45, limit: int = 60, *, public_only: bool = False) -> List[Dict[str, Any]]:
     """Recent snapshot runs only, filtered in SQL.
 
     Callers used to pull thousands of run-metadata rows via list_runs() to find
@@ -366,10 +366,11 @@ def list_snapshot_runs(days: int = 45, limit: int = 60) -> List[Dict[str, Any]]:
             FROM runs
             WHERE is_snapshot = TRUE
               AND created_at >= NOW() - make_interval(days => %s)
-            ORDER BY created_at DESC
+              AND (NOT %s OR (username = 'cron' AND label = 'daily_snapshot'))
+            ORDER BY created_at DESC, id DESC
             LIMIT %s
             """,
-            (int(days), int(limit)),
+            (int(days), bool(public_only), int(limit)),
         )
         rows = cur.fetchall() or []
         cur.close()

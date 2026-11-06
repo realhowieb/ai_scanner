@@ -29,3 +29,12 @@ export const stockDetail = (over: Partial<Schemas["StockDetail"]> = {}): Schemas
   earnings_days: 3, history_summary: { observations: 4, matured: 3, positive: 2 }, historical_context: null, outcome_cohort: null,
   historical_locked: false, lifecycle: [], bars: [], bars_as_of: null, watchlists: [], alerts: [], ...over,
 });
+
+
+export const trackDefaults = {
+  methodology: "track-v2-next-open", entry_policy: "first_session_open_strictly_after_snapshot",
+  avg_absolute_return: -0.02, median_absolute_return: -0.01, positive_return_rate: 0.4, benchmark_outperformance_rate: 0.56,
+  observation_count: 40, selected_count: 50, evaluated_count: 40, excluded_count: 10, coverage_pct: 80,
+  exclusions: { MISSING_SYMBOL_BARS: 10 }, unique_ticker_count: 20, selected_unique_ticker_count: 25,
+  signal_date_count: 10, snapshots_considered: 10, ranking_unavailable_snapshots: 0, observations: [],
+};
