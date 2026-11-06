@@ -56,6 +56,9 @@ class CustomView(StrictModel):
     unusual: bool = False
     gap: bool = False
     min_gap: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    min_rsi: float | None = Field(None, ge=0, le=100, allow_inf_nan=False)
+    max_rsi: float | None = Field(None, ge=0, le=100, allow_inf_nan=False)
+    rebound: bool | None = None
     score_all: bool = False
 
 

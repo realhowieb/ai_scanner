@@ -21,6 +21,7 @@ run_breakout_scan, then shapes rows exactly like GET /v1/scans/latest.
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Callable, Dict, List, Optional
 
@@ -96,6 +97,15 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
     min_price, max_price = float(f.get("min_price", 1.0)), float(f.get("max_price", 1000.0))
     if min_price > max_price:
         raise ValueError("min_price must not exceed max_price.")
+    min_rsi, max_rsi = f.get("min_rsi"), f.get("max_rsi")
+    for bound in (min_rsi, max_rsi):
+        if bound is not None and (not math.isfinite(float(bound)) or not 0 <= float(bound) <= 100):
+            raise ValueError("RSI bounds must be between 0 and 100.")
+    if min_rsi is not None and max_rsi is not None and min_rsi > max_rsi:
+        raise ValueError("Min RSI must not exceed Max RSI.")
+    has_rsi_screen = min_rsi is not None or max_rsi is not None or bool(f.get("rebound"))
+    if has_rsi_screen and req.get("score_all"):
+        raise ValueError("Turn off Score all to use RSI or rebound filters.")
     return {
         "universe": universe,
         "ticker": (req.get("ticker") or "").strip().upper() or None,
@@ -105,10 +115,11 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
         "profile": f.get("profile") or "regular",
         "session_requested": session,
         "session": effective_session,
+        "min_rsi": min_rsi, "max_rsi": max_rsi, "rebound": bool(f.get("rebound")),
         "min_price": min_price,
         "max_price": max_price,
         "min_dollar_vol": float(f.get("min_dollar_vol", 5_000_000.0)),
-        "min_gap": float(f.get("min_gap", 1.0)),
+        "min_gap": 0.0 if has_rsi_screen and not f.get("apply_gap_filter") else float(f.get("min_gap", 1.0)),
         "apply_gap_filter": bool(f.get("apply_gap_filter")),
         "unusual_volume": bool(f.get("unusual_volume")),
         "top_n": top_n,
@@ -206,11 +217,15 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
 
     bypass = p["universe"] in ("watchlist", "earnings") and p["score_all"]   # web: "score all" ignores the screens
     started = time.perf_counter()
+    has_rsi_screen = p.get("min_rsi") is not None or p.get("max_rsi") is not None or p.get("rebound", False)
+    def runner(**kwargs):
+        return run_breakout_scan(**kwargs, min_rsi=p.get("min_rsi"), max_rsi=p.get("max_rsi"), rebound=p.get("rebound", False))
+
     df = run_manual_scan_execution(
-        runner=run_breakout_scan, tickers=tickers,
+        runner=runner if has_rsi_screen else run_breakout_scan, tickers=tickers,
         premarket=p["session"] == "premarket", afterhours=p["session"] == "afterhours",
         unusual_volume=False if bypass else p["unusual_volume"],
-        min_gap=0.0 if bypass else p["min_gap"],
+        min_gap=0.0 if bypass or (has_rsi_screen and not p["apply_gap_filter"]) else p["min_gap"],
         min_price=0.0 if bypass else p["min_price"],
         max_price=1_000_000.0 if bypass else p["max_price"],
         top_n=max(p["top_n"], len(tickers)) if bypass else p["top_n"],
@@ -224,6 +239,15 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
     _save_run(df, label, username, duration)
     opps = redact_prebreakout_rows(top_setups(df, n=100_000), allowed=p["early_breakout"])
     rows = [_scan_row(o) for o in opps]
+    by_ticker = {str(r.get("Ticker") or r.get("Symbol")).upper(): r for r in df.to_dict("records")}
+    for row in rows:
+        evidence = by_ticker.get(row["ticker"], {})
+        rsi_value = evidence.get("RSI14")
+        row["rsi_14"] = float(rsi_value) if rsi_value is not None and math.isfinite(float(rsi_value)) else None
+        row["rebound_candidate"] = bool(evidence.get("ReboundCandidate", False))
+        if p.get("rebound"):
+            row["primary_setup"] = "Rebound candidate"
+
     total = len(rows)
     if p["universe"] == "earnings":   # up to a few hundred names: the plan's row cap applies
         rows = rows[:p["max_results"]]

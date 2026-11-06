@@ -3828,17 +3828,23 @@ export interface components {
             gap: boolean;
             /** Max Price */
             max_price?: number | null;
+            /** Max Rsi */
+            max_rsi?: number | null;
             /** Min Dollar Vol */
             min_dollar_vol?: number | null;
             /** Min Gap */
             min_gap?: number | null;
             /** Min Price */
             min_price?: number | null;
+            /** Min Rsi */
+            min_rsi?: number | null;
             /**
              * Name
              * @default AI scan
              */
             name: string;
+            /** Rebound */
+            rebound?: boolean | null;
             /**
              * Score All
              * @default false
@@ -5633,14 +5639,20 @@ export interface components {
             gap: boolean;
             /** Max Price */
             max_price?: number | null;
+            /** Max Rsi */
+            max_rsi?: number | null;
             /** Min Dollar Vol */
             min_dollar_vol?: number | null;
             /** Min Gap */
             min_gap?: number | null;
             /** Min Price */
             min_price?: number | null;
+            /** Min Rsi */
+            min_rsi?: number | null;
             /** Name */
             name: string;
+            /** Rebound */
+            rebound?: boolean | null;
             /**
              * Score All
              * @default false
@@ -9574,6 +9586,11 @@ export interface components {
              */
             max_price: number;
             /**
+             * Max Rsi
+             * @description Inclusive daily Wilder RSI(14) upper bound
+             */
+            max_rsi?: number | null;
+            /**
              * Min Dollar Vol
              * @description 20-day average dollar volume floor
              * @default 5000000
@@ -9591,11 +9608,22 @@ export interface components {
              */
             min_price: number;
             /**
+             * Min Rsi
+             * @description Inclusive daily Wilder RSI(14) lower bound
+             */
+            min_rsi?: number | null;
+            /**
              * Profile
              * @default regular
              * @enum {string}
              */
             profile: "regular" | "aggressive" | "conservative";
+            /**
+             * Rebound
+             * @description Experimental RSI recovery screen; not a breakout prediction
+             * @default false
+             */
+            rebound: boolean;
             /**
              * Session
              * @description premarket / afterhours: Pro+
@@ -9684,17 +9712,23 @@ export interface components {
              * @description This plan's row cap (Starter 25, Pro 100, Premium 200)
              */
             max_results: number;
+            /** Max Rsi */
+            max_rsi?: number | null;
             /** Min Dollar Vol */
             min_dollar_vol: number;
             /** Min Gap */
             min_gap: number;
             /** Min Price */
             min_price: number;
+            /** Min Rsi */
+            min_rsi?: number | null;
             /**
              * Profile
              * @enum {string}
              */
             profile: "regular" | "aggressive" | "conservative";
+            /** Rebound */
+            rebound?: boolean | null;
             /**
              * Score All
              * @default false
@@ -9790,6 +9824,10 @@ export interface components {
              * @description Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.
              */
             prob_rank?: number | null;
+            /** Rebound Candidate */
+            rebound_candidate?: boolean | null;
+            /** Rsi 14 */
+            rsi_14?: number | null;
             /** Rvol */
             rvol?: number | null;
             /** Score */
@@ -11302,6 +11340,10 @@ export interface components {
              * @description Position in that scan's ranked setups (1 = top)
              */
             rank: number;
+            /** Rebound Candidate */
+            rebound_candidate?: boolean | null;
+            /** Rsi 14 */
+            rsi_14?: number | null;
             /** Rvol */
             rvol?: number | null;
             /** Score */

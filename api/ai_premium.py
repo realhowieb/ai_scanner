@@ -347,6 +347,10 @@ BUILDER_SYSTEM = (
     "top_n: 10, 25, 50, 100 or 200 results\n"
     "min_price, max_price: dollars\n"
     "min_dollar_vol: minimum average daily dollar volume in dollars (e.g. 5000000 for $5M)\n"
+    "min_rsi, max_rsi: optional inclusive daily Wilder RSI(14) bounds 0 to 100. RSI <=30 means max_rsi=30.\n"
+    "rebound: true for experimental recovery: prior five bars touched RSI <=30, now 30<RSI<=50, up close and RVOL>=1.\n"
+    "Only daily RSI period 14 is supported. For unsupported periods/timeframes omit RSI bounds and rebound; explain the limitation. Never substitute a different period.\n"
+    "Do not set score_all=true when RSI bounds or rebound are requested.\n"
     "unusual: true to keep only unusual relative volume\n"
     "gap: true to keep only gappers; min_gap: minimum gap in percent\n"
     "score_all: true to score every ticker, not only setups (ticker, watchlist or earnings universes)\n"
@@ -403,15 +407,20 @@ def parse_builder(text: str, watchlist_ids: Sequence[int]) -> Dict[str, Any]:
     except (TypeError, ValueError):
         n = 25
     view["top_n"] = min(BUILDER_TOP_N, key=lambda x: abs(x - n))
-    for k, hi in (("min_price", 1e6), ("max_price", 1e6), ("min_dollar_vol", 1e12), ("min_gap", 100.0)):
+    for k, hi in (("min_price", 1e6), ("max_price", 1e6), ("min_dollar_vol", 1e12), ("min_gap", 100.0), ("min_rsi", 100.0), ("max_rsi", 100.0)):
         v = _num_or_none(raw.get(k), 0.0, hi)
+        if k in ("min_rsi", "max_rsi") and raw.get(k) is not None and v is None:
+            raise ValueError("RSI bounds must be between 0 and 100")
         if v is not None:
             view[k] = v
     if "min_price" in view and "max_price" in view and view["min_price"] > view["max_price"]:
         view["min_price"], view["max_price"] = view["max_price"], view["min_price"]
+    if "min_rsi" in view and "max_rsi" in view and view["min_rsi"] > view["max_rsi"]:
+        raise ValueError("Min RSI must not exceed Max RSI")
+    view["rebound"] = raw.get("rebound") is True
     view["unusual"] = raw.get("unusual") is True
     view["gap"] = raw.get("gap") is True or "min_gap" in view
-    view["score_all"] = raw.get("score_all") is True and view["universe"] in ("ticker", "watchlist", "earnings")
+    view["score_all"] = raw.get("score_all") is True and not (view.get("rebound") or "min_rsi" in view or "max_rsi" in view) and view["universe"] in ("ticker", "watchlist", "earnings")
     explain = str(raw.get("explain") or "").strip()[:300]
     return {"view": view, "explanation": explain or None}
 
