@@ -10876,6 +10876,8 @@ export interface components {
         TrackRecord: {
             /** Disclaimer */
             disclaimer: string;
+            /** Methodology */
+            methodology: string;
             /** Min Sample Size */
             min_sample_size: number;
             /**
@@ -10898,9 +10900,13 @@ export interface components {
             avg_excess_return?: number | null;
             /** Day */
             day: string;
+            /** Methodology */
+            methodology: string;
         };
         /** TrackRecordSummary */
         TrackRecordSummary: {
+            /** Avg Absolute Return */
+            avg_absolute_return?: number | null;
             /**
              * Avg Excess Return
              * @description Mean return vs SPY (0.012 = +1.2%)
@@ -10911,12 +10917,56 @@ export interface components {
              * @default SPY
              */
             benchmark: string;
+            /** Benchmark Outperformance Rate */
+            benchmark_outperformance_rate?: number | null;
             /** Computed At */
             computed_at?: string | null;
+            /** Coverage Pct */
+            coverage_pct?: number | null;
+            /** Entry Policy */
+            entry_policy: string;
+            /**
+             * Evaluated Count
+             * @default 0
+             */
+            evaluated_count: number;
+            /**
+             * Excluded Count
+             * @default 0
+             */
+            excluded_count: number;
+            /**
+             * Exclusions
+             * @default {}
+             */
+            exclusions: {
+                [key: string]: number;
+            };
             /** Horizon Days */
             horizon_days: number;
+            /** Median Absolute Return */
+            median_absolute_return?: number | null;
             /** Median Excess Return */
             median_excess_return?: number | null;
+            /** Methodology */
+            methodology: string;
+            /**
+             * Observation Count
+             * @default 0
+             */
+            observation_count: number;
+            /**
+             * Observations
+             * @default []
+             */
+            observations: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Positive Return Rate
+             * @description Share with absolute return >0; zero counts false
+             */
+            positive_return_rate?: number | null;
             /**
              * Ranking
              * @enum {string}
@@ -10924,10 +10974,35 @@ export interface components {
             ranking: "breakout" | "prebreakout";
             /** Ranking Label */
             ranking_label: string;
+            /**
+             * Ranking Unavailable Snapshots
+             * @default 0
+             */
+            ranking_unavailable_snapshots: number;
             /** Runs Used */
             runs_used?: number | null;
             /** Sample Size */
             sample_size?: number | null;
+            /**
+             * Selected Count
+             * @default 0
+             */
+            selected_count: number;
+            /**
+             * Selected Unique Ticker Count
+             * @default 0
+             */
+            selected_unique_ticker_count: number;
+            /**
+             * Signal Date Count
+             * @default 0
+             */
+            signal_date_count: number;
+            /**
+             * Snapshots Considered
+             * @default 0
+             */
+            snapshots_considered: number;
             /**
              * Sufficient
              * @description False while sample_size < min_sample_size (show 'still building')
@@ -10936,8 +11011,13 @@ export interface components {
             /** Top N */
             top_n?: number | null;
             /**
+             * Unique Ticker Count
+             * @default 0
+             */
+            unique_ticker_count: number;
+            /**
              * Win Rate
-             * @description Share of picks that beat SPY
+             * @description Deprecated alias for benchmark_outperformance_rate; strict >0 excess, ties count false
              */
             win_rate?: number | null;
         };

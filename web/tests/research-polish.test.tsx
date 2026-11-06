@@ -188,8 +188,8 @@ describe("Research wording", () => {
   it("Track record says it is a historical description and drops the best-slice headline", async () => {
     vi.stubGlobal("fetch", vi.fn(async (r: Request) => {
       if (path(r) === "/v1/track-record") {
-        return jsonResponse({ disclaimer: "Descriptive.", min_sample_size: 25, summary: { best_ranking: "BreakoutScore", best_horizon_days: 1, best_avg_excess_return: -0.001, ready_horizons: 5 },
-          summaries: [{ ranking: "breakout", ranking_label: "BreakoutScore", horizon_days: 1, avg_excess_return: -0.001, median_excess_return: 0, win_rate: 0.49, sample_size: 148, runs_used: 30, sufficient: true }] });
+        return jsonResponse({ methodology: "track-v2-next-open", disclaimer: "Descriptive.", min_sample_size: 25, summary: { best_ranking: "BreakoutScore", best_horizon_days: 1, best_avg_excess_return: -0.001, ready_horizons: 5 },
+          summaries: [{ methodology: "track-v2-next-open", ranking: "breakout", ranking_label: "BreakoutScore", horizon_days: 1, avg_excess_return: -0.001, median_excess_return: 0, win_rate: 0.49, sample_size: 148, runs_used: 30, sufficient: true }] });
       }
       return jsonResponse({ detail: "Not Found" }, 404);
     }));

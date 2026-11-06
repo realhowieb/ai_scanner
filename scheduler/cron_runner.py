@@ -867,19 +867,20 @@ def _refresh_track_record() -> None:
                 benchmark=summary.get("benchmark"),
                 top_n=summary.get("top_n"),
                 ranking=ranking,
+                details=summary,
             )
             any_saved = any_saved or saved
             if horizon == 5 and summary.get("daily"):
                 try:
                     from db.track_record import save_daily_excess
 
-                    save_daily_excess(ranking, 5, summary["daily"])
+                    save_daily_excess(ranking, 5, summary["daily"], methodology=summary["methodology"])
                 except Exception as e:
                     print(f"[track_record] daily save failed: {e}")
             print(
                 f"[track_record] h={horizon} {ranking}: "
-                f"excess_vs_{summary.get('benchmark')}={summary['avg_return']:+.2%} "
-                f"beat={summary['win_rate']:.0%} n={summary['sample_size']}"
+                f"selected={summary['selected_count']} evaluated={summary['evaluated_count']} "
+                f"excluded={summary['excluded_count']}"
             )
 
     if any_saved:
@@ -905,9 +906,8 @@ def _refresh_signal_leaderboard() -> None:
     from db.signal_leaderboard import save_leaderboard
 
     any_saved = False
-    # Both entry conventions: 'close' (enter at signal-day close) and 'open'
-    # (enter at signal-day open — the realistic fill for an early signal). Users
-    # compare them in the Strategy Lab.
+    # Versioned proxies: first session open/close strictly after availability.
+    # Neither is an executable fill or a portfolio strategy.
     for entry_mode in ("close", "open"):
         for horizon in (1, 5, 20):
             rows = compute_signal_leaderboard(horizon_days=horizon, entry_mode=entry_mode)
@@ -919,8 +919,7 @@ def _refresh_signal_leaderboard() -> None:
             best = rows[0]
             print(
                 f"[leaderboard] {entry_mode} h={horizon}: {saved} signals; "
-                f"best={best['signal']} excess={best['avg_excess']:+.2%} "
-                f"beat={best['win_rate']:.0%} n={best['sample_size']}"
+                f"best={best['signal']} evaluated={best['sample_size']}"
             )
 
     if any_saved:

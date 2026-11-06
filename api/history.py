@@ -11,13 +11,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from analytics.track_method import METHOD
 from api.store import DatabaseUnavailable
 
 RANKINGS = {"breakout": "BreakoutScore", "prebreakout": "PreBreakoutProb"}
 HORIZONS = (1, 3, 5, 10, 20)
 MIN_SAMPLE_SIZE = 25   # ui.track_record: fewer matured picks reads "still building"
-DISCLAIMER = ("Historical research: backtested on saved scan snapshots. These figures are descriptive and "
-              "are not evidence that HSF signals work. Past performance is not indicative of future results.")
+DISCLAIMER = ("Historical signal research, not executable trades or a portfolio backtest. "
+              "First regular-session open strictly after the saved snapshot; exit at the close of the horizon's last session. "
+              "Beating SPY can still mean losing money. Repeated tickers and overlapping windows are not independent observations. "
+              "No fees, spreads, slippage, liquidity or capital allocation are modeled. "
+              "These figures are not evidence that HSF signals work.")
 
 
 def _run_row(r: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,9 +83,9 @@ TRACK_RECORD_STALE_S = 6 * 3600
 def track_record() -> Dict[str, Any]:
     from api.today import _cache, _cached
 
-    out = _cached("track_record", _track_record, ttl_s=TRACK_RECORD_TTL_S, stale_s=TRACK_RECORD_STALE_S)
+    out = _cached(("track_record", METHOD), _track_record, ttl_s=TRACK_RECORD_TTL_S, stale_s=TRACK_RECORD_STALE_S)
     if not out.get("summaries"):  # nothing (or a database blip): don't keep the empty answer
-        _cache.clear_key("track_record")
+        _cache.clear_key(("track_record", METHOD))
     return out
 
 
@@ -100,28 +104,36 @@ def _track_record() -> Dict[str, Any]:
             if not row:
                 continue
             row = dict(row)
+            if row.get("methodology") != METHOD:
+                continue
             rows.append({"ranking": row.get("ranking") or ranking, "ranking_label": label,
                          "horizon_days": row.get("horizon_days", horizon),
-                         "avg_excess_return": row.get("avg_return"), "median_excess_return": row.get("median_return"),
+                         "avg_excess_return": row.get("avg_excess_return"), "median_excess_return": row.get("median_excess_return"),
                          "win_rate": row.get("win_rate"), "sample_size": row.get("sample_size"),
                          "runs_used": row.get("runs_used"), "top_n": row.get("top_n"),
                          "benchmark": row.get("benchmark") or "SPY", "computed_at": row.get("computed_at"),
-                         "sufficient": int(row.get("sample_size") or 0) >= MIN_SAMPLE_SIZE})
+                         "sufficient": int(row.get("sample_size") or 0) >= MIN_SAMPLE_SIZE,
+                         **{key: row.get(key) for key in (
+                             "methodology", "entry_policy", "avg_absolute_return", "median_absolute_return",
+                             "positive_return_rate", "benchmark_outperformance_rate", "observation_count",
+                             "selected_count", "evaluated_count", "excluded_count", "coverage_pct", "exclusions",
+                             "unique_ticker_count", "selected_unique_ticker_count", "signal_date_count",
+                             "snapshots_considered", "ranking_unavailable_snapshots", "observations")}})
     sufficient = [r for r in rows if r.get("sufficient") and r.get("avg_excess_return") is not None]
-    best = max(sufficient, key=lambda r: r.get("avg_excess_return") or -999) if sufficient else None
+    best = max(sufficient, key=lambda r: r["avg_excess_return"]) if sufficient else None
     summary = {"best_ranking": best.get("ranking_label") if best else None,
                "best_horizon_days": best.get("horizon_days") if best else None,
                "best_avg_excess_return": best.get("avg_excess_return") if best else None,
                "ready_horizons": len(sufficient), "total_horizons": len(rows),
                "read": (f"Best matured slice is {best.get('ranking_label')} at {best.get('horizon_days')}d."
                         if best else "Still building enough matured samples to call out a best slice.")}
-    return {"disclaimer": DISCLAIMER, "min_sample_size": MIN_SAMPLE_SIZE, "summary": summary, "summaries": rows}
+    return {"disclaimer": DISCLAIMER, "methodology": METHOD, "min_sample_size": MIN_SAMPLE_SIZE, "summary": summary, "summaries": rows}
 
 
 def track_record_daily(ranking: str, horizon: int, days: int) -> List[Dict[str, Any]]:
     from api.today import _cache, _cached
 
-    key = ("track_record_daily", ranking, int(horizon), int(days))
+    key = ("track_record_daily", METHOD, ranking, int(horizon), int(days))
     out = _cached(key, lambda: _track_record_daily(ranking, horizon, days),
                   ttl_s=TRACK_RECORD_TTL_S, stale_s=TRACK_RECORD_STALE_S)
     if not out:
@@ -135,5 +147,5 @@ def _track_record_daily(ranking: str, horizon: int, days: int) -> List[Dict[str,
     out = []
     for item in load_daily_excess(ranking, int(horizon), days=int(days)) or []:
         day, excess = (item[0], item[1]) if isinstance(item, (tuple, list)) else (item.get("day"), item.get("avg_excess"))
-        out.append({"day": day, "avg_excess_return": excess})
+        out.append({"day": day, "avg_excess_return": excess, "methodology": METHOD})
     return out

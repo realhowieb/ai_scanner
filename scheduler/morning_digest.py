@@ -497,29 +497,29 @@ def _movers_text(rows: List[Dict[str, Any]]) -> str:
 def _track_record_line() -> tuple[str, str]:
     """Return (html, text) one-liner for the signal track record, or ('','')."""
     try:
+        from analytics.track_method import METHOD
         from db.track_record import load_latest_track_record
 
         tr = load_latest_track_record(horizon_days=5)
-        if not tr or not tr.get("sample_size") or tr.get("avg_return") is None:
+        if not tr or tr.get("methodology") != METHOD or tr.get("avg_absolute_return") is None or tr.get("avg_excess_return") is None:
             return "", ""
-        # Only show once the sample is statistically meaningful (see UI gate).
+        # Display gate only: overlapping occurrences are not independent samples.
         if int(tr.get("sample_size") or 0) < 150 or int(tr.get("runs_used") or 0) < 8:
             return "", ""
-        avg = tr["avg_return"]
-        win = tr.get("win_rate") or 0.0
-        h = tr.get("horizon_days", 5)
-        bench = tr.get("benchmark") or "SPY"
-        top_n = tr.get("top_n") or 5
-        html = (
-            "<p style='color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;"
-            "border-radius:10px;margin:12px 0 0;font-size:14px'>"
-            f"📈 <strong>Track record:</strong> top-{top_n} candidates beat the {bench} by "
-            f"<strong>{avg:+.1%}</strong> over {h} trading days · {win:.0%} beat the benchmark.</p>"
-        )
-        text = (
-            f"Track record: top-{top_n} candidates beat {bench} by {avg:+.1%} "
-            f"over {h} days ({win:.0%} beat the benchmark)."
-        )
+        avg = tr["avg_excess_return"]
+        absolute = tr["avg_absolute_return"]
+        win = tr.get("benchmark_outperformance_rate") or 0.0
+        h, bench, top_n = tr.get("horizon_days", 5), tr.get("benchmark") or "SPY", tr.get("top_n") or 5
+        coverage = tr.get("coverage_pct")
+        coverage_text = f"{coverage:.1f}%" if coverage is not None else "unknown"
+        text = (f"Track record research: top-{top_n}, {h} sessions from the first open after snapshot availability. "
+                f"Average stock return {absolute:+.1%}; excess vs {bench} {avg:+.1%}; "
+                f"{win:.0%} beat the benchmark. Evaluated {tr.get('evaluated_count', 0)} of "
+                f"{tr.get('selected_count', 0)} selected ({coverage_text} coverage). "
+                "Repeated signals overlap; not independent trades or a portfolio return. "
+                "No costs modeled. Beating SPY can still lose money.")
+        import html as html_module
+        html = "<p style='color:#334155;font-size:14px'>" + html_module.escape(text) + "</p>"
         return html, text
     except Exception:
         return "", ""

@@ -52,7 +52,7 @@ class ForwardReturnTests(unittest.TestCase):
     def test_open_entry_falls_back_to_close_when_no_open_column(self):
         bars = _bars("2025-01-06", [100.0, 102.0, 103.0])
         r = tr._forward_return(bars, dt.date(2025, 1, 6), horizon_days=1, entry_mode="open")
-        self.assertAlmostEqual(r, (102.0 - 100.0) / 100.0)  # uses Close, no crash
+        self.assertIsNone(r)  # never substitute a different entry field
 
     def test_incomplete_forward_window_returns_none(self):
         bars = _bars("2025-01-06", [100.0, 102.0, 103.0])
@@ -71,7 +71,7 @@ class ForwardReturnTests(unittest.TestCase):
 class EligibleSnapshotsTests(unittest.TestCase):
     """Dedup same-day snapshots and fence out pre-epoch runs."""
 
-    def _run(self, runs):
+    def _run(self, runs, now=None):
         # _eligible_snapshots does local `from db.runs import ...` and
         # `from ui.app_runtime import ...`. Inject fakes via sys.modules so the
         # test doesn't depend on those (heavy) modules being importable in CI.
@@ -87,7 +87,7 @@ class EligibleSnapshotsTests(unittest.TestCase):
         fake_ar.normalize_results_to_df = lambda raw: pd.DataFrame(raw) if raw else None
 
         with mock.patch.dict(sys.modules, {"db.runs": fake_runs, "ui.app_runtime": fake_ar}):
-            return tr._eligible_snapshots(horizon_days=5, lookback_days=45, max_snapshots=30)
+            return tr._eligible_snapshots(horizon_days=5, lookback_days=45, max_snapshots=30, now=now)
 
     def test_same_day_snapshots_deduped_and_preepoch_fenced(self):
         # Build now-relative dates inside the 5D "complete window" + 45d lookback.
@@ -114,9 +114,19 @@ class EligibleSnapshotsTests(unittest.TestCase):
         ]
         with mock.patch.object(tr, "SCORE_EPOCH", base):
             out = self._run(runs)
-        dates = sorted(d for d, _df in out)
+        dates = sorted(d.astimezone(__import__("zoneinfo").ZoneInfo("America/New_York")).date() for d, _df in out)
         self.assertEqual(dates, [base, nxt])          # one per day, pre fenced
         self.assertTrue(all(d >= base for d in dates))
+
+    def test_deduplication_uses_exchange_date_and_retains_timestamp(self):
+        later = dt.datetime(2026, 11, 3, 0, 30, tzinfo=dt.timezone.utc)
+        earlier = dt.datetime(2026, 11, 2, 20, 0, tzinfo=dt.timezone.utc)
+        runs = [{"id": 1, "created_at": later}, {"id": 2, "created_at": earlier}]
+        with mock.patch.object(tr, "SCORE_EPOCH", dt.date(2026, 11, 2)):
+            out = self._run(runs, now=dt.datetime(2026, 11, 6, 23, tzinfo=dt.timezone.utc))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][0], later)
+        self.assertEqual(out[0][1].attrs["snapshot_id"], 1)
 
     def test_weekend_snapshots_are_skipped(self):
         # A weekend (forced) snapshot enters on the next session and duplicates
@@ -142,7 +152,7 @@ class EligibleSnapshotsTests(unittest.TestCase):
         ]
         with mock.patch.object(tr, "SCORE_EPOCH", min(fri, sat) - dt.timedelta(days=1)):
             out = self._run(runs)
-        dates = [d for d, _df in out]
+        dates = [d.astimezone(__import__("zoneinfo").ZoneInfo("America/New_York")).date() for d, _df in out]
         self.assertIn(fri, dates)
         self.assertNotIn(sat, dates)
 
@@ -189,36 +199,32 @@ class LoadDailyExcessTests(unittest.TestCase):
 
 
 class TrackRecordMethodTests(unittest.TestCase):
-    def test_new_results_are_stored_separately_from_legacy_rescoring(self):
+    def test_new_summary_and_daily_namespace_and_payload(self):
+        from analytics.track_method import METHOD
         from db import track_record as dbtr
-
         conn = mock.MagicMock()
-        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn), \
-                mock.patch.object(dbtr, "_ensure_schema"):
-            dbtr.save_track_record(horizon_days=5, avg_return=0.01, median_return=0.01,
-                                  win_rate=0.6, sample_size=30, runs_used=6, ranking="prebreakout")
-            self.assertEqual(conn.cursor.return_value.execute.call_args.args[1][-1], dbtr.PREBREAKOUT_SNAPSHOT)
-            dbtr.save_daily_excess("prebreakout", 5, [(dt.date(2026, 10, 1), 0.01, 5)])
-            self.assertEqual(conn.cursor.return_value.execute.call_args.args[1][1], dbtr.PREBREAKOUT_SNAPSHOT)
+        details = {"methodology": METHOD, "observations": [{"signal_at": "2026-10-01T19:00:00Z"}]}
+        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn), mock.patch.object(dbtr, "_ensure_schema"):
+            dbtr.save_track_record(horizon_days=5, avg_return=.01, median_return=.01, win_rate=.6,
+                                   sample_size=30, runs_used=6, ranking="prebreakout", details=details)
+            params = conn.cursor.return_value.execute.call_args.args[1]
+            self.assertEqual(params[-2], METHOD+":prebreakout")
+            self.assertIn('signal_at', params[-1])
+            dbtr.save_daily_excess("prebreakout", 5, [(dt.date(2026, 10, 1), .01, 5)], methodology=METHOD)
+            self.assertEqual(conn.cursor.return_value.execute.call_args.args[1][1], METHOD+":prebreakout")
 
-    def test_reads_select_only_snapshot_method_and_keep_public_ranking_name(self):
+    def test_reads_only_new_method_and_keeps_public_ranking_name(self):
+        from analytics.track_method import METHOD
         from db import track_record as dbtr
-
         conn = mock.MagicMock()
         cur = conn.cursor.return_value
-        cur.fetchone.return_value = {"horizon_days": 5, "ranking": dbtr.PREBREAKOUT_SNAPSHOT}
-        cur.fetchall.return_value = [cur.fetchone.return_value]
-        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn), \
-                mock.patch.object(dbtr, "_ensure_schema"):
-            single = dbtr.load_latest_track_record(5, "prebreakout")
-            self.assertEqual(single["ranking"], "prebreakout")
-            self.assertEqual(cur.execute.call_args.args[1][1], dbtr.PREBREAKOUT_SNAPSHOT)
-            rows = dbtr.load_latest_track_records()
-            self.assertEqual(rows[0]["ranking"], "prebreakout")
-            self.assertIn("ranking != 'prebreakout'", cur.execute.call_args.args[0])
+        cur.fetchall.return_value = [{"horizon_days": 5, "ranking": METHOD+":prebreakout", "details": {"methodology": METHOD}}]
+        with mock.patch.object(dbtr, "get_neon_conn", return_value=conn):
+            self.assertEqual(dbtr.load_latest_track_record(5, "prebreakout")["ranking"], "prebreakout")
+            self.assertEqual(cur.execute.call_args.args[1], (METHOD+":breakout", METHOD+":prebreakout"))
             cur.fetchall.return_value = []
             dbtr.load_daily_excess("prebreakout", 5, 120)
-            self.assertEqual(cur.execute.call_args.args[1][0], dbtr.PREBREAKOUT_SNAPSHOT)
+            self.assertEqual(cur.execute.call_args.args[1][0], METHOD+":prebreakout")
 
 
 @requires_pandas
@@ -275,15 +281,15 @@ class RankedSymbolsTests(unittest.TestCase):
 @requires_pandas
 class ComputeTrackRecordTests(unittest.TestCase):
     def test_excess_vs_benchmark_math(self):
-        run_date = dt.date(2025, 1, 6)
+        run_date = dt.datetime(2025, 1, 6, 13, tzinfo=dt.timezone.utc)
         snapshot_df = pd.DataFrame(
             {"Ticker": ["AAA", "BBB"], "BreakoutScore": [9.0, 8.0]}
         )
         bars = {
             # 1-day forward returns from Jan 6: AAA +10%, BBB -5%, SPY +2%.
-            "AAA": _bars("2025-01-06", [100.0, 110.0, 111.0]),
-            "BBB": _bars("2025-01-06", [100.0, 95.0, 96.0]),
-            "SPY": _bars("2025-01-06", [100.0, 102.0, 103.0]),
+            "AAA": _bars("2025-01-06", [110.0, 110.0, 111.0]).assign(Open=100.0),
+            "BBB": _bars("2025-01-06", [95.0, 95.0, 96.0]).assign(Open=100.0),
+            "SPY": _bars("2025-01-06", [102.0, 102.0, 103.0]).assign(Open=100.0),
         }
         with mock.patch.object(
             tr, "_eligible_snapshots", return_value=[(run_date, snapshot_df)]
@@ -304,16 +310,16 @@ class ComputeTrackRecordTests(unittest.TestCase):
         self.assertEqual(summary["sample_size"], 2)
         self.assertEqual(summary["benchmark"], "SPY")
         # Prebreakout ranking absent (no saved predictions) rather than fabricated.
-        self.assertNotIn("prebreakout", results)
+        self.assertEqual(results["prebreakout"]["ranking_unavailable_snapshots"], 1)
 
     def test_returns_none_without_benchmark_bars(self):
-        run_date = dt.date(2025, 1, 6)
+        run_date = dt.datetime(2025, 1, 6, 13, tzinfo=dt.timezone.utc)
         snapshot_df = pd.DataFrame({"Ticker": ["AAA"], "BreakoutScore": [9.0]})
         bars = {"AAA": _bars("2025-01-06", [100.0, 110.0])}
         with mock.patch.object(
             tr, "_eligible_snapshots", return_value=[(run_date, snapshot_df)]
         ), mock.patch("data.price_alpaca.download_multi_alpaca", return_value=bars):
-            self.assertIsNone(tr.compute_track_record(horizon_days=1))
+            self.assertEqual(tr.compute_track_record(horizon_days=1)["breakout"]["exclusions"], {"MISSING_BENCHMARK_BARS": 1})
 
     def test_returns_none_without_snapshots(self):
         with mock.patch.object(tr, "_eligible_snapshots", return_value=[]):

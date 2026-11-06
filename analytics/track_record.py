@@ -1,16 +1,14 @@
-"""Compute the signal track record: forward returns of past scan candidates.
+"""Versioned saved-signal research with timestamp-aware daily-bar proxies.
 
-For each historical daily snapshot old enough to have a complete forward window,
-take its top candidates and measure the return from the scan date to `horizon`
-trading days later using daily bars. Aggregate into avg/median return, win rate,
-and sample size. Heavy (bar downloads) — run once/day from the cron, not per UI
-render. Deterministic and best-effort; returns None rather than raising.
+The default is next eligible session open to horizon-last close. Every selected
+pick is evaluated or excluded explicitly; this is not a trading simulation.
+Date-only `_forward_return` remains a separately documented legacy research
+helper for economic-label callers, with no opening-price substitution.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from math import isfinite
-from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
 from config import SCORE_EPOCH  # single source of truth
@@ -64,27 +62,29 @@ def _ranked_symbols(df, ranking: str, top_n: int) -> List[str]:
             "_saved_probability", ascending=False, kind="stable")
     else:  # breakout
         if "BreakoutScore" in df.columns:
-            work = df.sort_values("BreakoutScore", ascending=False)
-    return [str(s).upper() for s in work[sym_col].head(top_n).tolist() if str(s).strip()]
+            work = df.sort_values("BreakoutScore", ascending=False, kind="stable")
+    return list(dict.fromkeys(str(s).strip().upper() for s in work[sym_col].tolist() if str(s).strip()))[:top_n]
 
 
-def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: int):
-    """Yield (run_date, df) for snapshots with a complete forward window."""
+def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: int, *, now=None):
+    """Latest snapshot per ET exchange date; preserve saved availability time.
+
+    Recent, incomplete outcomes are retained for explicit coverage reporting.
+    ``created_at`` is the snapshot write/refresh instant, not bar/scan start time.
+    """
     try:
         from db.runs import list_snapshot_runs, load_many_run_results
         from ui.app_runtime import normalize_results_to_df
     except Exception:
         return []
 
-    now = datetime.now(timezone.utc)
-    # A snapshot needs `horizon` trading days after it; ~1.5 calendar days each.
-    complete_before = now - timedelta(days=int(horizon_days * 1.6) + 2)
+    now = now or datetime.now(timezone.utc)
     oldest = now - timedelta(days=int(lookback_days))
 
     # Snapshot-only, recency-bounded SQL (replaces scanning thousands of run
     # rows), then one batched fetch of the chosen snapshots' JSON.
     try:
-        runs = list_snapshot_runs(days=int(lookback_days) + 2, limit=max_snapshots * 6) or []
+        runs = list_snapshot_runs(days=int(lookback_days) + 2, limit=max_snapshots * 6, public_only=True) or []
     except Exception:
         return []
 
@@ -95,12 +95,13 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
         if not isinstance(created, datetime):
             continue
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+            continue  # unknown availability cannot support time-aware entry
         if created < oldest:
             break
-        if created > complete_before:
+        if created > now:
             continue
-        run_date = created.date()
+        from analytics.market_calendar import ET, calendar_covered, is_trading_day
+        run_date = created.astimezone(ET).date()
         # Fence out pre-epoch snapshots (they carry the old un-clipped
         # BreakoutScore ceiling; mixing them in poisons the track record).
         if run_date < SCORE_EPOCH:
@@ -108,7 +109,7 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
         # Skip weekend (forced/manual) snapshots. Their picks enter on the next
         # session, so they duplicate that trading day's result — double-counting
         # the sample and painting spurious weekend cells in the daily heatmap.
-        if run_date.weekday() >= 5:  # Saturday=5, Sunday=6
+        if not calendar_covered(run_date) or not is_trading_day(run_date):
             continue
         # One snapshot per trading day. Multiple same-day snapshots (premarket /
         # regular / postmarket sessions + forced runs) share near-identical picks
@@ -135,7 +136,8 @@ def _eligible_snapshots(horizon_days: int, lookback_days: int, max_snapshots: in
             continue
         if not _symbol_column(df):
             continue
-        out.append((r["_created"].date(), df))
+        df.attrs["snapshot_id"] = int(r["id"])
+        out.append((r["_created"], df))
     return out
 
 
@@ -145,13 +147,19 @@ def _forward_return(bars, run_date, horizon_days: int, entry_mode: str = "close"
     entry_mode:
       "close" — enter at the signal-day close (default; original behavior).
       "open"  — enter at the signal-day open. For premarket signals this is the
-                realistic actionable fill and captures the signal-day move,
-                which the close-entry convention discards.
+                date-only research proxy; callers must not describe it as an
+                executable fill. Missing Open is excluded, never replaced.
     Exit is always the close `horizon_days` bars later. The same mode is applied
     to the benchmark by the caller, so excess stays apples-to-apples.
     """
     try:
-        closes = bars["Close"].dropna()
+        if isinstance(run_date, datetime):
+            from analytics.track_method import outcome, window
+            result = outcome(bars, window(run_date, horizon_days, entry_mode))
+            return result.get("return")
+        if entry_mode not in ("open", "close"):
+            return None
+        closes = bars["Close"]
         if closes.empty:
             return None
         # Position of the first bar dated on/after the scan date (entry).
@@ -166,15 +174,14 @@ def _forward_return(bars, run_date, horizon_days: int, entry_mode: str = "close"
         exit_pos = entry_pos + int(horizon_days)
         if exit_pos >= len(closes):
             return None
-        if entry_mode == "open" and "Open" in getattr(bars, "columns", []):
-            entry_series = bars["Open"].reindex(closes.index)
-            entry = float(entry_series.iloc[entry_pos])
-            if entry != entry or entry <= 0:  # NaN/invalid open → fall back to close
-                entry = float(closes.iloc[entry_pos])
+        if entry_mode == "open":
+            if "Open" not in bars.columns:
+                return None
+            entry = float(bars["Open"].reindex(closes.index).iloc[entry_pos])
         else:
             entry = float(closes.iloc[entry_pos])
         exit_ = float(closes.iloc[exit_pos])
-        if entry <= 0:
+        if not isfinite(entry) or not isfinite(exit_) or entry <= 0 or exit_ <= 0:
             return None
         return (exit_ - entry) / entry
     except Exception:
@@ -193,82 +200,26 @@ def compute_track_record(
     horizon_days: int = 5,
     lookback_days: int = 45,
     max_snapshots: int = 30,
-    entry_mode: str = "close",
+    entry_mode: str = "open",
 ) -> Optional[Dict[str, Dict[str, Any]]]:
-    """A/B forward performance of both rankings across recent snapshots.
+    """Versioned time-aware research with explicit missing-data denominators."""
+    from analytics.track_method import evaluate
 
-    Returns {ranking: summary_dict} for each ranking that produced data, or None.
-    Both rankings share one bar download (union of their picks + benchmark).
-    """
     snapshots = _eligible_snapshots(horizon_days, lookback_days, max_snapshots)
     if not snapshots:
         return None
-
-    # Per-snapshot top-N picks under each ranking; collect the symbol union once.
-    per_snapshot: List[tuple] = []  # (run_date, {ranking: [symbols]})
-    all_symbols = {BENCHMARK}
-    for run_date, df in snapshots:
-        picks = {rk: _ranked_symbols(df, rk, TOP_N) for rk in RANKINGS}
-        per_snapshot.append((run_date, picks))
-        for syms in picks.values():
-            all_symbols.update(syms)
-
-    if all_symbols == {BENCHMARK}:
-        return None
-
+    selected = {rk: [(at, _ranked_symbols(df, rk, TOP_N), df.attrs.get("snapshot_id")) for at, df in snapshots] for rk in RANKINGS}
+    symbols = {BENCHMARK} | {sym for rows in selected.values() for _, picks, _ in rows for sym in picks}
     try:
         from data.price_alpaca import download_multi_alpaca
-
-        bars_by_symbol = download_multi_alpaca(
-            sorted(all_symbols),
-            period=f"{lookback_days + horizon_days + 10}d",
-            interval="1d",
-            prepost=False,
-            timeout_s=25.0,
-        )
+        bars = download_multi_alpaca(sorted(symbols), period=f"{lookback_days + horizon_days*2 + 10}d",
+                                    interval="1d", prepost=False, timeout_s=25.0) or {}
     except Exception:
-        return None
-    if not bars_by_symbol:
-        return None
-
-    spy_bars = bars_by_symbol.get(BENCHMARK)
-    if spy_bars is None:
-        return None
-
-    results: Dict[str, Dict[str, Any]] = {}
-    for ranking in RANKINGS:
-        excess: List[float] = []
-        daily: List[tuple] = []  # (run_date, mean_excess, n_picks)
-        runs_counted = 0
-        for run_date, picks in per_snapshot:
-            spy_ret = _forward_return(spy_bars, run_date, horizon_days, entry_mode)
-            if spy_ret is None:
-                continue
-            day_vals: List[float] = []
-            for sym in picks.get(ranking, []):
-                bars = _bars_for(bars_by_symbol, sym)
-                if bars is None:
-                    continue
-                r = _forward_return(bars, run_date, horizon_days, entry_mode)
-                if r is not None:
-                    excess.append(r - spy_ret)
-                    day_vals.append(r - spy_ret)
-            if day_vals:
-                runs_counted += 1
-                daily.append((run_date, mean(day_vals), len(day_vals)))
-        if not excess:
-            continue
-        beats = sum(1 for e in excess if e > 0)
-        results[ranking] = {
-            "horizon_days": horizon_days,
-            "avg_return": mean(excess),
-            "median_return": median(excess),
-            "win_rate": beats / len(excess),
-            "sample_size": len(excess),
-            "runs_used": runs_counted,
-            "benchmark": BENCHMARK,
-            "top_n": TOP_N,
-            "ranking": ranking,
-            "daily": daily,
-        }
-    return results or None
+        bars = {}  # selected picks still appear as exclusions
+    results = {}
+    for ranking, selections in selected.items():
+        summary = evaluate(selections, bars, horizon_days, mode=entry_mode)
+        summary.update(ranking=ranking, top_n=TOP_N, snapshots_considered=len(snapshots),
+                       ranking_unavailable_snapshots=sum(not picks for _, picks, _ in selections))
+        results[ranking] = summary
+    return results

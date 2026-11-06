@@ -18567,6 +18567,10 @@
       "title": "Disclaimer",
       "type": "string"
      },
+     "methodology": {
+      "title": "Methodology",
+      "type": "string"
+     },
      "min_sample_size": {
       "title": "Min Sample Size",
       "type": "integer"
@@ -18589,6 +18593,7 @@
     },
     "required": [
      "disclaimer",
+     "methodology",
      "min_sample_size"
     ],
     "title": "TrackRecord",
@@ -18610,16 +18615,32 @@
      "day": {
       "title": "Day",
       "type": "string"
+     },
+     "methodology": {
+      "title": "Methodology",
+      "type": "string"
      }
     },
     "required": [
-     "day"
+     "day",
+     "methodology"
     ],
     "title": "TrackRecordDay",
     "type": "object"
    },
    "TrackRecordSummary": {
     "properties": {
+     "avg_absolute_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Absolute Return"
+     },
      "avg_excess_return": {
       "anyOf": [
        {
@@ -18637,6 +18658,17 @@
       "title": "Benchmark",
       "type": "string"
      },
+     "benchmark_outperformance_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Benchmark Outperformance Rate"
+     },
      "computed_at": {
       "anyOf": [
        {
@@ -18648,9 +18680,53 @@
       ],
       "title": "Computed At"
      },
+     "coverage_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Coverage Pct"
+     },
+     "entry_policy": {
+      "title": "Entry Policy",
+      "type": "string"
+     },
+     "evaluated_count": {
+      "default": 0,
+      "title": "Evaluated Count",
+      "type": "integer"
+     },
+     "excluded_count": {
+      "default": 0,
+      "title": "Excluded Count",
+      "type": "integer"
+     },
+     "exclusions": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "default": {},
+      "title": "Exclusions",
+      "type": "object"
+     },
      "horizon_days": {
       "title": "Horizon Days",
       "type": "integer"
+     },
+     "median_absolute_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Absolute Return"
      },
      "median_excess_return": {
       "anyOf": [
@@ -18663,6 +18739,36 @@
       ],
       "title": "Median Excess Return"
      },
+     "methodology": {
+      "title": "Methodology",
+      "type": "string"
+     },
+     "observation_count": {
+      "default": 0,
+      "title": "Observation Count",
+      "type": "integer"
+     },
+     "observations": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Observations",
+      "type": "array"
+     },
+     "positive_return_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share with absolute return >0; zero counts false",
+      "title": "Positive Return Rate"
+     },
      "ranking": {
       "enum": [
        "breakout",
@@ -18674,6 +18780,11 @@
      "ranking_label": {
       "title": "Ranking Label",
       "type": "string"
+     },
+     "ranking_unavailable_snapshots": {
+      "default": 0,
+      "title": "Ranking Unavailable Snapshots",
+      "type": "integer"
      },
      "runs_used": {
       "anyOf": [
@@ -18697,6 +18808,26 @@
       ],
       "title": "Sample Size"
      },
+     "selected_count": {
+      "default": 0,
+      "title": "Selected Count",
+      "type": "integer"
+     },
+     "selected_unique_ticker_count": {
+      "default": 0,
+      "title": "Selected Unique Ticker Count",
+      "type": "integer"
+     },
+     "signal_date_count": {
+      "default": 0,
+      "title": "Signal Date Count",
+      "type": "integer"
+     },
+     "snapshots_considered": {
+      "default": 0,
+      "title": "Snapshots Considered",
+      "type": "integer"
+     },
      "sufficient": {
       "description": "False while sample_size < min_sample_size (show 'still building')",
       "title": "Sufficient",
@@ -18713,6 +18844,11 @@
       ],
       "title": "Top N"
      },
+     "unique_ticker_count": {
+      "default": 0,
+      "title": "Unique Ticker Count",
+      "type": "integer"
+     },
      "win_rate": {
       "anyOf": [
        {
@@ -18722,7 +18858,7 @@
         "type": "null"
        }
       ],
-      "description": "Share of picks that beat SPY",
+      "description": "Deprecated alias for benchmark_outperformance_rate; strict >0 excess, ties count false",
       "title": "Win Rate"
      }
     },
@@ -18730,7 +18866,9 @@
      "ranking",
      "ranking_label",
      "horizon_days",
-     "sufficient"
+     "sufficient",
+     "methodology",
+     "entry_policy"
     ],
     "title": "TrackRecordSummary",
     "type": "object"
