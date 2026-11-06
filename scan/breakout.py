@@ -146,6 +146,9 @@ def run_breakout_scan(
     progress_cb: Optional[Callable[[int, int, str], Any]] = None,
     heartbeat_every: int = 25,
     min_dollar_vol: float = 0.0,
+    min_rsi: Optional[float] = None,
+    max_rsi: Optional[float] = None,
+    rebound: bool = False,
 ):
     """Breakout scan with richer metrics.
 
@@ -240,6 +243,12 @@ def run_breakout_scan(
         rel_vol = metrics["RelVol"]
         high_20 = metrics["High20"]
         is_breakout = metrics["IsBreakout"]
+
+        from scan.rsi_screen import rsi_screen
+        rsi_value, rebound_candidate, rsi_matches = rsi_screen(
+            df, min_rsi=min_rsi, max_rsi=max_rsi, rebound=rebound, relative_volume=rel_vol)
+        if not rsi_matches:
+            continue
 
         # 1) Price filter
         if not (min_price <= close <= max_price):
@@ -390,6 +399,8 @@ def run_breakout_scan(
         rows.append(
             {
                 "Ticker": symbol,
+                "RSI14": rsi_value,
+                "ReboundCandidate": rebound_candidate,
                 "BreakoutScore": score,
                 "Last": close,
                 "Volume": vol_today,
