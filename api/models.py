@@ -65,6 +65,13 @@ class KeyValueStatus(BaseModel):
 class Ready(BaseModel):
     ok: bool
     database: Literal["ok"]
+    stale: Optional[bool] = None
+    build: Optional[str] = None
+
+
+class ReadinessDiagnostics(BaseModel):
+    ok: bool
+    database: Literal["ok"]
     db_ping_ms: Optional[float] = Field(default=None, description=(
         "One SELECT 1 through the pool, in ms. A few ms means the API and database share a "
         "region; tens of ms means they don't"))

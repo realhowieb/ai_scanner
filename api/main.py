@@ -19,7 +19,7 @@ import time
 import uuid
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -262,15 +262,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                              "code": "verification_unavailable"},
                             status_code=503, headers={"Retry-After": "30"})
 
-    @app.get("/readyz", response_model=models.Ready,
-             responses={503: {"description": "Database unavailable, or (strict=true) a scheduled scan was missed"}})
-    def readyz(strict: bool = Query(False, description=(
-            "Answer 503 when a scheduled full-market scan was missed, so an outside uptime "
-            "monitor alerts on stale data as well as on a database outage"))) -> Any:
-        """Readiness: the database answers, plus the latest market scan's age for
-        freshness monitoring. /healthz stays the liveness check. One failed database
-        ping is retried after READYZ_RETRY_S: a database waking from idle shouldn't
-        page an uptime monitor. db_ping_ms is the time of the answered ping."""
+    def readiness(strict: bool, *, detailed: bool = False) -> Any:
+        """Shared readiness check; operational details require an admin route."""
         t0 = time.perf_counter()
         try:
             store.ping()
@@ -294,16 +287,30 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise
         except Exception:  # scan freshness is informational
             pass
-        body = {"ok": True, "database": "ok", "db_ping_ms": db_ms, "latest_scan_at": latest,
-                "scan_age_minutes": age, **fresh, **memory_status()}
-        from api import shared_cache
+        body = {"ok": True, "database": "ok", "stale": fresh["stale"],
+                "build": (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:12] or None}
+        if detailed:
+            from api import shared_cache
 
-        kv = shared_cache.status()  # informational: the API works without Key Value
-        body["key_value"] = {"configured": kv["configured"], "ok": kv["ok"], "ping_ms": kv["ping_ms"]}
-        body["build"] = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:12] or None
+            kv = shared_cache.status()
+            body.update({"db_ping_ms": db_ms, "latest_scan_at": latest, "scan_age_minutes": age,
+                         **fresh, **memory_status(),
+                         "key_value": {"configured": kv["configured"], "ok": kv["ok"], "ping_ms": kv["ping_ms"]}})
         if strict and fresh["stale"]:
             return JSONResponse({**body, "ok": False}, status_code=503)
         return body
+
+    @app.get("/readyz", response_model=models.Ready,
+             responses={503: {"description": "Database unavailable or a scheduled scan was missed"}})
+    def readyz(strict: bool = Query(False)) -> Any:
+        return readiness(strict)
+
+    from api.routes.admin import _admin
+
+    @app.get("/v1/admin/readiness", response_model=models.ReadinessDiagnostics,
+             tags=["admin (admins only)"], openapi_extra={"x-internal": True})
+    def readiness_diagnostics(strict: bool = False, _a: Dict[str, Any] = Depends(_admin)) -> Any:
+        return readiness(strict, detailed=True)
 
     async def _cap_threads() -> None:
         """Requests run on a shared thread pool, and each busy thread keeps its own warm

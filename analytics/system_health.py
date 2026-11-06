@@ -705,6 +705,11 @@ def _api_peak_mb(api: Mapping[str, Any]) -> Any:
 def api_memory_finding(api: Optional[Mapping[str, Any]], now: _dt.datetime) -> Optional[Dict[str, Any]]:
     """WARNING when the API's memory peak since its last restart reached its warning line
     (HSF_MEMORY_WARN_MB, default 400 of 512 MB on Render Starter)."""
+    if api and api.get("diagnostics_available") is False:
+        return finding("API_DIAGNOSTICS_UNAVAILABLE", "WARNING",
+                       "API memory diagnostics are unavailable",
+                       evidence={"reason": api.get("reason")}, detected_at=now, human="WATCH",
+                       action="configure ACC_ADMIN_EMAIL and ACC_ADMIN_PASSWORD for the System Health workflow")
     if not api or not api.get("memory_warning"):
         return None
     return finding("API_MEMORY_HIGH", "WARNING",

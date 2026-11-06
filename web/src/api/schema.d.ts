@@ -31,13 +31,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Readyz
-         * @description Readiness: the database answers, plus the latest market scan's age for
-         *     freshness monitoring. /healthz stays the liveness check. One failed database
-         *     ping is retried after READYZ_RETRY_S: a database waking from idle shouldn't
-         *     page an uptime monitor. db_ping_ms is the time of the answered ping.
-         */
+        /** Readyz */
         get: operations["readyz_readyz_get"];
         put?: never;
         post?: never;
@@ -710,6 +704,23 @@ export interface paths {
         };
         /** Live checks: database, Alpaca, FMP, Finnhub, billing */
         get: operations["admin_providers_v1_admin_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness Diagnostics */
+        get: operations["readiness_diagnostics_v1_admin_readiness_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9244,8 +9255,8 @@ export interface components {
              */
             timezone: string;
         };
-        /** Ready */
-        Ready: {
+        /** ReadinessDiagnostics */
+        ReadinessDiagnostics: {
             /**
              * Build
              * @description Git commit this API was deployed from (Render's RENDER_GIT_COMMIT, first 12 characters); the post-promote live check waits for it to match
@@ -9328,6 +9339,20 @@ export interface components {
              * Stale
              * @description A scheduled full-market scan was missed (see Market.stale)
              */
+            stale?: boolean | null;
+        };
+        /** Ready */
+        Ready: {
+            /** Build */
+            build?: string | null;
+            /**
+             * Database
+             * @constant
+             */
+            database: "ok";
+            /** Ok */
+            ok: boolean;
+            /** Stale */
             stale?: boolean | null;
         };
         /** Recap */
@@ -11697,7 +11722,6 @@ export interface operations {
     readyz_readyz_get: {
         parameters: {
             query?: {
-                /** @description Answer 503 when a scheduled full-market scan was missed, so an outside uptime monitor alerts on stale data as well as on a database outage */
                 strict?: boolean;
             };
             header?: never;
@@ -11724,7 +11748,7 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
-            /** @description Database unavailable, or (strict=true) a scheduled scan was missed */
+            /** @description Database unavailable or a scheduled scan was missed */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -13577,6 +13601,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    readiness_diagnostics_v1_admin_readiness_get: {
+        parameters: {
+            query?: {
+                strict?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessDiagnostics"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
             };
         };
     };

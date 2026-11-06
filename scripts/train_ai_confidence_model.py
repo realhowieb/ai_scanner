@@ -136,7 +136,7 @@ def train_ai_confidence_model(
         "auc": auc,
         "validation_method": "walk_forward",
         "target": TARGET_COLUMN,
-        "target_rule": "+4% before -2% in 5 trading days; fallback Return_5D >= +4%",
+        "target_rule": "path_first_hit_v1: +4% before -2% in 5 trading days; complete OHLC required; same-bar stop wins",
         "calibration": calibration,
         "calibration_map": calibration_map,
         "rows": int(len(x)),

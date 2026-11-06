@@ -1312,9 +1312,9 @@ def _binary_flag(series):
 
 
 def future_breakout_label(frame, horizon_scans: int = 3):
-    """Vectorized, exact ``ml_prebreakout.add_future_breakout_label``.
+    """Historical buggy v1 reproduction; never a training label helper.
 
-    The reference looks at the next ``horizon_scans`` rows of the WHOLE frame
+    The retired reference looked at the next ``horizon_scans`` rows of the WHOLE frame
     (sorted by Symbol, Timestamp) and labels 1 when any of them has the same
     symbol AND any of them is a breakout. The two conditions need not hold on
     the same row, so a symbol's last rows can inherit the next symbol's

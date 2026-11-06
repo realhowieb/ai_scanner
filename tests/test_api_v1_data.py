@@ -570,12 +570,19 @@ class ReliabilityTests(DataApiBase):
             r = self.client.get("/readyz")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(ping.call_count, 2)
-        self.assertIsInstance(r.json()["db_ping_ms"], float)
+        self.assertEqual(set(r.json()), {"ok", "database", "stale", "build"})
+
+    def test_readiness_details_require_admin_and_public_is_minimal(self):
+        with mock.patch("api.store.ping"), mock.patch("api.today.market_runs", return_value=[]):
+            public = self.client.get("/readyz").json()
+            self.assertEqual(set(public), {"ok", "database", "stale", "build"})
+            self.assertEqual(self.client.get("/v1/admin/readiness").status_code, 401)
+            self.assertEqual(self.client.get("/v1/admin/readiness", headers=self.h).status_code, 403)
 
     def test_readyz_reports_memory_and_warns_at_the_line(self):
         with mock.patch("api.store.ping"), mock.patch("api.today.market_runs", return_value=[]), \
                 mock.patch("api.memory._peak_mb", 450.0), mock.patch.dict("os.environ", {"HSF_MEMORY_WARN_MB": "400"}):
-            body = self.client.get("/readyz").json()
+            body = self.client.get("/v1/admin/readiness", headers=self.auth(self.login("boss@example.com").json()["access_token"])).json()
         self.assertEqual(body["memory_limit_mb"], 512.0)
         self.assertGreaterEqual(body["rss_peak_mb"], 450.0)
         self.assertTrue(body["memory_warning"])
@@ -606,7 +613,7 @@ class ReliabilityTests(DataApiBase):
             r = self.client.get("/readyz")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["database"], "ok")
-        self.assertAlmostEqual(r.json()["scan_age_minutes"], 30, delta=1)
+        self.assertNotIn("scan_age_minutes", r.json())
 
     def test_readyz_strict_is_503_when_a_scan_was_missed(self):
         now = dt.datetime.now(UTC)
@@ -619,7 +626,7 @@ class ReliabilityTests(DataApiBase):
         self.assertTrue(loose.json()["stale"])
         self.assertEqual(strict.status_code, 503)
         self.assertFalse(strict.json()["ok"])
-        self.assertIsNotNone(strict.json()["expected_scan_at"])
+        self.assertNotIn("expected_scan_at", strict.json())
 
     def test_readyz_strict_is_200_when_fresh(self):
         with mock.patch("api.store.ping"), \

@@ -500,8 +500,7 @@ def healthz():
     return {"ok": True}
 
 
-@app.get("/health")
-def health():
+def _health_details():
     missing = _required_env_missing(
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRET",
@@ -520,11 +519,32 @@ def health():
     return body
 
 
+@app.get("/health")
+def health():
+    result = _health_details()
+    ok = result.get("ok", False) if isinstance(result, dict) else False
+    return {"ok": True} if ok else JSONResponse({"ok": False}, status_code=503)
+
+
+def _diagnostic_admin(request: Request) -> None:
+    user = _authenticated_user(request, {})
+    try:
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT is_admin, is_active FROM users WHERE username = %s", (user,))
+                row = cur.fetchone()
+    except Exception:
+        raise HTTPException(503, "Account verification unavailable") from None
+    if not row or not row[0] or not row[1]:
+        raise HTTPException(403, "Admins only")
+
+
 @app.get("/debug/status")
-def debug_status():
+def debug_status(request: Request):
     # Run 83: operator-only. Hidden unless BILLING_DEBUG_STATUS=1 on the service.
     if os.getenv("BILLING_DEBUG_STATUS", "").strip() != "1":
         raise HTTPException(404, "Not Found")
+    _diagnostic_admin(request)
     # Do not return secrets; only whether they are set.
     status = {
         "ok": False,
