@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Schemas } from "@/api/client";
 import { Card, ErrorLine, Pill } from "@/components/ui";
@@ -61,7 +62,6 @@ export function IndicatorFacts({ e, label = "RSI and MACD evidence", selection }
       {!selection && highlighted.length === 0 && <span className="cap">No indicator setup confirmed.</span>}
     </div>
     <p className="body-sm">RSI {num(rsi)} · Prior five-bar low {num(e.prior_5_rsi_low)}{e.prior_5_rsi_low_date ? ` (${e.prior_5_rsi_low_date})` : ""} · Change {pct(e.change_pct)} · RVOL {num(e.relative_volume)}×</p>
-    <HistoryBasis e={e} />
     <details><summary>View rule-by-rule checks</summary>
       {focused.length > 0 ? <>
         <p className="strong">Required for the selected setup</p>
@@ -76,8 +76,31 @@ export function IndicatorFacts({ e, label = "RSI and MACD evidence", selection }
         <EvidenceTable rows={checks} label={label} />
       </>}
     </details>
-    <p className="cap">Each RSI setup also needs an up close and relative volume ≥1.0. Daily Wilder RSI(14); MACD(12,26,9). MACD above its signal line can still be below zero. Missing history is not a passing check.</p>
+    <details><summary>Calculation details</summary>
+      <HistoryBasis e={e} />
+      <p className="cap">Each RSI setup also needs an up close and relative volume ≥1.0. Daily Wilder RSI(14); MACD(12,26,9). MACD above its signal line can still be below zero. Missing history is not a passing check.</p>
+    </details>
   </>;
+}
+
+function LatestReadings({ s }: { s: Stock }) {
+  if (!s.indicator_evidence) return null;
+  return <>
+    <p className="cap">Daily bar {s.indicator_evidence.bar_date ?? "date unavailable"} · {s.volume_feed ?? "unknown"} volume feed. The latest daily bar can change during the session.</p>
+    <IndicatorFacts e={s.indicator_evidence} label="Latest chart RSI and MACD evidence" />
+  </>;
+}
+
+/** Mount comparison readings only on request; each stock/scan starts collapsed. */
+function LatestComparison({ s }: { s: Stock }) {
+  const [expanded, setExpanded] = useState(false);
+  return <details onToggle={(event) => setExpanded(event.currentTarget.open)}>
+    <summary>Compare with latest</summary>
+    {expanded && <>
+      <p className="cap">These are separate chart-bar readings; they do not replace your saved scan. RSI and MACD can differ when the calculation history or bars differ, even if the final close matches.</p>
+      <LatestReadings s={s} />
+    </>}
+  </details>;
 }
 
 /** Custom links retain the account-owned scan; chart readings remain a separate snapshot. */
@@ -96,20 +119,19 @@ export function StockIndicatorEvidence({ s }: { s: Stock }) {
   return <Card title="RSI and MACD checks" id="indicators">
     <div><Pill>Experimental research</Pill></div>
     {requested && <>
-      <h3 className="h3">Selected custom scan</h3>
+      <h3 className="h3">Saved scan evidence</h3>
       {scanId && saved.loading && <p className="cap" role="status">Loading the saved scan evidence…</p>}
       <ErrorLine error={saved.error} />
       {snapshot ? <>
         <p className="cap">{selected || "Custom indicator filters"} · Scan {job?.started_at ? etTime(job.started_at) : "time unavailable"} · Daily bar {snapshot.bar_date ?? "date unavailable"}.</p>
         <IndicatorFacts e={snapshot} selection={job?.params} label="Selected scan RSI and MACD evidence" />
-        <p className="cap">These readings are saved from your selected scan. The chart and HSF score use their own snapshots and may differ.</p>
+        <p className="cap">These readings are saved from your selected scan. {latest ? "Use the comparison below to review newer chart data." : "Current chart readings are unavailable."}</p>
       </> : (!scanId || (!saved.loading && !saved.error)) && <p className="cap">Saved evidence is unavailable for this ticker. Older scans may not contain it; no past qualification is inferred from newer bars.</p>}
     </>}
-    {latest && <details open={!requested}><summary>Latest chart-bar checks · {latest.bar_date ?? "date unavailable"}</summary>
-      <p className="cap">RSI and MACD depend on the earlier bars used to start their smoothing. Different history lengths or revised bars can change the readings even when the final date and close match. A small difference can change a check near its threshold.</p>
-      <p className="cap">Calculated separately from the displayed daily bars ({s.volume_feed ?? "unknown"} volume feed). These readings may differ from the selected scan. The latest bar can change during the session.</p>
-      <IndicatorFacts e={latest} label="Latest chart RSI and MACD evidence" />
-    </details>}
+    {latest && (requested ? <LatestComparison key={`${s.ticker}:${requested}`} s={s} /> : <>
+      <h3 className="h3">Latest indicator checks</h3>
+      <LatestReadings s={s} />
+    </>)}
     <p className="cap">These checks explain screening rules, not a prediction of profit. HSF score and model probabilities are separate and unchanged.</p>
   </Card>;
 }

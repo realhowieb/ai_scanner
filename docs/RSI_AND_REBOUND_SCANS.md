@@ -100,3 +100,16 @@ selected setup, required rules appear first. Other indicator checks are in a
 separate collapsed section and explicitly are not required for that scan.
 A selected MACD confirmation remains in the required table. Saved qualification
 is not recalculated or overwritten by newer chart readings.
+
+### Streamlined stock-page view
+
+When a stock opens from a custom scan, its saved scan evidence is the primary
+view. Latest chart readings appear only after opening **Compare with latest**;
+closing the comparison removes those details from the view. Comparisons start
+collapsed for each stock/scan, including after navigating from another ticker.
+Direct stock visits show the latest indicator checks without a second source
+section. If saved evidence cannot be loaded, the error remains explicit and
+latest readings remain available through the comparison rather than silently
+replacing the selected scan. Calculation history and technical notes are under
+**Calculation details**. No screening rules, fetched price histories or saved
+qualifications change.
