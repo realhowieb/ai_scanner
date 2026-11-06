@@ -349,8 +349,11 @@ BUILDER_SYSTEM = (
     "min_dollar_vol: minimum average daily dollar volume in dollars (e.g. 5000000 for $5M)\n"
     "min_rsi, max_rsi: optional inclusive daily Wilder RSI(14) bounds 0 to 100. RSI <=30 means max_rsi=30.\n"
     "rebound: true for experimental recovery: prior five bars touched RSI <=30, now 30<RSI<=50, up close and RVOL>=1.\n"
-    "Only daily RSI period 14 is supported. For unsupported periods/timeframes omit RSI bounds and rebound; explain the limitation. Never substitute a different period.\n"
-    "Do not set score_all=true when RSI bounds or rebound are requested.\n"
+    "momentum_recovery: true when RSI crosses from <=50 to >50 on the latest daily bar, up close and RVOL>=1.\n"
+    "uptrend_pullback: true when previous RSI is 40–50, latest RSI rises but stays <=50, close above SMA50, up close and RVOL>=1. Choose only one of rebound, momentum_recovery, uptrend_pullback.\n"
+    "macd_confirmation: bullish_cross (latest histogram >0 and previous <=0) or above_signal (histogram >0), daily MACD(12,26,9) only. Can combine with one RSI setup or run alone.\n"
+    "Only daily RSI period 14 is supported. For unsupported periods/timeframes omit RSI bounds and all RSI setups; explain the limitation. Never substitute a different period.\n"
+    "Do not set score_all=true when RSI or MACD filters are requested. Unsupported MACD periods/timeframes: omit macd_confirmation and explain the limitation.\n"
     "unusual: true to keep only unusual relative volume\n"
     "gap: true to keep only gappers; min_gap: minimum gap in percent\n"
     "score_all: true to score every ticker, not only setups (ticker, watchlist or earnings universes)\n"
@@ -417,10 +420,18 @@ def parse_builder(text: str, watchlist_ids: Sequence[int]) -> Dict[str, Any]:
         view["min_price"], view["max_price"] = view["max_price"], view["min_price"]
     if "min_rsi" in view and "max_rsi" in view and view["min_rsi"] > view["max_rsi"]:
         raise ValueError("Min RSI must not exceed Max RSI")
-    view["rebound"] = raw.get("rebound") is True
+    for key in ("rebound", "momentum_recovery", "uptrend_pullback"):
+        view[key] = raw.get(key) is True
+    if sum(view[key] for key in ("rebound", "momentum_recovery", "uptrend_pullback")) > 1:
+        raise ValueError("Choose one RSI setup at a time")
+    confirmation = raw.get("macd_confirmation")
+    if confirmation not in (None, "bullish_cross", "above_signal"):
+        raise ValueError("Unknown MACD confirmation")
+    if confirmation:
+        view["macd_confirmation"] = confirmation
     view["unusual"] = raw.get("unusual") is True
     view["gap"] = raw.get("gap") is True or "min_gap" in view
-    view["score_all"] = raw.get("score_all") is True and not (view.get("rebound") or "min_rsi" in view or "max_rsi" in view) and view["universe"] in ("ticker", "watchlist", "earnings")
+    view["score_all"] = raw.get("score_all") is True and not (any(view.get(key) for key in ("rebound", "momentum_recovery", "uptrend_pullback", "macd_confirmation")) or "min_rsi" in view or "max_rsi" in view) and view["universe"] in ("ticker", "watchlist", "earnings")
     explain = str(raw.get("explain") or "").strip()[:300]
     return {"view": view, "explanation": explain or None}
 

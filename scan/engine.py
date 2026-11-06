@@ -420,6 +420,9 @@ def run_breakout_scan(
     min_rsi: float | None = None,
     max_rsi: float | None = None,
     rebound: bool = False,
+    momentum_recovery: bool = False,
+    uptrend_pullback: bool = False,
+    macd_confirmation: str | None = None,
     diagnostics: bool = False,
     use_cache: bool = True,
     snapshot_id: str | None = None,
@@ -757,8 +760,10 @@ def run_breakout_scan(
             top_n=effective_top_n,
             diagnostics=diagnostics,
             min_dollar_vol=min_dollar_vol,
-            **({"min_rsi": min_rsi, "max_rsi": max_rsi, "rebound": rebound}
-               if min_rsi is not None or max_rsi is not None or rebound else {}),
+            **({"min_rsi": min_rsi, "max_rsi": max_rsi, "rebound": rebound,
+                "momentum_recovery": momentum_recovery, "uptrend_pullback": uptrend_pullback,
+                "macd_confirmation": macd_confirmation}
+               if min_rsi is not None or max_rsi is not None or rebound or momentum_recovery or uptrend_pullback or macd_confirmation else {}),
         )
     except _ENGINE_BOUNDARY_ERRORS as e:
         _log_scan_error(e, context="legacy_breakout.run_breakout_scan", tickers=tickers)

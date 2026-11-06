@@ -318,7 +318,31 @@ class Today(BaseModel):
 
 
 # ---- step 5: scans and stock detail --------------------------------------------------------------
+class IndicatorEvidence(BaseModel):
+    rule_version: str
+    bar_date: Optional[str] = None
+    rsi_14: Optional[float] = None
+    rsi_previous: Optional[float] = None
+    prior_5_rsi_low: Optional[float] = None
+    prior_5_rsi_low_date: Optional[str] = None
+    close: Optional[float] = None
+    previous_close: Optional[float] = None
+    change_pct: Optional[float] = None
+    relative_volume: Optional[float] = None
+    sma50: Optional[float] = None
+    rebound_candidate: bool
+    momentum_recovery: bool
+    uptrend_pullback: bool
+    macd_line: Optional[float] = None
+    macd_signal: Optional[float] = None
+    macd_histogram: Optional[float] = None
+    macd_previous_histogram: Optional[float] = None
+    macd_bullish_cross: bool
+    macd_above_signal: bool
+
+
 class ScanSetup(Setup):
+    indicator_evidence: Optional[IndicatorEvidence] = None
     rsi_14: Optional[float] = None
     rebound_candidate: Optional[bool] = None
     signals: List[str] = []
@@ -446,6 +470,7 @@ class Alert(BaseModel):
 
 
 class StockDetail(BaseModel):
+    indicator_evidence: Optional[IndicatorEvidence] = None
     ticker: str
     rvol: Optional[float] = Field(default=None, description="Relative volume in the displayed market scan")
     scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
@@ -824,6 +849,9 @@ class ScanParams(BaseModel):
     min_rsi: Optional[float] = None
     max_rsi: Optional[float] = None
     rebound: Optional[bool] = None
+    momentum_recovery: Optional[bool] = None
+    uptrend_pullback: Optional[bool] = None
+    macd_confirmation: Optional[Literal["bullish_cross", "above_signal"]] = None
     min_price: float
     max_price: float
     min_dollar_vol: float
@@ -1238,6 +1266,9 @@ class AIScanView(BaseModel):
     min_rsi: Optional[float] = Field(None, ge=0, le=100)
     max_rsi: Optional[float] = Field(None, ge=0, le=100)
     rebound: Optional[bool] = None
+    momentum_recovery: Optional[bool] = None
+    uptrend_pullback: Optional[bool] = None
+    macd_confirmation: Optional[Literal["bullish_cross", "above_signal"]] = None
     score_all: bool = False
 
 

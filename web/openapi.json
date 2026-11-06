@@ -187,6 +187,21 @@
       "title": "Gap",
       "type": "boolean"
      },
+     "macd_confirmation": {
+      "anyOf": [
+       {
+        "enum": [
+         "bullish_cross",
+         "above_signal"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Confirmation"
+     },
      "max_price": {
       "anyOf": [
        {
@@ -257,6 +272,17 @@
       ],
       "title": "Min Rsi"
      },
+     "momentum_recovery": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Momentum Recovery"
+     },
      "name": {
       "default": "AI scan",
       "title": "Name",
@@ -323,6 +349,17 @@
       "default": false,
       "title": "Unusual",
       "type": "boolean"
+     },
+     "uptrend_pullback": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uptrend Pullback"
      },
      "watchlist_id": {
       "anyOf": [
@@ -5448,6 +5485,21 @@
       "title": "Gap",
       "type": "boolean"
      },
+     "macd_confirmation": {
+      "anyOf": [
+       {
+        "enum": [
+         "bullish_cross",
+         "above_signal"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Confirmation"
+     },
      "max_price": {
       "anyOf": [
        {
@@ -5526,6 +5578,17 @@
       ],
       "title": "Min Rsi"
      },
+     "momentum_recovery": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Momentum Recovery"
+     },
      "name": {
       "maxLength": 60,
       "minLength": 1,
@@ -5595,6 +5658,17 @@
       "default": false,
       "title": "Unusual",
       "type": "boolean"
+     },
+     "uptrend_pullback": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uptrend Pullback"
      },
      "watchlist_id": {
       "anyOf": [
@@ -8102,6 +8176,198 @@
      "last"
     ],
     "title": "IndexQuote",
+    "type": "object"
+   },
+   "IndicatorEvidence": {
+    "properties": {
+     "bar_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bar Date"
+     },
+     "change_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Change Pct"
+     },
+     "close": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Close"
+     },
+     "macd_above_signal": {
+      "title": "Macd Above Signal",
+      "type": "boolean"
+     },
+     "macd_bullish_cross": {
+      "title": "Macd Bullish Cross",
+      "type": "boolean"
+     },
+     "macd_histogram": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Histogram"
+     },
+     "macd_line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Line"
+     },
+     "macd_previous_histogram": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Previous Histogram"
+     },
+     "macd_signal": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Signal"
+     },
+     "momentum_recovery": {
+      "title": "Momentum Recovery",
+      "type": "boolean"
+     },
+     "previous_close": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Previous Close"
+     },
+     "prior_5_rsi_low": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prior 5 Rsi Low"
+     },
+     "prior_5_rsi_low_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prior 5 Rsi Low Date"
+     },
+     "rebound_candidate": {
+      "title": "Rebound Candidate",
+      "type": "boolean"
+     },
+     "relative_volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Relative Volume"
+     },
+     "rsi_14": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rsi 14"
+     },
+     "rsi_previous": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rsi Previous"
+     },
+     "rule_version": {
+      "title": "Rule Version",
+      "type": "string"
+     },
+     "sma50": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sma50"
+     },
+     "uptrend_pullback": {
+      "title": "Uptrend Pullback",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "rule_version",
+     "rebound_candidate",
+     "momentum_recovery",
+     "uptrend_pullback",
+     "macd_bullish_cross",
+     "macd_above_signal"
+    ],
+    "title": "IndicatorEvidence",
     "type": "object"
    },
    "InsiderSummary": {
@@ -15364,6 +15630,21 @@
       "title": "Apply Gap Filter",
       "type": "boolean"
      },
+     "macd_confirmation": {
+      "anyOf": [
+       {
+        "enum": [
+         "bullish_cross",
+         "above_signal"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Confirmation"
+     },
      "max_combo": {
       "anyOf": [
        {
@@ -15450,6 +15731,11 @@
       "description": "Inclusive daily Wilder RSI(14) lower bound",
       "title": "Min Rsi"
      },
+     "momentum_recovery": {
+      "default": false,
+      "title": "Momentum Recovery",
+      "type": "boolean"
+     },
      "profile": {
       "default": "regular",
       "enum": [
@@ -15495,6 +15781,11 @@
       "default": false,
       "description": "Pro+",
       "title": "Unusual Volume",
+      "type": "boolean"
+     },
+     "uptrend_pullback": {
+      "default": false,
+      "title": "Uptrend Pullback",
       "type": "boolean"
      }
     },
@@ -15676,6 +15967,21 @@
       "title": "Full Lists",
       "type": "boolean"
      },
+     "macd_confirmation": {
+      "anyOf": [
+       {
+        "enum": [
+         "bullish_cross",
+         "above_signal"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Macd Confirmation"
+     },
      "max_combo": {
       "anyOf": [
        {
@@ -15740,6 +16046,17 @@
        }
       ],
       "title": "Min Rsi"
+     },
+     "momentum_recovery": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Momentum Recovery"
      },
      "profile": {
       "enum": [
@@ -15816,6 +16133,17 @@
      "unusual_volume": {
       "title": "Unusual Volume",
       "type": "boolean"
+     },
+     "uptrend_pullback": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uptrend Pullback"
      },
      "watchlist_id": {
       "anyOf": [
@@ -15973,6 +16301,16 @@
        }
       ],
       "title": "Gap Pct"
+     },
+     "indicator_evidence": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/IndicatorEvidence"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "last": {
       "anyOf": [
@@ -17427,6 +17765,16 @@
       "description": "The ticker had at least one row in that scan",
       "title": "In Latest Scan",
       "type": "boolean"
+     },
+     "indicator_evidence": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/IndicatorEvidence"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "lifecycle": {
       "default": [],
@@ -19802,6 +20150,16 @@
        }
       ],
       "title": "Gap Pct"
+     },
+     "indicator_evidence": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/IndicatorEvidence"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "last": {
       "anyOf": [

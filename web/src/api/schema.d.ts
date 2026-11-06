@@ -3826,6 +3826,8 @@ export interface components {
              * @default false
              */
             gap: boolean;
+            /** Macd Confirmation */
+            macd_confirmation?: ("bullish_cross" | "above_signal") | null;
             /** Max Price */
             max_price?: number | null;
             /** Max Rsi */
@@ -3838,6 +3840,8 @@ export interface components {
             min_price?: number | null;
             /** Min Rsi */
             min_rsi?: number | null;
+            /** Momentum Recovery */
+            momentum_recovery?: boolean | null;
             /**
              * Name
              * @default AI scan
@@ -3878,6 +3882,8 @@ export interface components {
              * @default false
              */
             unusual: boolean;
+            /** Uptrend Pullback */
+            uptrend_pullback?: boolean | null;
             /** Watchlist Id */
             watchlist_id?: number | null;
         };
@@ -5637,6 +5643,8 @@ export interface components {
              * @default false
              */
             gap: boolean;
+            /** Macd Confirmation */
+            macd_confirmation?: ("bullish_cross" | "above_signal") | null;
             /** Max Price */
             max_price?: number | null;
             /** Max Rsi */
@@ -5649,6 +5657,8 @@ export interface components {
             min_price?: number | null;
             /** Min Rsi */
             min_rsi?: number | null;
+            /** Momentum Recovery */
+            momentum_recovery?: boolean | null;
             /** Name */
             name: string;
             /** Rebound */
@@ -5686,6 +5696,8 @@ export interface components {
              * @default false
              */
             unusual: boolean;
+            /** Uptrend Pullback */
+            uptrend_pullback?: boolean | null;
             /** Watchlist Id */
             watchlist_id?: number | null;
         };
@@ -6677,6 +6689,49 @@ export interface components {
              * @description SPY or QQQ
              */
             symbol: string;
+        };
+        /** IndicatorEvidence */
+        IndicatorEvidence: {
+            /** Bar Date */
+            bar_date?: string | null;
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Close */
+            close?: number | null;
+            /** Macd Above Signal */
+            macd_above_signal: boolean;
+            /** Macd Bullish Cross */
+            macd_bullish_cross: boolean;
+            /** Macd Histogram */
+            macd_histogram?: number | null;
+            /** Macd Line */
+            macd_line?: number | null;
+            /** Macd Previous Histogram */
+            macd_previous_histogram?: number | null;
+            /** Macd Signal */
+            macd_signal?: number | null;
+            /** Momentum Recovery */
+            momentum_recovery: boolean;
+            /** Previous Close */
+            previous_close?: number | null;
+            /** Prior 5 Rsi Low */
+            prior_5_rsi_low?: number | null;
+            /** Prior 5 Rsi Low Date */
+            prior_5_rsi_low_date?: string | null;
+            /** Rebound Candidate */
+            rebound_candidate: boolean;
+            /** Relative Volume */
+            relative_volume?: number | null;
+            /** Rsi 14 */
+            rsi_14?: number | null;
+            /** Rsi Previous */
+            rsi_previous?: number | null;
+            /** Rule Version */
+            rule_version: string;
+            /** Sma50 */
+            sma50?: number | null;
+            /** Uptrend Pullback */
+            uptrend_pullback: boolean;
         };
         /** InsiderSummary */
         InsiderSummary: {
@@ -9570,6 +9625,8 @@ export interface components {
              * @default false
              */
             apply_gap_filter: boolean;
+            /** Macd Confirmation */
+            macd_confirmation?: ("bullish_cross" | "above_signal") | null;
             /**
              * Max Combo
              * @description Combo ticker cap, Pro up to 6000 (default 1000); ignored for Premium (full list)
@@ -9613,6 +9670,11 @@ export interface components {
              */
             min_rsi?: number | null;
             /**
+             * Momentum Recovery
+             * @default false
+             */
+            momentum_recovery: boolean;
+            /**
              * Profile
              * @default regular
              * @enum {string}
@@ -9642,6 +9704,11 @@ export interface components {
              * @default false
              */
             unusual_volume: boolean;
+            /**
+             * Uptrend Pullback
+             * @default false
+             */
+            uptrend_pullback: boolean;
         };
         /** ScanJob */
         ScanJob: {
@@ -9701,6 +9768,8 @@ export interface components {
              * @description True for Premium/admin: NASDAQ and Combo scan the full lists
              */
             full_lists: boolean;
+            /** Macd Confirmation */
+            macd_confirmation?: ("bullish_cross" | "above_signal") | null;
             /** Max Combo */
             max_combo?: number | null;
             /** Max Nasdaq */
@@ -9722,6 +9791,8 @@ export interface components {
             min_price: number;
             /** Min Rsi */
             min_rsi?: number | null;
+            /** Momentum Recovery */
+            momentum_recovery?: boolean | null;
             /**
              * Profile
              * @enum {string}
@@ -9756,6 +9827,8 @@ export interface components {
             universe: "sp500" | "nasdaq" | "combo" | "us_market" | "watchlist" | "ticker" | "earnings";
             /** Unusual Volume */
             unusual_volume: boolean;
+            /** Uptrend Pullback */
+            uptrend_pullback?: boolean | null;
             /** Watchlist Id */
             watchlist_id?: number | null;
         };
@@ -9808,6 +9881,7 @@ export interface components {
             fading: boolean;
             /** Gap Pct */
             gap_pct?: number | null;
+            indicator_evidence?: components["schemas"]["IndicatorEvidence"] | null;
             /** Last */
             last?: number | null;
             /** N Signals */
@@ -10432,6 +10506,7 @@ export interface components {
              * @description The ticker had at least one row in that scan
              */
             in_latest_scan: boolean;
+            indicator_evidence?: components["schemas"]["IndicatorEvidence"] | null;
             /**
              * Lifecycle
              * @default []
@@ -11319,6 +11394,7 @@ export interface components {
             fading: boolean;
             /** Gap Pct */
             gap_pct?: number | null;
+            indicator_evidence?: components["schemas"]["IndicatorEvidence"] | null;
             /** Last */
             last?: number | null;
             /** N Signals */
