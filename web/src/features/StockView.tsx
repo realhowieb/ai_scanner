@@ -19,6 +19,8 @@ import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format
 
 import { stateHorizon } from "@/lib/researchTime";
 
+import { StockIndicatorEvidence } from "./IndicatorEvidence";
+
 import { SnapshotTime } from "./SnapshotTime";
 import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
@@ -346,10 +348,11 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
         </div>
       </section>
 
-      <SectionNav label={`${s.ticker} sections`} items={[["snapshot", "Overview"], ["price", "Chart"], ["score", "HSF Score"], ["signals", "Signals"],
+      <SectionNav label={`${s.ticker} sections`} items={[["snapshot", "Overview"], ["price", "Chart"], ["indicators", "RSI / MACD"], ["score", "HSF Score"], ["signals", "Signals"],
         ["risks", "Risks"], ["hist", "History"], ["plan", "Trade plan"], ["ai", "AI note"], ["news", "News"], ["filings", "Filings"]]} />
 
       {ranked ? <DecisionSnapshot s={s} /> : <UnrankedSnapshot s={s} onAlert={alertAdded} />}
+      <StockIndicatorEvidence s={s} />
 
       <div className="split stock-split">
         <div className="col-main">

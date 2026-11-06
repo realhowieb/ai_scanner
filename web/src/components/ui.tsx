@@ -193,10 +193,10 @@ export function UpgradeButton({ plan, label }: { plan: "pro" | "premium"; label?
 
 /** A ticker linking to its stock page, with the company logo. `named` adds the short
  * company name under it (tables and lists); otherwise the name is the link's tooltip. */
-export function TickerLink({ ticker, named = false, logo = true }: { ticker: string; named?: boolean; logo?: boolean }) {
+export function TickerLink({ ticker, named = false, logo = true, scanId }: { ticker: string; named?: boolean; logo?: boolean; scanId?: string }) {
   const name = useCompanyName(ticker);
   return (
-    <Link href={`/stocks/${encodeURIComponent(ticker)}`} className={`tk${logo ? " tk-with-logo" : ""}`} title={name ?? undefined}>
+    <Link href={`/stocks/${encodeURIComponent(ticker)}${scanId ? `?scan=${encodeURIComponent(scanId)}` : ""}`} className={`tk${logo ? " tk-with-logo" : ""}`} title={name ?? undefined}>
       {logo && <TickerLogo ticker={ticker} size={named ? 24 : 18} />}
       {named ? <span className="tk-stack"><span className="tk-sym">{ticker}</span>{name && <span className="tk-name">{name}</span>}</span> : ticker}
     </Link>

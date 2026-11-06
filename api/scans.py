@@ -771,3 +771,23 @@ def score_history(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
                        "signals": signals, "signals_added": added})
         prev = set(signals)
     return {"ticker": t, "points": points}
+
+
+def daily_indicator_evidence(bars):
+    """Evaluate displayed chart bars without fetching or mixing scan snapshots."""
+    if not bars:
+        return None
+    import pandas as pd
+
+    from scan.rsi_screen import indicator_evidence
+
+    frame = pd.DataFrame(bars).rename(columns={"close": "Close", "volume": "Volume"})
+    frame.index = pd.to_datetime(frame["date"])
+    volume = None
+    if len(frame) >= 21 and "Volume" in frame:
+        history = pd.to_numeric(frame["Volume"].iloc[-21:-1], errors="coerce")
+        latest = _num(frame["Volume"].iloc[-1])
+        average = _num(history.mean()) if history.notna().all() else None
+        if latest is not None and average is not None and average > 0:
+            volume = latest / average
+    return indicator_evidence(frame, relative_volume=volume)

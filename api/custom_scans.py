@@ -103,9 +103,14 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
             raise ValueError("RSI bounds must be between 0 and 100.")
     if min_rsi is not None and max_rsi is not None and min_rsi > max_rsi:
         raise ValueError("Min RSI must not exceed Max RSI.")
-    has_rsi_screen = min_rsi is not None or max_rsi is not None or bool(f.get("rebound"))
+    if sum(bool(f.get(key)) for key in ("rebound", "momentum_recovery", "uptrend_pullback")) > 1:
+        raise ValueError("Choose one RSI setup at a time.")
+    if f.get("macd_confirmation") not in (None, "bullish_cross", "above_signal"):
+        raise ValueError("Unknown MACD confirmation.")
+    has_rsi_screen = min_rsi is not None or max_rsi is not None or any(f.get(key) for key in
+        ("rebound", "momentum_recovery", "uptrend_pullback", "macd_confirmation"))
     if has_rsi_screen and req.get("score_all"):
-        raise ValueError("Turn off Score all to use RSI or rebound filters.")
+        raise ValueError("Turn off Score all to use RSI or MACD filters.")
     return {
         "universe": universe,
         "ticker": (req.get("ticker") or "").strip().upper() or None,
@@ -116,6 +121,8 @@ def plan_scan(req: Dict[str, Any], *, entitlements: Dict[str, bool], tier: str, 
         "session_requested": session,
         "session": effective_session,
         "min_rsi": min_rsi, "max_rsi": max_rsi, "rebound": bool(f.get("rebound")),
+        "momentum_recovery": bool(f.get("momentum_recovery")), "uptrend_pullback": bool(f.get("uptrend_pullback")),
+        "macd_confirmation": f.get("macd_confirmation"),
         "min_price": min_price,
         "max_price": max_price,
         "min_dollar_vol": float(f.get("min_dollar_vol", 5_000_000.0)),
@@ -217,9 +224,11 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
 
     bypass = p["universe"] in ("watchlist", "earnings") and p["score_all"]   # web: "score all" ignores the screens
     started = time.perf_counter()
-    has_rsi_screen = p.get("min_rsi") is not None or p.get("max_rsi") is not None or p.get("rebound", False)
+    has_rsi_screen = p.get("min_rsi") is not None or p.get("max_rsi") is not None or any(p.get(key) for key in ("rebound", "momentum_recovery", "uptrend_pullback", "macd_confirmation"))
     def runner(**kwargs):
-        return run_breakout_scan(**kwargs, min_rsi=p.get("min_rsi"), max_rsi=p.get("max_rsi"), rebound=p.get("rebound", False))
+        return run_breakout_scan(**kwargs, min_rsi=p.get("min_rsi"), max_rsi=p.get("max_rsi"), rebound=p.get("rebound", False),
+                                 momentum_recovery=p.get("momentum_recovery", False), uptrend_pullback=p.get("uptrend_pullback", False),
+                                 macd_confirmation=p.get("macd_confirmation"))
 
     df = run_manual_scan_execution(
         runner=runner if has_rsi_screen else run_breakout_scan, tickers=tickers,
@@ -245,8 +254,13 @@ def run_scan(p: Dict[str, Any], username: str, report: Callable[[Dict[str, Any]]
         rsi_value = evidence.get("RSI14")
         row["rsi_14"] = float(rsi_value) if rsi_value is not None and math.isfinite(float(rsi_value)) else None
         row["rebound_candidate"] = bool(evidence.get("ReboundCandidate", False))
-        if p.get("rebound"):
-            row["primary_setup"] = "Rebound candidate"
+        row["indicator_evidence"] = evidence.get("IndicatorEvidence")
+        for key, setup_label in (("rebound", "Rebound candidate"), ("momentum_recovery", "Momentum recovery"),
+                           ("uptrend_pullback", "Uptrend pullback")):
+            if p.get(key):
+                row["primary_setup"] = setup_label
+        if p.get("macd_confirmation") and not any(p.get(key) for key in ("rebound", "momentum_recovery", "uptrend_pullback")):
+            row["primary_setup"] = "MACD confirmation"
 
     total = len(rows)
     if p["universe"] == "earnings":   # up to a few hundred names: the plan's row cap applies

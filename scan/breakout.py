@@ -149,6 +149,9 @@ def run_breakout_scan(
     min_rsi: Optional[float] = None,
     max_rsi: Optional[float] = None,
     rebound: bool = False,
+    momentum_recovery: bool = False,
+    uptrend_pullback: bool = False,
+    macd_confirmation: Optional[str] = None,
 ):
     """Breakout scan with richer metrics.
 
@@ -244,9 +247,10 @@ def run_breakout_scan(
         high_20 = metrics["High20"]
         is_breakout = metrics["IsBreakout"]
 
-        from scan.rsi_screen import rsi_screen
-        rsi_value, rebound_candidate, rsi_matches = rsi_screen(
-            df, min_rsi=min_rsi, max_rsi=max_rsi, rebound=rebound, relative_volume=rel_vol)
+        from scan.rsi_screen import evaluate_screen
+        evidence, rsi_matches = evaluate_screen(
+            df, min_rsi=min_rsi, max_rsi=max_rsi, rebound=rebound, relative_volume=rel_vol,
+            momentum_recovery=momentum_recovery, uptrend_pullback=uptrend_pullback, macd_confirmation=macd_confirmation)
         if not rsi_matches:
             continue
 
@@ -399,8 +403,9 @@ def run_breakout_scan(
         rows.append(
             {
                 "Ticker": symbol,
-                "RSI14": rsi_value,
-                "ReboundCandidate": rebound_candidate,
+                "RSI14": evidence["rsi_14"],
+                "ReboundCandidate": evidence["rebound_candidate"],
+                "IndicatorEvidence": evidence,
                 "BreakoutScore": score,
                 "Last": close,
                 "Volume": vol_today,

@@ -23,10 +23,60 @@ results; no model, score formula, or research confidence gate changes.
 Filters run across eligible price histories before ranking and the row cap.
 Universe membership, liquidity and other selected filters still apply. With an
 RSI screen active and the gap checkbox off, the implicit default gap is disabled.
-Score all cannot be combined with RSI or rebound filters. RSI values appear in
+Score all cannot be combined with RSI or MACD filters. RSI values appear in
 custom results when either screen is active. Existing saved views without these
 fields retain their behavior.
 
 Before claiming a predictive edge, evaluate the fixed rule against a baseline
 using time-separated observations, transaction costs, and drawdowns. Keep the
 rule experimental until that evidence supports a stronger claim.
+
+## Momentum recovery and uptrend pullback
+
+Choose at most one RSI setup (enforced by the API as well as the form):
+
+- **Momentum recovery:** previous daily RSI <=50, latest RSI >50, latest close
+  above previous close, and relative volume >=1.0. The crossing must occur on
+  the latest daily bar. This rule does not impose an upper RSI bound; optional
+  manual bounds still intersect with it.
+- **Uptrend pullback:** previous RSI in [40,50], latest RSI above previous RSI but
+  still <=50, latest close above its SMA50, an up close, and relative volume >=1.0.
+  At least 50 valid daily closes are required. The label refers to price above
+  SMA50; it does not additionally require the SMA itself to be rising.
+
+These are fixed experimental screening definitions, not performance claims.
+
+## Optional MACD confirmation
+
+Daily MACD(12,26,9) reuses `scan.indicators.macd`: EMA12 minus EMA26, its EMA9
+signal, and the histogram (MACD minus signal). EMA calculations use adjust=False.
+At least 35 valid closes are required before a MACD filter can match.
+
+- **Fresh bullish crossover:** latest histogram >0 and previous histogram <=0.
+- **MACD above signal line:** latest histogram >0. MACD itself may be below zero;
+  this filter does not require a positive MACD line or a new crossover.
+
+Use MACD alone or intersect it with one RSI setup and optional RSI bounds.
+Unknown MACD modes and multiple RSI setups are rejected. Score all conflicts
+with any active RSI/MACD filter. Other selected filters still apply. Relative
+volume is latest daily volume divided by the prior 20 daily bars' average, the
+same measure used by the scanner. No extra provider requests are made for these
+screens. Standard MACD reference: [Fidelity's indicator guide](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/macd).
+
+## Stock-page evidence and snapshot boundaries
+
+Custom result ticker links retain the account-owned scan ID. The stock page
+loads that scan through the existing ownership-checked job endpoint, finds the
+matching ticker, and shows the saved indicator evidence and scan start time.
+The evidence includes the daily bar date, RSI and previous RSI, prior five-bar
+RSI low/date, daily close/change, relative volume, SMA50, and MACD readings and
+checks. Saved rows also carry `daily-indicators-v1` to identify the rule set.
+
+Latest chart-bar checks are computed separately from the chart's existing bars
+and explicitly labelled. The latest chart may use more history, a different
+snapshot, or a different volume feed from the selected custom scan. Never use
+those newer readings to claim that an older scan qualified. Missing, expired,
+unowned or older scans without evidence receive an unavailable message. A
+stock absent from the selected scan also receives no historical qualification.
+Ordinary ticker links continue to work without scan context. No database
+migration, model retraining, or changes to HSF score/confidence gates are needed.

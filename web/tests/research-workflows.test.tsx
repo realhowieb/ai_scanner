@@ -164,3 +164,37 @@ it("blocks inverted RSI bounds before starting a scan", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Min RSI must not exceed Max RSI");
   expect(create).not.toHaveBeenCalled();
 });
+
+it("keeps RSI setup choices exclusive and submits optional MACD confirmation", async () => {
+  const create = vi.fn(async () => { throw new Error("captured"); });
+  render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  fireEvent.click(screen.getByText("Advanced filters"));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Rebound candidates/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Momentum recovery/ }));
+  expect(screen.getByRole("checkbox", { name: /Rebound candidates/ })).not.toBeChecked();
+  fireEvent.change(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)"), { target: { value: "bullish_cross" } });
+  fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.objectContaining({ momentum_recovery: true, macd_confirmation: "bullish_cross" }) })));
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.not.objectContaining({ rebound: true }) }));
+});
+
+it("loads and saves the new setup and MACD fields with custom views", async () => {
+  preferences.custom_views = [{ name: "Pullback", ticker: "", earnings_window: "today", universe: "sp500", session: "regular", top_n: 25,
+    unusual: false, gap: false, score_all: false, uptrend_pullback: true, macd_confirmation: "above_signal" }];
+  render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create: vi.fn(), get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  await screen.findByRole("option", { name: "Pullback" });
+  fireEvent.change(screen.getByLabelText("Saved views"), { target: { value: "Pullback" } });
+  fireEvent.click(screen.getByText("Advanced filters"));
+  expect(screen.getByRole("checkbox", { name: /Uptrend pullback/ })).toBeChecked();
+  expect(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)")).toHaveValue("above_signal");
+  fireEvent.change(screen.getByLabelText("View name"), { target: { value: "Pullback saved" } });
+  fireEvent.click(screen.getByText("Save view"));
+  await waitFor(() => expect(patches[0]?.custom_views).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Pullback saved", uptrend_pullback: true, macd_confirmation: "above_signal" })])));
+});
+
+it("carries the scan context into desktop and mobile ticker links", () => {
+  render(<SetupTable rows={[setup("BG", 30)]} premium scanId={"a".repeat(32)} displayControls={false} />);
+  const links = screen.getAllByRole("link", { name: /BG/ }).filter((link) => link.getAttribute("href")?.startsWith("/stocks/BG?"));
+  expect(links.length).toBe(2);
+  for (const link of links) expect(link).toHaveAttribute("href", `/stocks/BG?scan=${"a".repeat(32)}`);
+});
