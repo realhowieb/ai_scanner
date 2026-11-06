@@ -1302,3 +1302,14 @@ a.chip { display: inline-flex; align-items: center; }
 .founding-faq summary { cursor: pointer; }
 .founding-faq p { margin: var(--sp-2) 0 0; }
 .founding-switch { margin-top: var(--sp-2); }
+
+/* Indicator evidence: preserve readable columns and scroll on narrow screens. */
+.indicator-checks-table { min-width: 600px; table-layout: fixed; }
+.indicator-checks-table thead th:first-child { width: 44%; }
+.indicator-checks-table thead th:nth-child(2) { width: 38%; }
+.card:not(.flush) .indicator-checks-table tbody th {
+  text-align: left; font-size: 14px; font-weight: 400; color: var(--text);
+  white-space: normal; padding: 10px 20px 10px 0; border-top: 1px solid var(--line-soft);
+}
+.card:not(.flush) .indicator-checks-table td { padding-right: 20px; white-space: normal; vertical-align: top; }
+.indicator-checks-table tbody th { vertical-align: top; }

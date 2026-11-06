@@ -192,3 +192,22 @@ class RsiScreenTests(unittest.TestCase):
 
         evidence = indicator_evidence(bars(), relative_volume=1.2)
         self.assertEqual(IndicatorEvidence(**evidence).model_dump(), evidence)
+
+    def test_history_seed_can_change_readings_with_identical_recent_bars(self):
+        import math
+
+        from scan.rsi_screen import indicator_evidence
+
+        closes = [100 + i * .03 + 5 * math.sin(i / 9) for i in range(200)]
+        full = pd.DataFrame({"Close": closes}, index=pd.date_range("2026-01-01", periods=200))
+        short = full.iloc[-60:]
+        a = indicator_evidence(full, relative_volume=1.2)
+        b = indicator_evidence(short, relative_volume=1.2)
+        self.assertEqual(a["bar_date"], b["bar_date"])
+        self.assertEqual(a["close"], b["close"])
+        self.assertEqual(a["sma50"], b["sma50"])
+        self.assertNotAlmostEqual(a["rsi_14"], b["rsi_14"], places=4)
+        self.assertNotAlmostEqual(a["macd_line"], b["macd_line"], places=4)
+        self.assertEqual((a["history_bars"], b["history_bars"]), (200, 60))
+        self.assertEqual(a["history_start"], full.index[0].date().isoformat())
+        self.assertEqual(b["history_start"], short.index[0].date().isoformat())

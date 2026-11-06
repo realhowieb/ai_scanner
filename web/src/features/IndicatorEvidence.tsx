@@ -11,12 +11,24 @@ type Evidence = Schemas["IndicatorEvidence"];
 type Stock = Schemas["StockDetail"];
 type Selection = Pick<Schemas["ScanParams"], "rebound" | "momentum_recovery" | "uptrend_pullback" | "macd_confirmation">;
 
+type Check = [string, string, string];
+function EvidenceTable({ rows, label }: { rows: Check[]; label: string }) {
+  return <div className="table-wrap" role="region" aria-label={label} tabIndex={0}>
+    <table className="table indicator-checks-table"><thead><tr><th scope="col">Condition</th><th scope="col">Reading</th><th scope="col">Check</th></tr></thead><tbody>
+      {rows.map(([name, value, result]) => <tr key={name}><th scope="row">{name}</th><td>{value}</td><td>{result}</td></tr>)}
+    </tbody></table>
+  </div>;
+}
+function HistoryBasis({ e }: { e: Evidence }) {
+  return <p className="cap">Calculation history: {e.history_bars != null && e.history_start ? `${e.history_bars} daily bars, ${e.history_start} through ${e.bar_date ?? "unknown date"}.` : "not recorded for this saved reading."}</p>;
+}
+
 function flag(available: boolean, passed: boolean) { return !available ? "Needs data" : passed ? "Pass" : "Not met"; }
 
 export function IndicatorFacts({ e, label = "RSI and MACD evidence", selection }: { e: Evidence; label?: string; selection?: Selection }) {
   const rsi = e.rsi_14;
   const previous = e.rsi_previous;
-  const checks: [string, string, string][] = [
+  const checks: Check[] = [
     ["Oversold in prior five daily bars", e.prior_5_rsi_low == null ? "—" : `${num(e.prior_5_rsi_low)} on ${e.prior_5_rsi_low_date ?? "unknown date"}`, flag(e.prior_5_rsi_low != null, (e.prior_5_rsi_low ?? 100) <= 30)],
     ["Rebound RSI: above 30, at most 50", num(rsi), flag(rsi != null, rsi != null && rsi > 30 && rsi <= 50)],
     ["Up close", `${price(e.previous_close)} → ${price(e.close)} (${pct(e.change_pct)})`, flag(e.close != null && e.previous_close != null, (e.close ?? 0) > (e.previous_close ?? Infinity))],
@@ -35,21 +47,34 @@ export function IndicatorFacts({ e, label = "RSI and MACD evidence", selection }
     { name: "MACD above signal line", passed: e.macd_above_signal, selected: selection?.macd_confirmation === "above_signal" },
   ];
   const highlighted = statuses.filter((s) => selection ? s.selected : s.passed);
+  const required = new Set<number>();
+  if (selection?.rebound) [0, 1, 2, 3].forEach((i) => required.add(i));
+  if (selection?.momentum_recovery) [2, 3, 4].forEach((i) => required.add(i));
+  if (selection?.uptrend_pullback) [2, 3, 5, 6].forEach((i) => required.add(i));
+  if (selection?.macd_confirmation === "above_signal") required.add(7);
+  if (selection?.macd_confirmation === "bullish_cross") required.add(8);
+  const focused = checks.filter((_, i) => required.has(i));
+  const other = checks.filter((_, i) => !required.has(i));
   return <>
     <div className="row-actions">
       {highlighted.map((s) => <Pill key={s.name} tone={s.passed ? "up" : "warn"}>{selection ? `${s.name}: ${s.passed ? "passed" : "not confirmed"}` : s.name}</Pill>)}
       {!selection && highlighted.length === 0 && <span className="cap">No indicator setup confirmed.</span>}
     </div>
     <p className="body-sm">RSI {num(rsi)} · Prior five-bar low {num(e.prior_5_rsi_low)}{e.prior_5_rsi_low_date ? ` (${e.prior_5_rsi_low_date})` : ""} · Change {pct(e.change_pct)} · RVOL {num(e.relative_volume)}×</p>
+    <HistoryBasis e={e} />
     <details><summary>View rule-by-rule checks</summary>
-    <div className="row-actions">
-      {statuses.filter((s) => !s.selected).map((s) => <Pill key={s.name}>{s.name}: {s.passed ? "passed" : "not confirmed"}</Pill>)}
-    </div>
-    <div className="table-scroll" role="region" aria-label={label} tabIndex={0}>
-      <table><thead><tr><th>Condition</th><th>Reading</th><th>Check</th></tr></thead><tbody>
-        {checks.map(([label, value, result]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{result}</td></tr>)}
-      </tbody></table>
-    </div>
+      {focused.length > 0 ? <>
+        <p className="strong">Required for the selected setup</p>
+        {!selection?.macd_confirmation && <p className="cap">MACD was not required for this scan.</p>}
+        <EvidenceTable rows={focused} label={label} />
+        <details><summary>Other indicator checks (not required for this scan)</summary>
+          <div className="row-actions">{statuses.filter((s) => !s.selected).map((s) => <Pill key={s.name}>{s.name}: {s.passed ? "passed" : "not confirmed"}</Pill>)}</div>
+          <EvidenceTable rows={other} label={`${label} · other indicators`} />
+        </details>
+      </> : <>
+        <div className="row-actions">{statuses.map((s) => <Pill key={s.name}>{s.name}: {s.passed ? "passed" : "not confirmed"}</Pill>)}</div>
+        <EvidenceTable rows={checks} label={label} />
+      </>}
     </details>
     <p className="cap">Each RSI setup also needs an up close and relative volume ≥1.0. Daily Wilder RSI(14); MACD(12,26,9). MACD above its signal line can still be below zero. Missing history is not a passing check.</p>
   </>;
@@ -81,6 +106,7 @@ export function StockIndicatorEvidence({ s }: { s: Stock }) {
       </> : (!scanId || (!saved.loading && !saved.error)) && <p className="cap">Saved evidence is unavailable for this ticker. Older scans may not contain it; no past qualification is inferred from newer bars.</p>}
     </>}
     {latest && <details open={!requested}><summary>Latest chart-bar checks · {latest.bar_date ?? "date unavailable"}</summary>
+      <p className="cap">RSI and MACD depend on the earlier bars used to start their smoothing. Different history lengths or revised bars can change the readings even when the final date and close match. A small difference can change a check near its threshold.</p>
       <p className="cap">Calculated separately from the displayed daily bars ({s.volume_feed ?? "unknown"} volume feed). These readings may differ from the selected scan. The latest bar can change during the session.</p>
       <IndicatorFacts e={latest} label="Latest chart RSI and MACD evidence" />
     </details>}

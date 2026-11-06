@@ -81,3 +81,30 @@ it("highlights the selected pullback and keeps other setup statuses in collapsed
     expect(other.closest("details")).not.toHaveAttribute("open");
   }
 });
+
+it("separates required rebound rules from optional MACD checks and identifies history", async () => {
+  params.set("scan", id);
+  const e = { ...evidence, history_bars: 63, history_start: "2026-08-10" };
+  fetchMock.mockResolvedValue(jsonResponse({ ...saved("BG", e), params: { rebound: true } }));
+  render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG", indicator_evidence: { ...e, history_bars: 260, history_start: "2025-11-07" } })} />);
+  await screen.findByText("Rebound candidate: passed");
+  const required = screen.getByRole("region", { name: "Selected scan RSI and MACD evidence" });
+  expect(within(required).getAllByRole("row")).toHaveLength(5);
+  expect(within(required).queryByText("MACD above signal line")).not.toBeInTheDocument();
+  expect(screen.getByText("MACD was not required for this scan.")).toBeInTheDocument();
+  const other = screen.getByRole("region", { name: "Selected scan RSI and MACD evidence · other indicators" });
+  expect(within(other).getByRole("rowheader", { name: "MACD above signal line" })).toBeInTheDocument();
+  expect(other.closest("details")).not.toHaveAttribute("open");
+  expect(screen.getByText(/63 daily bars, 2026-08-10/)).toBeInTheDocument();
+  expect(screen.getByText(/260 daily bars, 2025-11-07/)).toBeInTheDocument();
+});
+
+it("keeps a selected MACD filter among required rules", async () => {
+  params.set("scan", id); fetchMock.mockResolvedValue(jsonResponse(saved()));
+  render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG" })} />);
+  await screen.findByText("Rebound candidate: passed");
+  const required = screen.getByRole("region", { name: "Selected scan RSI and MACD evidence" });
+  expect(within(required).getByRole("rowheader", { name: "Fresh MACD bullish crossover" })).toBeInTheDocument();
+  expect(screen.queryByText("MACD was not required for this scan.")).not.toBeInTheDocument();
+  expect(screen.getByText(/not recorded for this saved reading/)).toBeInTheDocument();
+});
