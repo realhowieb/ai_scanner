@@ -22365,6 +22365,48 @@
     "x-internal": true
    }
   },
+  "/v1/admin/ml/production/health": {
+   "get": {
+    "operationId": "ml_production_health_v1_admin_ml_production_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Production Health V1 Admin Ml Production Health Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Production model prediction capture health",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
   "/v1/admin/ml/production/prebreakout": {
    "get": {
     "operationId": "ml_prebreakout_production_v1_admin_ml_production_prebreakout_get",

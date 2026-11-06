@@ -499,3 +499,27 @@ class AuditReportTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FingerprintComponentsTest(unittest.TestCase):
+    def test_component_hashes_preserve_original_whole_dataset_contract(self):
+        built = rd.build_dataset([opp(1, 'AAA', '2026-09-15T16:50:00')], [])
+        meta = built['metadata']
+        payload = {k: meta[k] for k in ('feature_schema_version', 'label_schema_version', 'filters')}
+        payload.update({k: built[k] for k in ('feature_columns', 'label_columns', 'observation_ids',
+                                           'observed_at', 'features', 'labels')})
+        payload['maturity'] = built['maturity_5d']
+        self.assertEqual(meta['fingerprint'], rd.fingerprint(payload))
+        self.assertEqual(meta['component_fingerprints']['features'], rd.fingerprint(built['features']))
+        changed = rd.build_dataset([opp(2, 'AAA', '2026-09-15T16:50:00')], [])['metadata']
+        self.assertNotEqual(meta['component_fingerprints']['observation_ids'], changed['component_fingerprints']['observation_ids'])
+        self.assertEqual(meta['component_fingerprints']['features'], changed['component_fingerprints']['features'])
+
+    def test_scan_reader_does_not_attempt_schema_writes(self):
+        from db.research_datasets import fetch_scan_records
+        conn = sqlite3.connect(':memory:')
+        conn.execute('CREATE TABLE hsf_observations (observation_id TEXT, symbol TEXT, context TEXT, timestamp TEXT, created_at TEXT, record TEXT)')
+        conn.execute('PRAGMA query_only = ON')
+        with mock.patch('db.hsf_observations._ensure_schema', side_effect=AssertionError('DDL forbidden')):
+            self.assertEqual(fetch_scan_records(['AAA'], ts('2026-09-15T00:00:00'), ts('2026-09-16T00:00:00'), conn=conn), [])
+        conn.close()

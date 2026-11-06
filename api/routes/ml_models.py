@@ -104,6 +104,12 @@ def register(app: FastAPI) -> None:
 
         return json_safe(_call(production_prebreakout))
 
+    @get("/v1/admin/ml/production/health", "Production model prediction capture health")
+    def ml_production_health(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.ml_operations import production_capture_health
+
+        return json_safe(_call(production_capture_health))
+
     @get("/v1/admin/ml/models", "ML v4 registry models")
     def ml_models(status: Optional[Literal["candidate", "validated", "shadow", "champion", "retired"]] = None,
                   target_label: Optional[str] = Query(None, pattern=_LABEL),
