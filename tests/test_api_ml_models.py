@@ -155,3 +155,17 @@ class MlModelsApiTests(ApiTestCase):
                 "print(','.join(m for m in ('lightgbm','catboost','xgboost','sklearn') if m in sys.modules))")
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(out.stdout.strip(), "")
+
+    def test_production_capture_requires_admin_and_masks_outage(self):
+        from db.ml_model_registry import RegistryUnavailable
+        url = '/v1/admin/ml/production/health'
+        with mock.patch('db.ml_operations.production_capture_health', return_value={'models': []}) as read:
+            self.assertEqual(self.client.get(url).status_code, 401)
+            pro = self.auth(self.login().json()['access_token'])
+            self.assertEqual(self.client.get(url, headers=pro).status_code, 403)
+            read.assert_not_called()
+            self.assertEqual(self.client.get(url, headers=self.boss).json(), {'models': []})
+        with mock.patch('db.ml_operations.production_capture_health', side_effect=RegistryUnavailable('private detail')):
+            response = self.client.get(url, headers=self.boss)
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn('private detail', response.text)

@@ -40,6 +40,14 @@ beforeEach(() => {
       configured_model: prebreakoutState === "missing" ? null : { model_version: "prebreakout-configured", trained_at: "2026-10-07T20:00:00Z", dataset_version: null },
       latest_capture: prebreakoutState === "missing" ? null : { model_version: "prebreakout-actual", signal_at: "2026-11-06T17:43:00Z", inferred_at: "2026-11-06T17:43:01Z", artifact_sha256: "pb-hash" },
     });
+    if (path === "/v1/admin/ml/production/health") return jsonResponse({
+      generated_at: "2026-11-06T20:00:00Z", since: "2026-10-30T20:00:00Z",
+      note: "Capture completeness and identity only, not predictive quality.",
+      models: [
+        { role: "ai_confidence", status: "WATCH", observations: 350, predictions: 350, missing_predictions: 0, identity_missing: 300, latest_prediction_at: "2026-11-06T17:43:00Z", behind_latest_observation: false },
+        { role: "prebreakout", status: "HEALTHY", observations: 350, predictions: 350, missing_predictions: 0, identity_missing: 0, latest_prediction_at: "2026-11-06T17:43:00Z", behind_latest_observation: false },
+      ],
+    });
     if (path === "/v1/admin/ml/production") return jsonResponse({
       configured_model: { model_version: "production-xgb", trained_at: "2026-09-09T20:55:40Z", dataset_version: null },
       latest_capture: { model_version: "captured-local-xgb", signal_at: "2026-11-05T17:00:00Z", inferred_at: null, artifact_sha256: null },
@@ -124,4 +132,15 @@ it("keeps PreBreakout failures explicit while AI Confidence still loads", async 
   expect(await within(card).findByText(/Model evidence unavailable/)).toBeInTheDocument();
   expect(await screen.findByText("production-xgb")).toBeInTheDocument();
   expect(card).not.toHaveTextContent("No active database model recorded");
+});
+
+
+it("separates missing predictions from missing identity without claiming model quality", async () => {
+  render(<ModelsTab />);
+  const card = screen.getByRole("heading", { name: "Production prediction capture" }).closest("section")!;
+  expect(await within(card).findByText("300")).toBeInTheDocument();
+  expect(within(card).getAllByText("350 / 350")).toHaveLength(2);
+  expect(within(card).getByText("Healthy")).toBeInTheDocument();
+  expect(within(card).getByText(/not predictive quality/)).toBeInTheDocument();
+  expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
 });
