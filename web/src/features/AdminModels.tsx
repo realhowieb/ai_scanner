@@ -247,6 +247,7 @@ type Production = {
 
 function ModelSummary() {
   const production = useApi("admin-ml-production", (signal) => unwrap(api.GET("/v1/admin/ml/production", { signal })) as unknown as Promise<Production>);
+  const prebreakout = useApi("admin-ml-prebreakout", (signal) => unwrap(api.GET("/v1/admin/ml/production/prebreakout", { signal })) as unknown as Promise<Production>);
   const registry = useApi("admin-ml-summary", (signal) => unwrap(api.GET("/v1/admin/ml/models", { signal })) as unknown as Promise<{ models: Model[] }>);
   return <Card title="What is trained and running?">
     {production.error ? <ErrorState error={production.error} onRetry={production.reload} what="production confidence evidence" /> : !production.data ? <Skeleton rows={2} label="Loading production confidence" /> : <>
@@ -257,6 +258,17 @@ function ModelSummary() {
       <p className="cap">Inference time: {etTime(production.data.latest_capture?.inferred_at)} · artifact checksum: <span className="mono">{production.data.latest_capture?.artifact_sha256 ?? "Not recorded on this signal"}</span>.</p>
       <p className="cap">The configured model and latest recorded prediction are separate evidence. A local fallback may be used; an unrecorded value is unknown.</p>
     </>}
+    <section aria-label="Production PreBreakout" className="stack-sm">
+      <h3 className="h3">Production PreBreakout</h3>
+      <p className="cap">The separate model behind the Premium PreBreakout column and stock-page signals. It is not AI Confidence or an ML v4 challenger.</p>
+      {prebreakout.error ? <ErrorState error={prebreakout.error} onRetry={prebreakout.reload} what="PreBreakout model evidence" /> : !prebreakout.data ? <Skeleton rows={2} label="Loading PreBreakout model evidence" /> : <>
+        <p>Configured database model: <strong>{prebreakout.data.configured_model?.model_version ?? "No active database model recorded"}</strong>.</p>
+        <p className="cap">Trained: {etTime(prebreakout.data.configured_model?.trained_at)} · dataset: {prebreakout.data.configured_model?.dataset_version ?? "Not recorded"}.</p>
+        <p>Latest recorded PreBreakout prediction: {prebreakout.data.latest_capture ? `${prebreakout.data.latest_capture.model_version ?? "Model version not recorded"} · signal ${etTime(prebreakout.data.latest_capture.signal_at)}` : "No saved PreBreakout prediction with model evidence found"}.</p>
+        <p className="cap">Inference time: {etTime(prebreakout.data.latest_capture?.inferred_at)} · artifact checksum: <span className="mono">{prebreakout.data.latest_capture?.artifact_sha256 ?? "Not recorded on this signal"}</span>.</p>
+        <p className="cap">Configuration and recorded predictions do not prove which artifact is currently cached in every process. A local fallback may be used. Missing evidence is unknown; a display zero without a model is not a prediction.</p>
+      </>}
+    </section>
     <h3 className="h3">ML v4 challengers</h3>
     {registry.error ? <ErrorState error={registry.error} onRetry={registry.reload} what="challenger training records" /> : !registry.data ? <Skeleton rows={3} label="Loading challengers" /> : <div className="table-wrap"><table className="table">
       <thead><tr><th scope="col">Model</th><th scope="col">Training evidence</th><th scope="col">Dataset</th><th scope="col">Evaluation</th><th scope="col">Stage / app use</th></tr></thead>
@@ -274,7 +286,7 @@ function ModelSummary() {
 export function ModelsTab() {
   return (
     <div className="stack">
-      <p className="notice">ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
+      <p className="notice">PreBreakout and AI Confidence are separate production scorers. ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
       <ModelSummary />
       <MlNextSteps />
       <MonitoringCard />

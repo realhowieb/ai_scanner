@@ -1,4 +1,5 @@
 """Operational views must distinguish history, capture failures and actual identity."""
+import unittest
 from unittest.mock import MagicMock, patch
 
 from analytics.ml_readiness import feature_capture_health
@@ -58,3 +59,52 @@ def test_production_evidence_accepts_dict_rows_without_reading_model_bytes():
         assert call.args[0].startswith('SELECT ')
         assert 'model_bytes' not in call.args[0]
     conn.close.assert_called_once()
+
+
+
+
+class PrebreakoutEvidenceTests(unittest.TestCase):
+    def test_identity_is_slim_read_only_and_not_confidence(self):
+        from db.ml_operations import production_prebreakout
+        conn = MagicMock()
+        cursor = conn.cursor.return_value
+        cursor.fetchone.side_effect = [
+            ('prebreakout_models', 'signal_outcomes'),
+            (7, 'configured-pb', '2026-10-07', None),
+            ('2026-11-06', 'pb-hash', '2026-11-06', 'actual-pb', 'legacy-pb'),
+        ]
+        with patch('db.ml_operations.get_neon_conn', return_value=conn):
+            result = production_prebreakout()
+        self.assertEqual(result['configured_model']['model_version'], 'configured-pb')
+        self.assertEqual(result['latest_capture']['model_version'], 'actual-pb')
+        self.assertEqual(result['latest_capture']['artifact_sha256'], 'pb-hash')
+        queries = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(all(q.startswith('SELECT ') and 'model_bytes' not in q for q in queries))
+        self.assertIn("'captured'", queries[-1])
+        self.assertIn('prebreakout_prob > 0', queries[-1])
+        self.assertNotIn('ai_confidence', ''.join(queries))
+        conn.close.assert_called_once()
+
+    def test_absent_tables_and_database_failure_are_distinct(self):
+        from db.ml_model_registry import RegistryUnavailable
+        from db.ml_operations import production_prebreakout
+        conn = MagicMock()
+        conn.cursor.return_value.fetchone.return_value = (None, None)
+        with patch('db.ml_operations.get_neon_conn', return_value=conn):
+            result = production_prebreakout()
+        self.assertIsNone(result['configured_model'])
+        self.assertIsNone(result['latest_capture'])
+        with patch('db.ml_operations.get_neon_conn', return_value=None):
+            with self.assertRaises(RegistryUnavailable):
+                production_prebreakout()
+
+    def test_query_failure_closes_resources(self):
+        from db.ml_model_registry import RegistryUnavailable
+        from db.ml_operations import production_prebreakout
+        conn = MagicMock()
+        conn.cursor.return_value.execute.side_effect = RuntimeError('db failure')
+        with patch('db.ml_operations.get_neon_conn', return_value=conn):
+            with self.assertRaises(RegistryUnavailable):
+                production_prebreakout()
+        conn.cursor.return_value.close.assert_called_once()
+        conn.close.assert_called_once()

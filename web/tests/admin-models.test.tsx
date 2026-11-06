@@ -27,14 +27,19 @@ const gates = { gates_version: "hsf-ml-v4-gates-1", passed: false, checks: [
 const shadow = { scored: 60, labeled: 40, entry_days: 8, last_scored_at: "2026-11-24T21:41:00Z", roc_auc: 0.6, hit_rate: 0.3,
   vs_ai_confidence_as_served: { rows: 40, model_auc: 0.6, served_auc: 0.55, auc_delta: 0.05, brier_delta: -0.01 } };
 
+let prebreakoutState: "available" | "missing" | "error" = "available";
 const calls: { path: string; method: string; body: unknown }[] = [];
 beforeEach(() => {
-  calls.length = 0;
+  calls.length = 0; prebreakoutState = "available";
   vi.stubGlobal("fetch", vi.fn(async (input: Request | string, init?: RequestInit) => {
     const r = typeof input === "string" ? new Request(new URL(input, "http://localhost"), init) : input;
     const path = new URL(r.url).pathname.replace(/^\/api\/(hsf|public)/, "");
     const body = r.method === "GET" ? null : JSON.parse((await r.text()) || "null");
     calls.push({ path, method: r.method, body });
+    if (path === "/v1/admin/ml/production/prebreakout") return prebreakoutState === "error" ? jsonResponse({ detail: "Model evidence unavailable" }, 503) : jsonResponse({
+      configured_model: prebreakoutState === "missing" ? null : { model_version: "prebreakout-configured", trained_at: "2026-10-07T20:00:00Z", dataset_version: null },
+      latest_capture: prebreakoutState === "missing" ? null : { model_version: "prebreakout-actual", signal_at: "2026-11-06T17:43:00Z", inferred_at: "2026-11-06T17:43:01Z", artifact_sha256: "pb-hash" },
+    });
     if (path === "/v1/admin/ml/production") return jsonResponse({
       configured_model: { model_version: "production-xgb", trained_at: "2026-09-09T20:55:40Z", dataset_version: null },
       latest_capture: { model_version: "captured-local-xgb", signal_at: "2026-11-05T17:00:00Z", inferred_at: null, artifact_sha256: null },
@@ -90,4 +95,33 @@ describe("Admin > Models", () => {
     expect(post?.body).toEqual({ to_status: "validated", reason: "walk-forward and holdout reviewed", approve: false });
     expect(await within(dialog).findByRole("status")).toHaveTextContent("Moved to validated.");
   });
+});
+
+
+it("shows separate PreBreakout configuration and actual prediction evidence", async () => {
+  render(<ModelsTab />);
+  const card = screen.getByRole("region", { name: "Production PreBreakout" });
+  expect(await within(card).findByText("prebreakout-configured")).toBeInTheDocument();
+  expect(within(card).getByText(/prebreakout-actual/)).toBeInTheDocument();
+  expect(within(card).getByText("pb-hash")).toBeInTheDocument();
+  expect(card).not.toHaveTextContent("production-xgb");
+  expect(card).toHaveTextContent(/do not prove which artifact is currently cached/);
+  expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+});
+
+it("labels missing PreBreakout evidence without claiming a running model", async () => {
+  prebreakoutState = "missing";
+  render(<ModelsTab />);
+  const card = screen.getByRole("region", { name: "Production PreBreakout" });
+  expect(await within(card).findByText("No active database model recorded")).toBeInTheDocument();
+  expect(card).toHaveTextContent("No saved PreBreakout prediction with model evidence found");
+});
+
+it("keeps PreBreakout failures explicit while AI Confidence still loads", async () => {
+  prebreakoutState = "error";
+  render(<ModelsTab />);
+  const card = screen.getByRole("region", { name: "Production PreBreakout" });
+  expect(await within(card).findByText(/Model evidence unavailable/)).toBeInTheDocument();
+  expect(await screen.findByText("production-xgb")).toBeInTheDocument();
+  expect(card).not.toHaveTextContent("No active database model recorded");
 });
