@@ -141,6 +141,9 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const [minRsi, setMinRsi] = useState("");
   const [maxRsi, setMaxRsi] = useState("");
   const [rebound, setRebound] = useState(false);
+  const [momentumRecovery, setMomentumRecovery] = useState(false);
+  const [uptrendPullback, setUptrendPullback] = useState(false);
+  const [macdConfirmation, setMacdConfirmation] = useState<"" | "bullish_cross" | "above_signal">("");
   const [scoreAll, setScoreAll] = useState(!!link);
   const [earnWindow, setEarnWindow] = useState<EarnWindow>(link?.when ?? "today");
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -184,13 +187,16 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       if (bound.trim() && (optNum(bound) === undefined || Number(bound) < 0 || Number(bound) > 100)) return { error: "RSI bounds must be between 0 and 100." };
     }
     if (minRsi.trim() && maxRsi.trim() && Number(minRsi) > Number(maxRsi)) return { error: "Min RSI must not exceed Max RSI." };
-    if (scoreAll && (minRsi.trim() || maxRsi.trim() || rebound)) return { error: "Turn off Score all to use RSI or rebound filters." };
+    if (scoreAll && (minRsi.trim() || maxRsi.trim() || rebound || momentumRecovery || uptrendPullback || macdConfirmation)) return { error: "Turn off Score all to use RSI or MACD filters." };
     const filters: NonNullable<ScanCreate["filters"]> = {
       top_n: Math.min(topN, maxRows),
       session,
       ...(optNum(minRsi) !== undefined ? { min_rsi: optNum(minRsi) } : {}),
       ...(optNum(maxRsi) !== undefined ? { max_rsi: optNum(maxRsi) } : {}),
       ...(rebound ? { rebound: true } : {}),
+      ...(momentumRecovery ? { momentum_recovery: true } : {}),
+      ...(uptrendPullback ? { uptrend_pullback: true } : {}),
+      ...(macdConfirmation ? { macd_confirmation: macdConfirmation } : {}),
       ...(optNum(minPrice) !== undefined ? { min_price: optNum(minPrice) } : {}),
       ...(optNum(maxPrice) !== undefined ? { max_price: optNum(maxPrice) } : {}),
       ...(optNum(minDollarVol) !== undefined ? { min_dollar_vol: optNum(minDollarVol) } : {}),
@@ -245,6 +251,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
     setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
     setMinRsi(v.min_rsi == null ? "" : String(v.min_rsi)); setMaxRsi(v.max_rsi == null ? "" : String(v.max_rsi)); setRebound(v.rebound ?? false);
+    setMomentumRecovery(v.momentum_recovery ?? false); setUptrendPullback(v.uptrend_pullback ?? false); setMacdConfirmation(v.macd_confirmation ?? "");
     setFormErr(null);
   };
 
@@ -269,7 +276,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       <SavedResearchViews kind="custom_views" disabled={active || scan.starting}
         current={{ name: "", universe, ticker, watchlist_id: watchlistId ? Number(watchlistId) : null, session, earnings_window: earnWindow,
           top_n: topN as 10 | 25 | 50 | 100 | 200, min_price: optNum(minPrice), max_price: optNum(maxPrice),
-          min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), min_rsi: optNum(minRsi), max_rsi: optNum(maxRsi), rebound, score_all: scoreAll }}
+          min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), min_rsi: optNum(minRsi), max_rsi: optNum(maxRsi), rebound, momentum_recovery: momentumRecovery, uptrend_pullback: uptrendPullback, macd_confirmation: macdConfirmation || null, score_all: scoreAll }}
         onApply={applyView} />
       <ScanBuilder disabled={active || scan.starting} onApply={applyView} />
       <div className={`split custom-scan-layout${done ? " is-done" : ""}`}>
@@ -358,7 +365,15 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 </select>
               </label>
             </div>
-            <label className="check"><input type="checkbox" checked={rebound} onChange={(e) => { setRebound(e.target.checked); setScoreAll(false); }} /><span>Rebound candidates (experimental)</span></label>
+            <label className="check"><input type="checkbox" checked={rebound} onChange={(e) => { setRebound(e.target.checked); setMomentumRecovery(false); setUptrendPullback(false); setScoreAll(false); }} /><span>Rebound candidates (experimental)</span></label>
+            <label className="check"><input type="checkbox" checked={momentumRecovery} onChange={(e) => { setMomentumRecovery(e.target.checked); setRebound(false); setUptrendPullback(false); setScoreAll(false); }} /><span>Momentum recovery (experimental)</span></label>
+            <p className="cap">RSI crosses from 50 or below to above 50 on the latest daily bar, with an up close and relative volume of at least 1.0.</p>
+            <label className="check"><input type="checkbox" checked={uptrendPullback} onChange={(e) => { setUptrendPullback(e.target.checked); setRebound(false); setMomentumRecovery(false); setScoreAll(false); }} /><span>Uptrend pullback (experimental)</span></label>
+            <p className="cap">Previous RSI was 40–50 and now turns up while staying at most 50, with price above its 50-day average, an up close and relative volume of at least 1.0. Choose one RSI setup.</p>
+            <label className="field"><span>MACD confirmation (12, 26, 9 daily)</span><select value={macdConfirmation} onChange={(e) => { setMacdConfirmation(e.target.value as typeof macdConfirmation); setScoreAll(false); }}>
+              <option value="">No MACD filter</option><option value="bullish_cross">Fresh bullish crossover</option><option value="above_signal">MACD above signal line</option>
+            </select></label>
+            <p className="cap">Fresh crossover: MACD moves above its signal line on the latest daily bar. Above signal: the histogram is positive; MACD itself can still be below zero. Use alone or with one RSI setup.</p>
             <p className="cap">Rebound: RSI touched 30 or below in the prior five daily bars, is now above 30 and at most 50, the latest close is up, and relative volume is at least 1.0. Research candidates, not breakout predictions. RSI uses the latest daily bar, which can change during the session. Blank RSI bounds impose no RSI limit.</p>
             <label className={`check${can("can_unusual_volume") ? "" : " is-locked"}`}>
               <input type="checkbox" checked={unusual} disabled={!can("can_unusual_volume")} onChange={(e) => setUnusual(e.target.checked)} />
@@ -419,7 +434,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               {job.result.setups.length === 0 ? (
                 <Empty title="No setups matched.">Try a larger list or looser filters.</Empty>
               ) : (
-                <div className="flush-inner"><SetupTable showRsi={job.params.min_rsi != null || job.params.max_rsi != null || Boolean(job.params.rebound)} rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
+                <div className="flush-inner"><SetupTable scanId={job.scan_id} showRsi={job.params.min_rsi != null || job.params.max_rsi != null || Boolean(job.params.rebound || job.params.momentum_recovery || job.params.uptrend_pullback || job.params.macd_confirmation)} rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
               )}
               {job.result.total > job.result.setups.length && (
                 <p className="cap">Showing the top {job.result.setups.length} of {job.result.total} scored stocks (your plan&apos;s row limit).</p>

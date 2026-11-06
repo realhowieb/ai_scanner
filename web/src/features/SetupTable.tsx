@@ -42,7 +42,7 @@ type NewsFlag = Schemas["NewsFlag"];
 /** `ranks`: each ticker's rank in the whole latest scan (null = not ranked), for rows that
  * aren't a slice of the ranked list (the Scanner's Watchlist tab). */
 type Ranks = Record<string, number | null>;
-type Ctx = { numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks; auto?: Set<string> };
+type Ctx = { scanId?: string; numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks; auto?: Set<string> };
 const TableCtx = createContext<Ctx>({ numbered: true, offset: 0, sparks: false, series: {}, news: {}, choose: () => null });
 const NOT_RANKED = "Not ranked in the latest scan";
 /** Unranked and not auto-scored: no score to show. */
@@ -78,7 +78,7 @@ function ScoreCell({ row }: { row: { original: Row } }) {
 }
 function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
-  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
+  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named scanId={c.scanId} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
 }
 function SparkCell({ row }: { row: { original: Row } }) { const c = useCtx(); return <DailySpark points={c.series[row.original.ticker]} ticker={row.original.ticker} />; }
 
@@ -103,7 +103,8 @@ const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
 /** `sort` + `onSort` make the sortable headers buttons that ask the server for a new order. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, showRsi = false, sort, onSort, prefs: given, ranks, auto }: {
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, showRsi = false, scanId, sort, onSort, prefs: given, ranks, auto }: {
+  scanId?: string;
   rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean; showRsi?: boolean;
   /** Show each row's rank in the whole scan instead of its position; null marks a row that isn't ranked. */
   ranks?: Ranks;
@@ -125,7 +126,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const series = useDailySparks(sparks && visible("spark") ? rows.map((r) => r.ticker) : []);
   const news = useNewsFlags(sparks ? rows.map((r) => r.ticker) : []);
 
-  const ctx = { numbered, offset, sparks, series, news, choose, ranks, auto };
+  const ctx = { scanId, numbered, offset, sparks, series, news, choose, ranks, auto };
   const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)])), rsi: showRsi };
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
@@ -196,7 +197,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               {ranks ? ranks[r.ticker] != null && <span className="mono cap" title="Rank in the latest scan">#{ranks[r.ticker]}</span>
                 : numbered && <span className="mono cap">#{offset + i + 1}</span>}
               {sparks && choose(r.ticker)}
-              <TickerLink ticker={r.ticker} named />
+              <TickerLink ticker={r.ticker} named scanId={scanId} />
               {visible("setup") && !isUnranked(ranks, r.ticker, auto) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />

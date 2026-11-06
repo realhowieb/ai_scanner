@@ -19,6 +19,9 @@ class ScanFilters(BaseModel):
     min_rsi: Optional[float] = Field(None, ge=0, le=100, allow_inf_nan=False, description="Inclusive daily Wilder RSI(14) lower bound")
     max_rsi: Optional[float] = Field(None, ge=0, le=100, allow_inf_nan=False, description="Inclusive daily Wilder RSI(14) upper bound")
     rebound: bool = Field(False, description="Experimental RSI recovery screen; not a breakout prediction")
+    momentum_recovery: bool = False
+    uptrend_pullback: bool = False
+    macd_confirmation: Optional[Literal["bullish_cross", "above_signal"]] = None
     min_gap: float = Field(1.0, ge=0, le=20, description="Used with apply_gap_filter (Pro+)")
     apply_gap_filter: bool = Field(False, description="Pro+")
     unusual_volume: bool = Field(False, description="Pro+")
