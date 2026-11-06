@@ -149,7 +149,7 @@ it("submits inclusive RSI bounds and the experimental rebound screen", async () 
   fireEvent.click(screen.getByText("Advanced filters"));
   fireEvent.change(screen.getByLabelText("Min RSI (14, daily)"), { target: { value: "28" } });
   fireEvent.change(screen.getByLabelText("Max RSI (14, daily)"), { target: { value: "32" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: /Rebound candidates/ }));
+  fireEvent.change(screen.getByLabelText("RSI setup (experimental)"), { target: { value: "rebound" } });
   fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.objectContaining({ min_rsi: 28, max_rsi: 32, rebound: true }) })));
 });
@@ -169,9 +169,9 @@ it("keeps RSI setup choices exclusive and submits optional MACD confirmation", a
   const create = vi.fn(async () => { throw new Error("captured"); });
   render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
   fireEvent.click(screen.getByText("Advanced filters"));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Rebound candidates/ }));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Momentum recovery/ }));
-  expect(screen.getByRole("checkbox", { name: /Rebound candidates/ })).not.toBeChecked();
+  fireEvent.change(screen.getByLabelText("RSI setup (experimental)"), { target: { value: "rebound" } });
+  fireEvent.change(screen.getByLabelText("RSI setup (experimental)"), { target: { value: "momentum_recovery" } });
+  expect(screen.getByLabelText("RSI setup (experimental)")).toHaveValue("momentum_recovery");
   fireEvent.change(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)"), { target: { value: "bullish_cross" } });
   fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.objectContaining({ momentum_recovery: true, macd_confirmation: "bullish_cross" }) })));
@@ -185,7 +185,7 @@ it("loads and saves the new setup and MACD fields with custom views", async () =
   await screen.findByRole("option", { name: "Pullback" });
   fireEvent.change(screen.getByLabelText("Saved views"), { target: { value: "Pullback" } });
   fireEvent.click(screen.getByText("Advanced filters"));
-  expect(screen.getByRole("checkbox", { name: /Uptrend pullback/ })).toBeChecked();
+  expect(screen.getByLabelText("RSI setup (experimental)")).toHaveValue("uptrend_pullback");
   expect(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)")).toHaveValue("above_signal");
   fireEvent.change(screen.getByLabelText("View name"), { target: { value: "Pullback saved" } });
   fireEvent.click(screen.getByText("Save view"));
@@ -197,4 +197,27 @@ it("carries the scan context into desktop and mobile ticker links", () => {
   const links = screen.getAllByRole("link", { name: /BG/ }).filter((link) => link.getAttribute("href")?.startsWith("/stocks/BG?"));
   expect(links.length).toBe(2);
   for (const link of links) expect(link).toHaveAttribute("href", `/stocks/BG?scan=${"a".repeat(32)}`);
+});
+
+it("shows only the selected RSI explanation and clears the setup without clearing MACD", async () => {
+  const create = vi.fn(async () => { throw new Error("captured"); });
+  render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  fireEvent.click(screen.getByText("Advanced filters"));
+  const selector = screen.getByLabelText("RSI setup (experimental)");
+  expect(selector).toHaveValue("");
+  expect(screen.queryByText(/RSI touched 30 or below/)).not.toBeInTheDocument();
+  fireEvent.change(selector, { target: { value: "rebound" } });
+  expect(screen.getByText(/RSI touched 30 or below/)).toHaveAttribute("id", "rsi-setup-help");
+  expect(selector).toHaveAttribute("aria-describedby", "rsi-setup-help");
+  fireEvent.change(selector, { target: { value: "uptrend_pullback" } });
+  expect(screen.queryByText(/RSI touched 30 or below/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Previous RSI was 40–50/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)"), { target: { value: "above_signal" } });
+  fireEvent.change(selector, { target: { value: "" } });
+  expect(screen.getByLabelText("MACD confirmation (12, 26, 9 daily)")).toHaveValue("above_signal");
+  fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.objectContaining({ macd_confirmation: "above_signal" }) })));
+  for (const key of ["rebound", "momentum_recovery", "uptrend_pullback"]) {
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.not.objectContaining({ [key]: true }) }));
+  }
 });
