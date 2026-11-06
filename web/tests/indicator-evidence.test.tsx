@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Schemas } from "@/api/client";
 import { StockIndicatorEvidence } from "@/features/IndicatorEvidence";
@@ -34,7 +34,14 @@ it("shows the exact saved scan separately from newer chart readings", async () =
   expect(within(region).getByText("27.1 on 2026-11-03")).toBeInTheDocument();
   expect(within(region).getByText("39.4")).toBeInTheDocument();
   expect(screen.getByText(/These readings are saved/)).toBeInTheDocument();
-  expect(screen.getByText(/Latest chart-bar checks · 2026-11-06/)).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Latest chart RSI and MACD evidence" })).not.toBeInTheDocument();
+  const compare = screen.getByText("Compare with latest");
+  expect(compare.closest("details")).not.toHaveAttribute("open");
+  fireEvent.click(compare);
+  expect(await screen.findByText(/These are separate chart-bar readings/)).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Latest chart RSI and MACD evidence" })).toBeInTheDocument();
+  fireEvent.click(compare);
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Latest chart RSI and MACD evidence" })).not.toBeInTheDocument());
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(new URL(fetchMock.mock.calls[0]![0].url).pathname).toContain(`/v1/scans/${id}`);
 });
@@ -96,7 +103,9 @@ it("separates required rebound rules from optional MACD checks and identifies hi
   expect(within(other).getByRole("rowheader", { name: "MACD above signal line" })).toBeInTheDocument();
   expect(other.closest("details")).not.toHaveAttribute("open");
   expect(screen.getByText(/63 daily bars, 2026-08-10/)).toBeInTheDocument();
-  expect(screen.getByText(/260 daily bars, 2025-11-07/)).toBeInTheDocument();
+  expect(screen.queryByText(/260 daily bars, 2025-11-07/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Compare with latest"));
+  expect(await screen.findByText(/260 daily bars, 2025-11-07/)).toBeInTheDocument();
 });
 
 it("keeps a selected MACD filter among required rules", async () => {
@@ -107,4 +116,37 @@ it("keeps a selected MACD filter among required rules", async () => {
   expect(within(required).getByRole("rowheader", { name: "Fresh MACD bullish crossover" })).toBeInTheDocument();
   expect(screen.queryByText("MACD was not required for this scan.")).not.toBeInTheDocument();
   expect(screen.getByText(/not recorded for this saved reading/)).toBeInTheDocument();
+});
+
+
+it("shows just the latest checks on a direct stock visit", () => {
+  render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG", indicator_evidence: evidence })} />);
+  expect(screen.getByRole("heading", { name: "Latest indicator checks" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Latest chart RSI and MACD evidence" })).toBeInTheDocument();
+  expect(screen.queryByText("Compare with latest")).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Saved scan evidence" })).not.toBeInTheDocument();
+  expect(screen.getByText("Calculation details").closest("details")).not.toHaveAttribute("open");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("resets an expanded comparison when navigating to another stock", async () => {
+  params.set("scan", id); fetchMock.mockResolvedValue(jsonResponse(saved()));
+  const view = render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG", indicator_evidence: evidence })} />);
+  await screen.findByText("Rebound candidate: passed");
+  fireEvent.click(screen.getByText("Compare with latest"));
+  await screen.findByText(/These are separate chart-bar readings/);
+  view.rerender(<StockIndicatorEvidence s={stockDetail({ ticker: "NOC", indicator_evidence: evidence })} />);
+  expect(screen.getByText("Compare with latest").closest("details")).not.toHaveAttribute("open");
+  expect(screen.queryByRole("region", { name: "Latest chart RSI and MACD evidence" })).not.toBeInTheDocument();
+});
+
+it("keeps latest readings available after a saved-scan error without replacing its evidence", async () => {
+  params.set("scan", id); fetchMock.mockResolvedValue(jsonResponse({ detail: "Scan not found" }, 404));
+  render(<StockIndicatorEvidence s={stockDetail({ ticker: "BG", indicator_evidence: evidence })} />);
+  await screen.findByRole("alert");
+  expect(screen.queryByText("Rebound candidate: passed")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Compare with latest"));
+  await screen.findByText(/These are separate chart-bar readings/);
+  expect(screen.getByRole("region", { name: "Latest chart RSI and MACD evidence" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Selected scan RSI and MACD evidence" })).not.toBeInTheDocument();
 });
