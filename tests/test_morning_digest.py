@@ -101,6 +101,9 @@ class TrackRecordLineTests(unittest.TestCase):
             "runs_used": runs_used,
             "benchmark": "SPY",
             "top_n": 5,
+            "methodology": "track-v2-next-open", "avg_absolute_return": -.02, "avg_excess_return": avg,
+            "benchmark_outperformance_rate": win, "evaluated_count": sample_size, "selected_count": sample_size+10,
+            "coverage_pct": 95,
         }
 
     def test_shows_when_sample_is_meaningful(self):
@@ -108,7 +111,7 @@ class TrackRecordLineTests(unittest.TestCase):
             "db.track_record.load_latest_track_record", return_value=self._tr()
         ):
             html, text = _track_record_line()
-        self.assertIn("beat the SPY", html)
+        self.assertIn("excess vs SPY", html)
         self.assertIn("+1.2%", html)
         self.assertIn("top-5", html)
         self.assertIn("SPY", text)

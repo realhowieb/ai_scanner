@@ -37,7 +37,6 @@ function share(v: number | null | undefined): string {
   return v === null || v === undefined || !Number.isFinite(v) ? "—" : `${Math.round(v * 100)}%`;
 }
 
-const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
 /** `runningSum` overlays the running sum of the daily averages: only for 1-day holds, where days don't overlap. */
 function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: boolean }) {
@@ -85,60 +84,48 @@ function DailyChart({ days, runningSum = false }: { days: Day[]; runningSum?: bo
 export function trackRecordCsv(rows: TrackRecordSummary[], days: Day[], horizon: number): CsvTable {
   const p = (v: number | null | undefined) => (v == null ? null : round(v * 100, 3));
   const out: unknown[][] = rows.map((r) => ["Summary", r.ranking_label, r.horizon_days, "", r.sufficient ? p(r.avg_excess_return) : null,
-    r.sufficient ? p(r.median_excess_return) : null, r.sufficient ? p(r.win_rate) : null, r.sample_size ?? null, r.runs_used ?? null, r.benchmark, r.computed_at ?? ""]);
-  for (const d of days) out.push(["Daily", rows[0]?.ranking_label ?? "", horizon, d.day, p(d.avg_excess_return), null, null, null, null, rows[0]?.benchmark ?? "SPY", ""]);
+    r.sufficient ? p(r.median_excess_return) : null, r.sufficient ? p(r.win_rate) : null, r.sample_size ?? null, r.runs_used ?? null, r.benchmark, r.computed_at ?? "", r.methodology, r.entry_policy, r.sufficient ? p(r.avg_absolute_return) : null,
+    r.sufficient ? p(r.median_absolute_return) : null, r.sufficient ? p(r.positive_return_rate) : null,
+    r.selected_count, r.evaluated_count, r.excluded_count, r.coverage_pct, r.unique_ticker_count, r.signal_date_count,
+    JSON.stringify(r.exclusions ?? {})]);
+  for (const d of days) out.push(["Daily", rows[0]?.ranking_label ?? "", horizon, d.day, p(d.avg_excess_return), null, null, null, null, rows[0]?.benchmark ?? "SPY", "", d.methodology, "", null, null, null, null, null, null, null, null, null, ""]);
   return {
-    header: ["Section", "Ranking", "Horizon (trading days)", "Day", "Avg vs benchmark %", "Median vs benchmark %", "Beat benchmark %", "Matured picks", "Scans", "Benchmark", "Computed (UTC)"],
+    header: ["Section", "Ranking", "Horizon (trading days)", "Day", "Avg vs benchmark %", "Median vs benchmark %", "Beat benchmark %", "Matured picks", "Scans", "Benchmark", "Computed (UTC)", "Methodology", "Entry policy", "Avg absolute %", "Median absolute %", "Positive absolute %", "Selected", "Evaluated", "Excluded", "Coverage %", "Unique tickers", "Signal dates", "Exclusions"],
     rows: out,
   };
 }
 
 function SummaryTable({ rows, minSample }: { rows: TrackRecordSummary[]; minSample: number }) {
-  return (
-    <div className="table-wrap" tabIndex={0} role="region" aria-label="Ranking study table; scroll sideways for more columns">
-      <table className="table">
-        <thead>
-          <tr>
-            <th scope="col">Horizon</th>
-            <th scope="col" className="num">Avg vs SPY</th>
-            <th scope="col" className="num hide-narrow">Median vs SPY</th>
-            <th scope="col" className="num">Beat SPY</th>
-            <th scope="col" className="num">Matured picks</th>
-            <th scope="col" className="num hide-narrow">Scans</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.horizon_days} className={r.sufficient ? undefined : "row-muted"}>
-              <th scope="row" className="row-h">{r.horizon_days} trading day{r.horizon_days === 1 ? "" : "s"}</th>
-              {r.sufficient ? (
-                <>
-                  <td className={`num mono ${tone(r.avg_excess_return)}`}>{signedPct(r.avg_excess_return)}</td>
-                  <td className={`num mono hide-narrow ${tone(r.median_excess_return)}`}>{signedPct(r.median_excess_return)}</td>
-                  <td className="num mono">{share(r.win_rate)}</td>
-                </>
-              ) : (
-                <td colSpan={3} className="num cap">Still building ({r.sample_size ?? 0} of {minSample} needed)</td>
-              )}
-              <td className="num mono">{r.sample_size ?? "—"}</td>
-              <td className="num mono hide-narrow">{r.runs_used ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <div className="table-wrap" tabIndex={0} role="region" aria-label="Ranking study table; scroll sideways for more columns">
+    <table className="table"><thead><tr>
+      <th>Horizon</th><th>Avg stock</th><th>Median stock</th><th>Avg vs SPY</th><th>Median vs SPY</th>
+      <th>Positive stock return</th><th>Beat SPY</th><th>Evaluated / selected</th><th>Coverage</th><th>Unique tickers</th><th>Signal dates</th>
+    </tr></thead><tbody>{rows.map((r) => <tr key={r.horizon_days}>
+      <th scope="row">{r.horizon_days} trading day{r.horizon_days === 1 ? "" : "s"}</th>
+      {r.sufficient ? <>
+        <td className="num mono">{signedPct(r.avg_absolute_return)}</td><td className="num mono">{signedPct(r.median_absolute_return)}</td>
+        <td className="num mono">{signedPct(r.avg_excess_return)}</td><td className="num mono">{signedPct(r.median_excess_return)}</td>
+        <td className="num mono">{share(r.positive_return_rate)}</td><td className="num mono">{share(r.benchmark_outperformance_rate)}</td>
+      </> : <td colSpan={6} className="cap">Still building ({r.sample_size ?? 0} of {minSample} needed)</td>}
+      <td>{r.evaluated_count ?? 0} / {r.selected_count ?? 0}</td><td>{r.coverage_pct == null ? "—" : `${r.coverage_pct.toFixed(1)}%`}</td>
+      <td>{r.unique_ticker_count ?? 0}</td><td>{r.signal_date_count ?? 0}</td>
+    </tr>)}</tbody></table>
+    <details><summary>Coverage and exclusions</summary>{rows.map((r) => <p className="cap" key={r.horizon_days}>
+      {r.horizon_days}d: {r.excluded_count ?? 0} excluded. {Object.entries(r.exclusions ?? {}).map(([reason, count]) => `${reason}: ${count}`).join("; ") || "No selected-pick exclusions."}
+      {" "}{r.ranking_unavailable_snapshots ?? 0} snapshots had no usable ranking evidence; no replacement picks were invented.
+    </p>)}</details>
+  </div>;
 }
 
 function Research() {
   const [ranking, setRanking] = useState<Ranking>("breakout");
-  const rec = useApi("track-record", (signal) => research.trackRecord(signal));
-  const rows = (rec.data?.summaries ?? []).filter((r) => r.ranking === ranking).sort((a, b) => a.horizon_days - b.horizon_days);
+  const rec = useApi("track-record:track-v2-next-open", (signal) => research.trackRecord(signal));
+  const rows = (rec.data?.methodology === "track-v2-next-open" ? rec.data.summaries : []).filter((r) => r.methodology === "track-v2-next-open" && r.ranking === ranking).sort((a, b) => a.horizon_days - b.horizon_days);
   const sufficient = rows.filter((r) => r.sufficient);
   const [horizon, setHorizon] = useState<number | null>(null);
   const chosen = horizon !== null && rows.some((r) => r.horizon_days === horizon) ? horizon
     : (sufficient.find((r) => r.horizon_days === 5) ?? sufficient[0] ?? rows[0])?.horizon_days ?? null;
-  const daily = useApi(rec.data && chosen !== null ? `tr-daily:${ranking}:${chosen}` : null,
+  const daily = useApi(rec.data && chosen !== null ? `tr-daily:track-v2-next-open:${ranking}:${chosen}` : null,
     (signal) => research.daily(ranking, chosen!, 120, signal));
 
   if (rec.error && !rec.data) {
@@ -168,12 +155,12 @@ function Research() {
           <Card title={`Ranking study: top ${rk.label} picks vs ${meta?.benchmark ?? "SPY"}`} id="summary"
             aside={meta?.computed_at ? `Computed ${etTime(meta.computed_at)}` : undefined}>
             <p className="cap">
-              {rk.note}{meta?.top_n ? ` (top ${meta.top_n} per scan)` : ""}, held for each horizon. Returns are excess returns over {meta?.benchmark ?? "SPY"} for the same days.
+              {rk.note}{meta?.top_n ? ` (top ${meta.top_n} per scan)` : ""}, held for each horizon. Stock returns and excess returns over {meta?.benchmark ?? "SPY"} are shown separately. Beating SPY can still mean losing money. Zero stock returns are not positive; benchmark ties do not count as outperformance.
               A horizon needs at least {d.min_sample_size} matured picks before rates are shown.
             </p>
             <SummaryTable rows={rows} minSample={d.min_sample_size} />
             <div className="row-actions end"><ResearchCsvButton what="the Track record" filename={csvFile("track-record", rk.label)}
-              build={() => trackRecordCsv(rows, daily.data ?? [], chosen ?? rows[0]!.horizon_days)} /></div>
+              build={() => trackRecordCsv(rows, (daily.data ?? []).filter((row) => row.methodology === "track-v2-next-open"), chosen ?? rows[0]!.horizon_days)} /></div>
           </Card>
 
           <Card title="Day by day" id="daily" aside={
@@ -188,14 +175,14 @@ function Research() {
           }>
             {daily.error && !daily.data ? <ErrorState error={daily.error} onRetry={daily.reload} what="the daily series" />
               : !daily.data || daily.loading ? <Skeleton rows={4} label="Loading the daily series" />
-              : <DailyChart days={daily.data} runningSum={chosen === 1} />}
+              : <DailyChart days={daily.data.filter((row) => row.methodology === "track-v2-next-open")} />}
             {chosen !== null && !rows.find((r) => r.horizon_days === chosen)?.sufficient && (
               <p className="cap"><Pill tone="warn">Small sample</Pill> This horizon hasn&apos;t reached {d.min_sample_size} matured picks; read the bars as anecdotes.</p>
             )}
           </Card>
         </>
       )}
-      <p className="cap">Picks are scan results, not trades: no costs, slippage or position sizing.</p>
+      <p className="cap">Evaluated observations count repeated ticker selections; overlapping windows are not independent trades. No capital-constrained portfolio, costs, spreads, slippage or liquidity constraints are modeled.</p>
     </>
   );
 }
@@ -206,8 +193,8 @@ function HowMeasured() {
     <details className="method">
       <summary>How these results are measured</summary>
       <dl className="method-body">
-        <div><dt>What counts as a signal</dt><dd>A ticker that appeared in an HSF scan, counted once per ticker per day, with the score and setup it had then. Records are saved at scan time and never revised.</dd></div>
-        <div><dt>When an outcome is measured</dt><dd>Close-to-close return over the holding period (1, 3 or 5 trading days), compared with SPY over the same days. Signals whose period hasn&apos;t ended are pending: they are not wins or losses.</dd></div>
+        <div><dt>What counts as a signal</dt><dd>A ticker that appeared in an HSF scan, counted once per ticker per day, with the score and setup it had then. The ranking study uses the latest saved snapshot for each exchange date, including its saved prediction evidence; it does not rescore history with today’s model.</dd></div>
+        <div><dt>When an outcome is measured</dt><dd>The overall record uses its own close-to-close outcome convention. The ranking study below uses the first regular-session open strictly after snapshot availability and exits at the close of the last session in its horizon (1d means that session’s open to close). SPY uses the exact same dates. These daily-bar prices are research proxies, not fills. Signals whose period hasn&apos;t ended are pending: they are not wins or losses.</dd></div>
         <div><dt>What the HSF Score is</dt><dd>An opportunity ranking from 0 to 100. It is not a probability of profit, and these tables are not a model&apos;s training accuracy.</dd></div>
         <div><dt>Historical description vs forward evidence</dt><dd>Everything on this page describes signals that have already happened. Sample coverage only says how many there are. Validated forward evidence would come from a test registered in advance and compared with a matched control group of stocks HSF did not pick; HSF runs that test separately and does not yet claim its signals beat that control.</dd></div>
         <div><dt>What this can&apos;t tell you</dt><dd>No costs, slippage or position sizing are included, and samples are small. Past results describe what happened; they don&apos;t predict future results.</dd></div>

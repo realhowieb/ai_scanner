@@ -11,14 +11,12 @@ effort and deterministic; returns None rather than raising.
 """
 from __future__ import annotations
 
-from statistics import mean, median
 from typing import Any, Dict, List, Optional
 
 from analytics.track_record import (
     BENCHMARK,
-    _bars_for,
     _eligible_snapshots,
-    _forward_return,
+    _ranked_symbols,
     _symbol_column,
 )
 
@@ -90,7 +88,8 @@ def compute_signal_leaderboard(
         picks: Dict[str, List[str]] = {}
         for key, _display, cols in SIGNALS:
             value_col = _signal_column(df, cols)
-            syms = _top_symbols_by(df, sym_col, value_col, TOP_N) if value_col else []
+            syms = (_ranked_symbols(df, 'prebreakout', TOP_N) if key == 'prebreakout' else
+                    _top_symbols_by(df, sym_col, value_col, TOP_N) if value_col else [])
             if syms:
                 picks[key] = syms
                 all_symbols.update(syms)
@@ -110,52 +109,18 @@ def compute_signal_leaderboard(
             timeout_s=25.0,
         )
     except Exception:
-        return None
+        bars_by_symbol = {}
     if not bars_by_symbol:
-        return None
-    spy_bars = bars_by_symbol.get(BENCHMARK)
-    if spy_bars is None:
-        return None
+        bars_by_symbol = {}
+    from analytics.track_method import evaluate
 
-    display_by_key = {key: display for key, display, _ in SIGNALS}
-    rows: List[Dict[str, Any]] = []
-    for key, _display, _cols in SIGNALS:
-        excess: List[float] = []
-        runs_counted = 0
-        for run_date, picks in per_snapshot:
-            syms = picks.get(key) or []
-            if not syms:
-                continue
-            spy_ret = _forward_return(spy_bars, run_date, horizon_days, entry_mode)
-            if spy_ret is None:
-                continue
-            day_had = False
-            for sym in syms:
-                bars = _bars_for(bars_by_symbol, sym)
-                if bars is None:
-                    continue
-                r = _forward_return(bars, run_date, horizon_days, entry_mode)
-                if r is not None:
-                    excess.append(r - spy_ret)
-                    day_had = True
-            if day_had:
-                runs_counted += 1
-        if not excess:
+    rows = []
+    for key, display, _cols in SIGNALS:
+        selections = [(signal_at, picks.get(key, [])) for signal_at, picks in per_snapshot]
+        result = evaluate(selections, bars_by_symbol, horizon_days, mode=entry_mode)
+        if not result['selected_count']:
             continue
-        beats = sum(1 for e in excess if e > 0)
-        rows.append({
-            "signal": key,
-            "display": display_by_key.get(key, key),
-            "horizon_days": horizon_days,
-            "avg_excess": mean(excess),
-            "median_excess": median(excess),
-            "win_rate": beats / len(excess),
-            "sample_size": len(excess),
-            "runs_used": runs_counted,
-            "benchmark": BENCHMARK,
-            "top_n": TOP_N,
-        })
-    if not rows:
-        return None
-    rows.sort(key=lambda r: r["avg_excess"], reverse=True)
-    return rows
+        rows.append({**result, 'signal': key, 'display': display, 'top_n': TOP_N,
+                     'avg_excess': result['avg_excess_return'], 'median_excess': result['median_excess_return']})
+    rows.sort(key=lambda r: r['avg_excess'] if r['avg_excess'] is not None else float('-inf'), reverse=True)
+    return rows or None
