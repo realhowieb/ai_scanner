@@ -138,6 +138,9 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
   const [unusual, setUnusual] = useState(false);
   const [gap, setGap] = useState(false);
   const [minGap, setMinGap] = useState("");
+  const [minRsi, setMinRsi] = useState("");
+  const [maxRsi, setMaxRsi] = useState("");
+  const [rebound, setRebound] = useState(false);
   const [scoreAll, setScoreAll] = useState(!!link);
   const [earnWindow, setEarnWindow] = useState<EarnWindow>(link?.when ?? "today");
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -177,9 +180,17 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     if (universe === "ticker" && !TICKER_RE.test(t)) return { error: "Enter a ticker symbol like AAPL." };
     if (universe === "watchlist" && !watchlistId) return { error: "Choose a watchlist." };
     if (universe === "earnings" && earnLocked(earnWindow)) return { error: "Scanning tomorrow's or this week's earnings is part of Pro." };
+    for (const bound of [minRsi, maxRsi]) {
+      if (bound.trim() && (optNum(bound) === undefined || Number(bound) < 0 || Number(bound) > 100)) return { error: "RSI bounds must be between 0 and 100." };
+    }
+    if (minRsi.trim() && maxRsi.trim() && Number(minRsi) > Number(maxRsi)) return { error: "Min RSI must not exceed Max RSI." };
+    if (scoreAll && (minRsi.trim() || maxRsi.trim() || rebound)) return { error: "Turn off Score all to use RSI or rebound filters." };
     const filters: NonNullable<ScanCreate["filters"]> = {
       top_n: Math.min(topN, maxRows),
       session,
+      ...(optNum(minRsi) !== undefined ? { min_rsi: optNum(minRsi) } : {}),
+      ...(optNum(maxRsi) !== undefined ? { max_rsi: optNum(maxRsi) } : {}),
+      ...(rebound ? { rebound: true } : {}),
       ...(optNum(minPrice) !== undefined ? { min_price: optNum(minPrice) } : {}),
       ...(optNum(maxPrice) !== undefined ? { max_price: optNum(maxPrice) } : {}),
       ...(optNum(minDollarVol) !== undefined ? { min_dollar_vol: optNum(minDollarVol) } : {}),
@@ -233,6 +244,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
     setSession(v.session ?? "regular"); setTopN(v.top_n ?? 25); setMinPrice(v.min_price == null ? "" : String(v.min_price));
     setMaxPrice(v.max_price == null ? "" : String(v.max_price)); setMinDollarVol(v.min_dollar_vol == null ? "" : String(v.min_dollar_vol));
     setUnusual(v.unusual ?? false); setGap(v.gap ?? false); setMinGap(v.min_gap == null ? "" : String(v.min_gap)); setScoreAll(v.score_all ?? false);
+    setMinRsi(v.min_rsi == null ? "" : String(v.min_rsi)); setMaxRsi(v.max_rsi == null ? "" : String(v.max_rsi)); setRebound(v.rebound ?? false);
     setFormErr(null);
   };
 
@@ -257,7 +269,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
       <SavedResearchViews kind="custom_views" disabled={active || scan.starting}
         current={{ name: "", universe, ticker, watchlist_id: watchlistId ? Number(watchlistId) : null, session, earnings_window: earnWindow,
           top_n: topN as 10 | 25 | 50 | 100 | 200, min_price: optNum(minPrice), max_price: optNum(maxPrice),
-          min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), score_all: scoreAll }}
+          min_dollar_vol: optNum(minDollarVol), unusual, gap, min_gap: optNum(minGap), min_rsi: optNum(minRsi), max_rsi: optNum(maxRsi), rebound, score_all: scoreAll }}
         onApply={applyView} />
       <ScanBuilder disabled={active || scan.starting} onApply={applyView} />
       <div className={`split custom-scan-layout${done ? " is-done" : ""}`}>
@@ -335,6 +347,8 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
 
             <details className="advanced-scan"><summary>Advanced filters</summary><p className="cap">Blank fields use the scanner’s server defaults. Set a value to override them.</p>
             <div className="grid2">
+              <label className="field"><span>Min RSI (14, daily)</span><input type="number" min="0" max="100" step="any" value={minRsi} onChange={(e) => { setMinRsi(e.target.value); setScoreAll(false); }} placeholder="No lower bound" /></label>
+              <label className="field"><span>Max RSI (14, daily)</span><input type="number" min="0" max="100" step="any" value={maxRsi} onChange={(e) => { setMaxRsi(e.target.value); setScoreAll(false); }} placeholder="No upper bound" /></label>
               <label className="field"><span>Min price ($)</span><input inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Max price ($)</span><input inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Server default" /></label>
               <label className="field"><span>Min dollar volume</span><input inputMode="numeric" value={minDollarVol} onChange={(e) => setMinDollarVol(e.target.value)} placeholder="Server default" /></label>
@@ -344,6 +358,8 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
                 </select>
               </label>
             </div>
+            <label className="check"><input type="checkbox" checked={rebound} onChange={(e) => { setRebound(e.target.checked); setScoreAll(false); }} /><span>Rebound candidates (experimental)</span></label>
+            <p className="cap">Rebound: RSI touched 30 or below in the prior five daily bars, is now above 30 and at most 50, the latest close is up, and relative volume is at least 1.0. Research candidates, not breakout predictions. RSI uses the latest daily bar, which can change during the session. Blank RSI bounds impose no RSI limit.</p>
             <label className={`check${can("can_unusual_volume") ? "" : " is-locked"}`}>
               <input type="checkbox" checked={unusual} disabled={!can("can_unusual_volume")} onChange={(e) => setUnusual(e.target.checked)} />
               <span>Unusual volume only{can("can_unusual_volume") ? "" : " · Pro"}</span>
@@ -403,7 +419,7 @@ export function CustomScanView({ client }: { client?: ScanApi } = {}) {
               {job.result.setups.length === 0 ? (
                 <Empty title="No setups matched.">Try a larger list or looser filters.</Empty>
               ) : (
-                <div className="flush-inner"><SetupTable rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
+                <div className="flush-inner"><SetupTable showRsi={job.params.min_rsi != null || job.params.max_rsi != null || Boolean(job.params.rebound)} rows={job.result.setups} premium={can("can_early_breakout")} sparks /></div>
               )}
               {job.result.total > job.result.setups.length && (
                 <p className="cap">Showing the top {job.result.setups.length} of {job.result.total} scored stocks (your plan&apos;s row limit).</p>

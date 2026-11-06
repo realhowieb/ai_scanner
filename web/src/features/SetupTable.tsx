@@ -91,6 +91,7 @@ const COLUMNS = col.columns([
   col.display({ id: "last", header: "Last", cell: (c) => price(c.row.original.last) }),
   col.display({ id: "change", header: "Chg %", cell: (c) => pct(c.row.original.chg_pct) }),
   col.display({ id: "gap", header: "Gap %", cell: (c) => pct(c.row.original.gap_pct) }),
+  col.display({ id: "rsi", header: "RSI (14)", cell: (c) => num(c.row.original.rsi_14) }),
   col.display({ id: "rvol", header: "RVOL", cell: (c) => <RvolMeter rvol={c.row.original.rvol} /> }),
   col.display({ id: "prob", header: "PreBreakout", cell: (c) => <PreBreakoutMeter prob={c.row.original.prob} rank={c.row.original.prob_rank} /> }),
   col.display({ id: "save", header: () => <span className="sr-only">Save</span>, cell: (c) => <SaveToWatchlistButton ticker={c.row.original.ticker} compact /> }),
@@ -102,8 +103,8 @@ const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
 /** `sort` + `onSort` make the sortable headers buttons that ask the server for a new order. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, sort, onSort, prefs: given, ranks, auto }: {
-  rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean;
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, showRsi = false, sort, onSort, prefs: given, ranks, auto }: {
+  rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean; showRsi?: boolean;
   /** Show each row's rank in the whole scan instead of its position; null marks a row that isn't ranked. */
   ranks?: Ranks;
   /** Tickers whose row comes from the Premium auto-score pass (shown with an Auto tag). */
@@ -125,11 +126,11 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const news = useNewsFlags(sparks ? rows.map((r) => r.ticker) : []);
 
   const ctx = { numbered, offset, sparks, series, news, choose, ranks, auto };
-  const columnVisibility = Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)]));
+  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)])), rsi: showRsi };
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
     features, columns: COLUMNS, data: rows,
-    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "score", ...columnOrder(shown), "save"], sorting },
+    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "score", ...columnOrder(shown), "rsi", "save"], sorting },
     manualSorting: true, enableSortingRemoval: false, enableMultiSort: false, sortDescFirst: true,
     enableSorting: Boolean(onSort),
     onSortingChange: (next) => {
@@ -203,6 +204,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">
+              {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
               <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker, auto) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <>{<ScoreBadge score={r.score} />}{auto?.has(r.ticker) && <> <AutoTag /></>}</>}</dd></div>
               <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}</dd></div>
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${upDown(r.chg_pct)}`}>{pct(r.chg_pct)}</dd></div>

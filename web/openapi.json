@@ -198,6 +198,19 @@
       ],
       "title": "Max Price"
      },
+     "max_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Rsi"
+     },
      "min_dollar_vol": {
       "anyOf": [
        {
@@ -231,10 +244,34 @@
       ],
       "title": "Min Price"
      },
+     "min_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Rsi"
+     },
      "name": {
       "default": "AI scan",
       "title": "Name",
       "type": "string"
+     },
+     "rebound": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rebound"
      },
      "score_all": {
       "default": false,
@@ -5424,6 +5461,19 @@
       ],
       "title": "Max Price"
      },
+     "max_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Rsi"
+     },
      "min_dollar_vol": {
       "anyOf": [
        {
@@ -5463,11 +5513,35 @@
       ],
       "title": "Min Price"
      },
+     "min_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Rsi"
+     },
      "name": {
       "maxLength": 60,
       "minLength": 1,
       "title": "Name",
       "type": "string"
+     },
+     "rebound": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rebound"
      },
      "score_all": {
       "default": false,
@@ -15325,6 +15399,20 @@
       "title": "Max Price",
       "type": "number"
      },
+     "max_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Inclusive daily Wilder RSI(14) upper bound",
+      "title": "Max Rsi"
+     },
      "min_dollar_vol": {
       "default": 5000000.0,
       "description": "20-day average dollar volume floor",
@@ -15348,6 +15436,20 @@
       "title": "Min Price",
       "type": "number"
      },
+     "min_rsi": {
+      "anyOf": [
+       {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Inclusive daily Wilder RSI(14) lower bound",
+      "title": "Min Rsi"
+     },
      "profile": {
       "default": "regular",
       "enum": [
@@ -15357,6 +15459,12 @@
       ],
       "title": "Profile",
       "type": "string"
+     },
+     "rebound": {
+      "default": false,
+      "description": "Experimental RSI recovery screen; not a breakout prediction",
+      "title": "Rebound",
+      "type": "boolean"
      },
      "session": {
       "default": "regular",
@@ -15599,6 +15707,17 @@
       "title": "Max Results",
       "type": "integer"
      },
+     "max_rsi": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Rsi"
+     },
      "min_dollar_vol": {
       "title": "Min Dollar Vol",
       "type": "number"
@@ -15611,6 +15730,17 @@
       "title": "Min Price",
       "type": "number"
      },
+     "min_rsi": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Rsi"
+     },
      "profile": {
       "enum": [
        "regular",
@@ -15619,6 +15749,17 @@
       ],
       "title": "Profile",
       "type": "string"
+     },
+     "rebound": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rebound"
      },
      "score_all": {
       "default": false,
@@ -15889,6 +16030,28 @@
       ],
       "description": "Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.",
       "title": "Prob Rank"
+     },
+     "rebound_candidate": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rebound Candidate"
+     },
+     "rsi_14": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rsi 14"
      },
      "rvol": {
       "anyOf": [
@@ -19701,6 +19864,28 @@
       "description": "Position in that scan's ranked setups (1 = top)",
       "title": "Rank",
       "type": "integer"
+     },
+     "rebound_candidate": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rebound Candidate"
+     },
+     "rsi_14": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rsi 14"
      },
      "rvol": {
       "anyOf": [

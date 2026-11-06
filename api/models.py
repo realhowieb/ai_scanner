@@ -319,6 +319,8 @@ class Today(BaseModel):
 
 # ---- step 5: scans and stock detail --------------------------------------------------------------
 class ScanSetup(Setup):
+    rsi_14: Optional[float] = None
+    rebound_candidate: Optional[bool] = None
     signals: List[str] = []
     fading: bool = False
     breakout_score: Optional[float] = None
@@ -819,6 +821,9 @@ class ScanParams(BaseModel):
     session_requested: Literal["regular", "premarket", "afterhours"]
     session: Literal["regular", "premarket", "afterhours"] = Field(
         description="Session scanned: pre-market / after-hours outside that session scan the regular session")
+    min_rsi: Optional[float] = None
+    max_rsi: Optional[float] = None
+    rebound: Optional[bool] = None
     min_price: float
     max_price: float
     min_dollar_vol: float
@@ -1230,6 +1235,9 @@ class AIScanView(BaseModel):
     unusual: bool = False
     gap: bool = False
     min_gap: Optional[float] = None
+    min_rsi: Optional[float] = Field(None, ge=0, le=100)
+    max_rsi: Optional[float] = Field(None, ge=0, le=100)
+    rebound: Optional[bool] = None
     score_all: bool = False
 
 

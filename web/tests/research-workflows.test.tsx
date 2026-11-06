@@ -142,3 +142,25 @@ it("refuses saved custom filters that are outside the account's current plan", a
   expect(screen.getByRole("checkbox", { name: /Unusual volume/ })).not.toBeChecked();
   expect(create).not.toHaveBeenCalled();
 });
+
+it("submits inclusive RSI bounds and the experimental rebound screen", async () => {
+  const create = vi.fn(async () => { throw new Error("test request captured"); });
+  render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  fireEvent.click(screen.getByText("Advanced filters"));
+  fireEvent.change(screen.getByLabelText("Min RSI (14, daily)"), { target: { value: "28" } });
+  fireEvent.change(screen.getByLabelText("Max RSI (14, daily)"), { target: { value: "32" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: /Rebound candidates/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ filters: expect.objectContaining({ min_rsi: 28, max_rsi: 32, rebound: true }) })));
+});
+
+it("blocks inverted RSI bounds before starting a scan", async () => {
+  const create = vi.fn();
+  render(<SessionProvider initialMe={me("premium")}><CustomScanView client={{ list: async () => [], create, get: vi.fn(), cancel: vi.fn() }} /></SessionProvider>);
+  fireEvent.click(screen.getByText("Advanced filters"));
+  fireEvent.change(screen.getByLabelText("Min RSI (14, daily)"), { target: { value: "40" } });
+  fireEvent.change(screen.getByLabelText("Max RSI (14, daily)"), { target: { value: "30" } });
+  fireEvent.click(screen.getByRole("button", { name: "Start scan" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Min RSI must not exceed Max RSI");
+  expect(create).not.toHaveBeenCalled();
+});
