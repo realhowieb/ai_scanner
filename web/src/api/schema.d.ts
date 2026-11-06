@@ -6698,6 +6698,16 @@ export interface components {
             change_pct?: number | null;
             /** Close */
             close?: number | null;
+            /**
+             * History Bars
+             * @description Number of daily bars used in this calculation
+             */
+            history_bars?: number | null;
+            /**
+             * History Start
+             * @description First daily bar used to seed indicator smoothing
+             */
+            history_start?: string | null;
             /** Macd Above Signal */
             macd_above_signal: boolean;
             /** Macd Bullish Cross */
