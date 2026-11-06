@@ -1,4 +1,5 @@
 """RSI correctness and custom-scan screening contracts."""
+import importlib.util
 import json
 import unittest
 
@@ -139,7 +140,6 @@ class RsiScreenTests(unittest.TestCase):
                 parse_builder(json.dumps(invalid), [])
 
     def test_evidence_dates_json_and_chart_relative_volume(self):
-        from api.models import IndicatorEvidence
         from api.scans import daily_indicator_evidence
         from scan.rsi_screen import indicator_evidence
 
@@ -147,7 +147,6 @@ class RsiScreenTests(unittest.TestCase):
         e = indicator_evidence(frame, relative_volume=1.2)
         self.assertEqual(e["bar_date"], frame.index[-1].date().isoformat())
         self.assertEqual(e["prior_5_rsi_low_date"], frame.index[-5].date().isoformat())
-        self.assertEqual(IndicatorEvidence(**e).model_dump(), e)
         json.dumps(e, allow_nan=False)
         chart_bars = [{"date": d.date().isoformat(), "close": float(r.Close), "volume": float(r.Volume)} for d, r in frame.iterrows()]
         self.assertEqual(daily_indicator_evidence(chart_bars), e)
@@ -185,3 +184,11 @@ class RsiScreenTests(unittest.TestCase):
         saved_rows = json.loads(save.call_args.args[1])
         self.assertAlmostEqual(saved_rows[0]["IndicatorEvidence"]["rsi_14"], e["rsi_14"], places=7)
         self.assertEqual(saved_rows[0]["IndicatorEvidence"]["rule_version"], "daily-indicators-v1")
+
+    @unittest.skipUnless(importlib.util.find_spec("pydantic"), "API model contract needs pydantic")
+    def test_evidence_matches_api_model_contract(self):
+        from api.models import IndicatorEvidence
+        from scan.rsi_screen import indicator_evidence
+
+        evidence = indicator_evidence(bars(), relative_volume=1.2)
+        self.assertEqual(IndicatorEvidence(**evidence).model_dump(), evidence)
