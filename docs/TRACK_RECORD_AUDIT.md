@@ -38,9 +38,11 @@ for selection details, versioning, interpretation and operational limitations.
 - OpenAPI exported locally with `scripts/export_openapi.py`; no live endpoint was queried.
 
 No production deployment, schema migration, production-data recomputation, paid
-job or live billing action was run. SQL persistence is covered by mocks and
-namespace/payload regressions; the new JSONB writer changes still need an isolated
-PostgreSQL migration check before an approved deployment. Provider calls in return
+job or live billing action was run. The initial local run covered SQL persistence with mocks and namespace/payload
+regressions. The merge follow-up added `tests/test_track_record_postgres.py`: both
+legacy-schema upgrade/summary/daily isolation and leaderboard JSONB/provenance
+round-trip tests passed against the throwaway CI PostgreSQL service. The complete
+isolated PostgreSQL job passed 30 tests in [run 42313090065](https://github.com/realhowieb/ai_scanner/actions/runs/42313090065). Provider calls in return
 regressions are mocked. Test numbers are validation counts, not financial results.
 
 Users should see **Avg stock**, **Median stock**, **Avg/Median vs SPY**,
