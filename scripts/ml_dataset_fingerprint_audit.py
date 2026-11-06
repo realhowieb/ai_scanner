@@ -40,8 +40,19 @@ def diagnose(entry, current, asof):
 
 
 def main():
-    # Applies to libpq connections created by all readers in this diagnostic.
-    os.environ["PGOPTIONS"] = "-c default_transaction_read_only=on -c statement_timeout=60000"
+    # Set transaction mode after connecting: some poolers reject startup PGOPTIONS.
+    from db import engine
+
+    original_connect = engine.get_neon_conn
+
+    def readonly_connect():
+        conn = original_connect()
+        if conn is not None:
+            conn.execute("SET TRANSACTION READ ONLY")
+            conn.execute("SET LOCAL statement_timeout = 60000")
+        return conn
+
+    engine.get_neon_conn = readonly_connect
     from analytics import ml_v3_pipeline as pipeline
     from analytics import research_dataset as rd
     from api.research import load_window
