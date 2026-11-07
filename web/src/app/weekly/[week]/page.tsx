@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
 import { JsonLd } from "@/components/JsonLd";
-import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
+import { WeeklyRecapView } from "@/features/WeeklyRecap";
 import { OG_IMAGE } from "@/lib/seo";
+import { weekRange } from "@/lib/weekRange";
 import { articleSchema } from "@/lib/schema";
 import { loadRecap, loadRecapIndex } from "@/server/publicRecap";
 

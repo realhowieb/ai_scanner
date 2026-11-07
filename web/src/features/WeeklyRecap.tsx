@@ -12,19 +12,13 @@ import { FoundingStrip } from "@/features/FoundingBanner";
 import { PublicFooter, PublicHeader, useLandingVisit } from "@/features/Landing";
 import { setupLabel } from "@/lib/format";
 import { track } from "@/lib/funnel";
+import { weekRange } from "@/lib/weekRange";
 
 type Recap = Schemas["PublicRecap"];
 type Week = Schemas["RecapWeek"];
 
 const DAY = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-const SHORT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
-
-/** "Oct 27 – Oct 31, 2026" */
-export function weekRange(start: string, end: string): string {
-  return `${SHORT.format(d(start))} – ${YEAR.format(d(end))}`;
-}
 
 const TIME: Record<string, string> = { bmo: "before open", amc: "after close" };
 

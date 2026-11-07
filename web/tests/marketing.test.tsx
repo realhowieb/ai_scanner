@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MarketingTab, SocialCard, taggedLink } from "@/features/AdminMarketing";
 import { EmailSignup, ListConfirmView } from "@/features/EmailSignup";
 import { Landing } from "@/features/Landing";
-import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
+import { WeeklyRecapView } from "@/features/WeeklyRecap";
+import { weekRange } from "@/lib/weekRange";
 import { cleanAttribution } from "@/server/public";
 
 import { jsonResponse } from "./helpers";
