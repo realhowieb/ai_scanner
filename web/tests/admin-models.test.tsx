@@ -12,6 +12,16 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin",
 }));
 
+const inputHealth = {
+  status: "WATCH", sample_limit: 500, lookback_days: 7, sampled_predictions: 375,
+  comparable_predictions: 375, unknown_predictions: 0, other_identity_predictions: 0,
+  latest_prediction_at: "2026-11-06T17:43:00Z", model_version: "prebreakout-actual",
+  input_contract: "public_snapshot_observations_v1", feature_count: 75,
+  latest_real_inputs: 17, latest_defaulted_inputs: 58,
+  features: [{ name: "LowSlope10D", defaulted_predictions: 375, predictions: 375, defaulted_pct: 100 }],
+  note: "Input completeness only, not accuracy or calibration.",
+};
+
 const shadowModel = {
   id: 2, model_version: "ml-v4-lightgbm-production-f5d-000000000002", provider: "lightgbm", kind: "model",
   feature_set: "production", target_label: "F_clean_path_5d", horizon_days: 5, dataset_version: "hsf-ml-2026-11-13-v1",
@@ -37,6 +47,7 @@ beforeEach(() => {
     const body = r.method === "GET" ? null : JSON.parse((await r.text()) || "null");
     calls.push({ path, method: r.method, body });
     if (path === "/v1/admin/ml/production/prebreakout") return prebreakoutState === "error" ? jsonResponse({ detail: "Model evidence unavailable" }, 503) : jsonResponse({
+      input_health: prebreakoutState === "missing" ? { ...inputHealth, status: "UNKNOWN", latest_real_inputs: null, latest_defaulted_inputs: null, features: [] } : inputHealth,
       configured_model: prebreakoutState === "missing" ? null : { model_version: "prebreakout-configured", trained_at: "2026-10-07T20:00:00Z", dataset_version: null },
       latest_capture: prebreakoutState === "missing" ? null : { model_version: "prebreakout-actual", signal_at: "2026-11-06T17:43:00Z", inferred_at: "2026-11-06T17:43:01Z", artifact_sha256: "pb-hash" },
     });
@@ -110,7 +121,7 @@ it("shows separate PreBreakout configuration and actual prediction evidence", as
   render(<ModelsTab />);
   const card = screen.getByRole("region", { name: "Production PreBreakout" });
   expect(await within(card).findByText("prebreakout-configured")).toBeInTheDocument();
-  expect(within(card).getByText(/prebreakout-actual/)).toBeInTheDocument();
+  expect(within(card).getAllByText(/prebreakout-actual/)).toHaveLength(2);
   expect(within(card).getByText("pb-hash")).toBeInTheDocument();
   expect(card).not.toHaveTextContent("production-xgb");
   expect(card).toHaveTextContent(/do not prove which artifact is currently cached/);
@@ -143,4 +154,27 @@ it("separates missing predictions from missing identity without claiming model q
   expect(within(card).getByText("Healthy")).toBeInTheDocument();
   expect(within(card).getByText(/not predictive quality/)).toBeInTheDocument();
   expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+});
+
+
+it("shows input defaults separately from successfully captured predictions", async () => {
+  render(<ModelsTab />);
+  const health = await screen.findByRole("region", { name: "PreBreakout input health" });
+  expect(health).toHaveTextContent("17 of 75 inputs have recorded values; 58 filled with defaults");
+  expect(health).toHaveTextContent("public_snapshot_observations_v1");
+  expect(health).toHaveTextContent("not accuracy or calibration");
+  await userEvent.click(within(health).getByText("Inputs filled with defaults (1)"));
+  expect(within(health).getByText("LowSlope10D")).toBeVisible();
+  expect(within(health).getByText("100%")).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh PreBreakout health" }));
+  expect(calls.filter((c) => c.path === "/v1/admin/ml/production/prebreakout").length).toBeGreaterThan(1);
+  expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
+});
+
+it("shows unknown input evidence without inventing complete coverage", async () => {
+  prebreakoutState = "missing";
+  render(<ModelsTab />);
+  const health = await screen.findByRole("region", { name: "PreBreakout input health" });
+  expect(health).toHaveTextContent("Latest input evidence is unavailable or incomplete");
+  expect(health).not.toHaveTextContent("inputs have recorded values");
 });
