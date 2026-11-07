@@ -86,7 +86,7 @@ jobs:
           print(json.dumps(report, indent=1, sort_keys=True, default=str))
           PY
 
-      - name: Train and save PreBreakout model
+      - name: Evaluate PreBreakout model (report only)
         if: inputs.mode != 'audit'
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
@@ -113,6 +113,7 @@ jobs:
 
           summary = {
               "auc": bundle.get("auc"),
+              "input_contract": bundle.get("input_contract"),
               "baseline_comparison": bundle.get("baseline_comparison") or {},
               "benchmark_context_source": bundle.get("benchmark_context_source") or {},
               "calibration": bundle.get("calibration") or [],
