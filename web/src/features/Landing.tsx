@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 
 import { publicApi, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
-import { ErrorState, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import { BillingIntervalToggle, useBillingInterval } from "@/components/BillingInterval";
 import { FoundingBanner, usePublicFounding } from "@/features/FoundingBanner";
 import { EmailSignup } from "@/features/EmailSignup";
@@ -161,13 +161,41 @@ function summaryHighlights(id: string, highlights: string[]): string[] {
   return [...highlights.filter((h) => priority.test(h)), ...highlights.filter((h) => !priority.test(h))].slice(0, 5);
 }
 
+// Shown only when GET /v1/plans can't answer, so the section never turns into an error box.
+// Names only: prices come from the API and are never guessed here.
+const FALLBACK_PLANS: [string, string][] = [
+  ["Starter", "Free forever. The ranked Scanner, stock pages, watchlists and S&P 500 scans."],
+  ["Pro", "Adds custom scans, email alerts and Day Trader."],
+  ["Premium", "Adds AI research and paper trading."],
+];
+
+function PlansFallback({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="stack" data-testid="plans-fallback">
+      <div className="plans">
+        {FALLBACK_PLANS.map(([name, line]) => (
+          <article key={name} className={`card plan${name === "Pro" ? " plan-pick" : ""}`} aria-label={name}>
+            <h3 className="h2">{name}</h3>
+            <p className="body-sm">{line}</p>
+          </article>
+        ))}
+      </div>
+      <p className="cap">
+        {onRetry
+          ? <>Prices didn&apos;t load just now. <button type="button" className="link-btn" onClick={onRetry}>Try again</button></>
+          : <Link href="/pricing">See full pricing</Link>}
+      </p>
+    </div>
+  );
+}
+
 /** Plan cards, and with `table` the full comparison, from GET /v1/plans. */
 export function PlansSection({ table = false }: { table?: boolean }) {
   const [interval] = useBillingInterval();
   const [mobilePlan, setMobilePlan] = useState("pro");
   const signedIn = useSignedIn();
   const plans = useApi<Plans>("plans", (signal) => unwrap(publicApi.GET("/v1/plans", { signal })));
-  if (plans.error && !plans.data) return <ErrorState error={plans.error} onRetry={plans.reload} what="plans and prices" />;
+  if (plans.error && !plans.data) return <PlansFallback onRetry={table ? plans.reload : undefined} />;
   if (!plans.data) return <Skeleton rows={6} label="Loading plans" />;
   const { tiers, rows } = plans.data;
   const price = (tier: Plans["tiers"][number]) => interval === "year" && tier.yearly_price ? tier.yearly_price : tier.price;
