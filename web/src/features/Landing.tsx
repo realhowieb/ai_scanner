@@ -27,7 +27,7 @@ type Plans = Schemas["Plans"];
 
 export const HEADLINE = "Find Market Opportunities with AI-Powered Intelligence";
 export const SUBHEADLINE = "Discover momentum, analyze technical signals, and monitor market activity from one intelligent platform.";
-const POSITIONING = "Signal intelligence, not a prediction machine. HSF continuously scans thousands of tradable U.S. stocks and organizes noteworthy setups so you can focus your research.";
+const POSITIONING = "Signal intelligence, not a prediction machine. HSF runs scheduled scans of thousands of tradable U.S. stocks and organizes noteworthy setups so you can focus your research.";
 const SCORE_LINE = "HSF Score (0–100) ranks setups by how strongly the current technical evidence lines up. It is not a probability of profit or a prediction.";
 const DISCLAIMER = "HSF is a market-research and decision-support tool, not financial advice. It does not recommend buying or selling any security.";
 // Each one is a working part of the app today (no roadmap items).
@@ -37,7 +37,7 @@ export const FEATURES: [string, string][] = [
   ["Technical Analysis", "Interactive price charts with moving averages, RSI and volume, plus the evidence behind every score: relative volume, gaps, trend and strength against the S&P 500."],
   ["Watchlists", "Save the stocks you follow, see how they move against the S&P 500 and get alerts when a price, score or setup changes."],
   ["Momentum and Breakout Discovery", "Day Trader ranks intraday movers, and early breakout and steady stair-step setups flag stocks while they are still building."],
-  ["Historical Signal Tracking", "Every result is recorded as the scanner saw it. Score history and the Track record show how past setups developed, never revised with hindsight."],
+  ["Historical Signal Tracking", "Score history and the Track record show how saved setups developed. Historical rankings use the scores and predictions saved with each scan."],
 ];
 const HOW: [string, string][] = [
   ["Discover stocks", "Start from the ranked Scanner, the Market Brief or your own custom scan."],
@@ -47,7 +47,7 @@ const HOW: [string, string][] = [
 const TRUST: [string, string][] = [
   ["Fresh market data", "Every result shows when it was scanned."],
   ["Transparent explanations", "Each setup lists the evidence that put it there."],
-  ["Point-in-time scanning", "Results are recorded as the scanner saw them, never revised with hindsight."],
+  ["Saved scan evidence", "Historical rankings use saved scores and prediction evidence. Daily snapshots can refresh, and evaluation methods are versioned."],
   ["Research-first methodology", "HSF measures its own methods forward before making claims about them."],
   ["Estimates are not outcomes", "Model outputs such as breakout or outcome probabilities are research estimates for defined events. They are not profits, returns or trading results."],
 ];

@@ -9,8 +9,7 @@ import { PublicHeader, PublicFooter } from "@/features/Landing";
 export const metadata: Metadata = publicMetadata("/how-hsf-works", "How HSF AI works",
   "What the HSF Score means, how scans cover the U.S. market, why a stock appears, and how HSF measures its own methods. Educational research, not financial advice.");
 
-// The classic app's methodology page (ui/methodology.py, ui/product_copy.py), word for
-// word. Public, like the original: readable signed in or out.
+// Public methodology for the current web app, readable signed in or out.
 const SECTIONS: [string, string][] = [
   ["Market coverage",
     "HSF scans a broad universe of tradable U.S.-listed stocks and ETFs on the major U.S. exchanges. The list is rebuilt from the market-data provider's tradable-asset list, so it changes as listings change. Preferred shares, SPAC units, warrants, rights and malformed symbols are excluded. Scheduled scans run several times each trading day."],
@@ -21,9 +20,9 @@ const SECTIONS: [string, string][] = [
   ["Why a stock appears",
     "Each result lists the technical and contextual evidence that put it there, such as relative volume, a price gap, trend over recent days, position against its recent high, strength against the S&P 500, and upcoming earnings. HSF explains the evidence; it does not tell you what to do with it."],
   ["Data freshness",
-    "Results are point-in-time scanner observations: they show what the scanner saw at the time shown, and they are never revised with hindsight. Check the scan time before acting on any result, especially outside market hours."],
+    "Results show what the scanner observed at the displayed scan time. A daily snapshot can be refreshed by a later scan. Check the timestamp before using a result, especially outside market hours."],
   ["How HSF evaluates itself",
-    "Live ranking asks what looks interesting now. Historical Research separately asks how similar saved HSF observations behaved afterward. HSF records scanner observations as they happen and measures its methods forward, on data collected after the method was fixed. HSF will not publish performance claims until that forward research supports them. Any historical figures shown in the app are labelled as historical research: they are descriptive and do not represent validated forward performance. Historical Research is available on Pro and Premium."],
+    "Live ranking asks what looks interesting now. Historical Research separately asks how similar saved HSF observations behaved afterward. Historical rankings use saved scores and prediction-time evidence rather than rescoring past picks with today’s model. Changes to evaluation methods are versioned so incompatible results are not mixed. HSF records scanner observations as they happen and measures its methods forward, on data collected after the method was fixed. HSF will not publish performance claims until that forward research supports them. Any historical figures shown in the app are labelled as historical research: they are descriptive and do not represent validated forward performance. Historical Research is available on Pro and Premium."],
   ["Not financial advice",
     "HSF is a market-research and decision-support tool, not financial advice. It does not recommend buying or selling any security. Do your own research and consider your own circumstances before making any investment decision."],
 ];
@@ -35,7 +34,7 @@ export default function HowHsfWorks() {
       <article className="card stack-sm">
         <h1 className="h1">How HSF works</h1>
         <p className="strong">Turn the whole market into a short list.</p>
-        <p className="body-sm">HSF scans a broad universe of tradable U.S.-listed stocks throughout the trading day. It ranks the setups that stand out, shows the technical evidence behind each one, and tracks how they change through the session. HSF is a research tool: it helps you decide what deserves a closer look, and leaves the decision to you.</p>
+        <p className="body-sm">HSF runs scheduled scans of a broad universe of tradable U.S.-listed stocks during the trading day. It ranks the setups that stand out, shows the technical evidence behind each one, and tracks how they change through the session. HSF is a research tool: it helps you decide what deserves a closer look, and leaves the decision to you.</p>
         <nav aria-label="On this page" className="chips">{SECTIONS.map(([h], i) => <a className="chip" key={h} href={`#method-${i}`}>{h}</a>)}</nav>
         {SECTIONS.map(([h, body], i) => (
           <section key={h} id={`method-${i}`} className="stack-sm doc-section">
