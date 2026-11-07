@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
+import { JsonLd } from "@/components/JsonLd";
 import { publicMetadata } from "@/lib/seo";
+import { faqSchema } from "@/lib/schema";
 import Link from "@/components/Link";
 import { PublicHeader, PublicFooter } from "@/features/Landing";
 
@@ -29,6 +31,7 @@ const SECTIONS: [string, string][] = [
 export default function HowHsfWorks() {
   return (
     <div className="pub"><PublicHeader /><main id="main" className="doc">
+      <JsonLd data={faqSchema(SECTIONS)} />
       <article className="card stack-sm">
         <h1 className="h1">How HSF works</h1>
         <p className="strong">Turn the whole market into a short list.</p>
