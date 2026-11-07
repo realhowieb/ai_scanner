@@ -397,7 +397,7 @@ def _normalize_datetime(value) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
+def load_run_history(days_back: int = 90, max_runs: int = 2000, *, canonical_only: bool = False) -> pd.DataFrame:
     """
     Load past runs from the runs DB and explode results into a ticker-level DataFrame.
 
@@ -419,6 +419,8 @@ def load_run_history(days_back: int = 90, max_runs: int = 2000) -> pd.DataFrame:
     cutoff = _utc_now() - timedelta(days=days_back)
 
     for run in runs:
+        if canonical_only and not (run.get("username") == "cron" and run.get("label") == "daily_snapshot" and run.get("is_snapshot")):
+            continue
         run_id = run.get("id")
         created_at = run.get("created_at") or run.get("timestamp")
 
@@ -1639,6 +1641,48 @@ def add_prebreakout_features(
     return out.sort_values(order_col, kind="mergesort").drop(columns=[order_col])
 
 
+PREBREAKOUT_INPUT_CONTRACT = "public_snapshot_observations_v1"
+
+
+def snapshot_feature_frame(frame, *, history=None, benchmark_context=None):
+    """Shared causal feature builder; legacy D suffixes count scanner observations.
+
+    History contains only public snapshots. Rolling features use earlier rows of
+    the same ticker; current rows take precedence over stored duplicates. Never
+    substitute missing observations with another symbol or a future scan.
+    """
+    if frame.empty:
+        return frame.copy()
+    current = frame.copy().reset_index(drop=True)
+    if "Symbol" not in current and "Ticker" in current:
+        current["Symbol"] = current["Ticker"]
+    current["Symbol"] = current["Symbol"].astype(str).str.strip().str.upper()
+    current["Timestamp"] = _asof_timestamps(current["Timestamp"])
+    if current["Timestamp"].isna().any():
+        raise ValueError("PreBreakout inputs require a valid observation timestamp")
+    if current.duplicated(["Symbol", "Timestamp"]).any():
+        raise ValueError("PreBreakout inputs require unique ticker/timestamp pairs")
+    marker = "__prebreakout_target_row"
+    current[marker] = np.arange(len(current))
+    pieces = []
+    if history is not None and not history.empty:
+        prior = history.copy()
+        prior["Symbol"] = prior["Symbol"].astype(str).str.strip().str.upper()
+        prior["Timestamp"] = _asof_timestamps(prior["Timestamp"])
+        prior = prior.loc[prior["Symbol"].isin(current["Symbol"]) &
+                          (prior["Timestamp"] < current["Timestamp"].max())].copy()
+        prior[marker] = np.nan
+        pieces.append(prior)
+    pieces.append(current)
+    combined = pd.concat(pieces, ignore_index=True)
+    combined = combined.drop_duplicates(["Symbol", "Timestamp"], keep="last")
+    features = add_prebreakout_features(combined, benchmark_context=benchmark_context)
+    result = features.loc[features[marker].notna()].sort_values(marker).drop(columns=[marker])
+    result.index = frame.index
+    result["PreBreakoutInputContract"] = PREBREAKOUT_INPUT_CONTRACT
+    return result
+
+
 def build_ml_dataset(
     df: pd.DataFrame,
     benchmark_context: dict[str, pd.DataFrame] | None = None,
@@ -1651,11 +1695,14 @@ def build_ml_dataset(
     if df.empty:
         return pd.DataFrame(), pd.Series(dtype=int)
 
-    df = add_prebreakout_features(
-        df,
-        benchmark_context=benchmark_context,
-        include_market_features=include_market_features,
-    )
+    # Run 17 prepares features on the full observation stream BEFORE labels
+    # discard non-candidates or immature rows. Do not recompute on that subset.
+    prepared = ("PreBreakoutInputContract" in df and
+                df["PreBreakoutInputContract"].eq(PREBREAKOUT_INPUT_CONTRACT).all())
+    if not prepared:
+        df = add_prebreakout_features(
+            df, benchmark_context=benchmark_context, include_market_features=include_market_features,
+        )
     selected_cols = feature_cols or (FEATURE_COLS if include_market_features else RUN6_FEATURE_COLS)
     selected_cols = _unique_feature_list([c for c in selected_cols if c in df.columns])
 
@@ -3490,7 +3537,7 @@ def serving_skew_audit(days_back: int = 90, *, maturity_days: int = 10) -> dict:
     if not bundle or bundle.get("model") is None:
         return {"skipped": "no live model"}
     trained_at = pd.to_datetime(bundle.get("trained_at"), utc=True, errors="coerce")
-    df = load_run_history(days_back=days_back)
+    df = load_run_history(days_back=days_back, canonical_only=True)
     if df.empty:
         return {"skipped": "no run history"}
     labeled = add_prebreakout_target_label(df, lookback_days=days_back)
@@ -3511,6 +3558,13 @@ def serving_skew_audit(days_back: int = 90, *, maturity_days: int = 10) -> dict:
         "rows": int(len(rows)),
         "base_rate_pct": round(float(y.mean()) * 100.0, 2),
         "feature_count": len(bundle.get("features") or []),
+        "input_contract": PREBREAKOUT_INPUT_CONTRACT,
+        "pipeline_notes": {
+            "per_scan": "legacy scan-only pipeline without history or enrichment",
+            "most_different_features": "legacy scan-only versus label-filtered reconstruction; see current_contract for the shared builder",
+            "current_contract": "shared public-snapshot history replay; not the original captured matrix",
+            "stored": "original saved predictions; historical model identity may differ",
+        },
     }
 
     def auc(scores) -> float | None:
@@ -3559,6 +3613,16 @@ def serving_skew_audit(days_back: int = 90, *, maturity_days: int = 10) -> dict:
     aucs["per_scan_spy_qqq"] = auc(per_scan(rows, benchmark_context))
     aucs["per_scan_bars_spy_qqq"] = auc(per_scan(enriched, benchmark_context))
     aucs["history_bars"] = auc(_bundle_raw_scores(bundle, add_prebreakout_features(enriched.copy())))
+    # Build on the complete source stream, not the label-filtered candidates.
+    full_source = add_historical_ohlcv_context(df.copy(), days_back=days_back)
+    replay = snapshot_feature_frame(full_source, benchmark_context=benchmark_context)
+    keys = ["Symbol", "Timestamp"]
+    selected = rows[keys].merge(replay, on=keys, how="left", validate="one_to_one")
+    aucs["current_contract"] = auc(_bundle_raw_scores(bundle, selected))
+    out["current_contract_default_pct"] = {
+        col: round(float(pd.to_numeric(selected[col], errors="coerce").isna().mean()) * 100, 1)
+        if col in selected else 100.0 for col in feature_cols
+    }
     out["auc"] = aucs
 
     train_X = train_feats.reindex(columns=feature_cols)
@@ -3686,15 +3750,11 @@ def _live_benchmark_context() -> dict:
 
 
 def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Build live model inputs the way training builds them.
+    """Build inputs with earlier public snapshots and prior completed bars.
 
-    Training rows carry their scan time, the prior completed daily OHLCV bar
-    (add_historical_ohlcv_context) and SPY/QQQ context. Live scan frames carry
-    none of these, so without this step most features came out zero and the
-    live model scored close to chance (serving_skew_audit, AUC 0.52 live vs
-    0.70 with training inputs). Each enrichment is best-effort: on a provider
-    failure the frame is scored with what it has, as before.
-    Set PREBREAKOUT_LIVE_ENRICH=0 to turn the enrichment off.
+    Missing history stays missing until the scorer's recorded zero-fill step.
+    Enrichment is best-effort and its availability is captured with predictions.
+    PREBREAKOUT_LIVE_ENRICH=0 disables price/benchmark downloads only.
     """
     import os
 
@@ -3705,10 +3765,24 @@ def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     if "Timestamp" not in out.columns:
         out["Timestamp"] = _utc_now()
     context = None
-    availability = {"ohlcv": "disabled", "benchmark": "disabled", "fallback": False}
+    history = pd.DataFrame()
+    history_status = "unavailable"
+    if "Timestamp" in out and pd.to_datetime(out["Timestamp"], utc=True, errors="coerce").notna().all():
+        try:
+            from db.prebreakout_history import load_feature_history
+            history = load_feature_history(out["Symbol"], before=pd.to_datetime(out["Timestamp"], utc=True).max().to_pydatetime())
+            history_status = "available" if not history.empty else "empty"
+        except Exception as e:
+            print(f"[ml_prebreakout] live scanner history unavailable: {e}")
+    availability = {"ohlcv": "disabled", "benchmark": "disabled", "fallback": False, "scanner_history": history_status, "history_rows": len(history), "input_contract": PREBREAKOUT_INPUT_CONTRACT}
     if os.environ.get("PREBREAKOUT_LIVE_ENRICH", "1") != "0":
         try:
-            out = add_historical_ohlcv_context(out, days_back=LIVE_CONTEXT_DAYS).sort_index()
+            # One provider batch for both prior observations and the current scan.
+            prior_count = len(history)
+            combined = pd.concat([history, out], ignore_index=True) if prior_count else out
+            enriched = add_historical_ohlcv_context(combined, days_back=LIVE_CONTEXT_DAYS).sort_index()
+            history = enriched.iloc[:prior_count].copy() if prior_count else history
+            out = enriched.iloc[prior_count:].copy().reset_index(drop=True)
             availability["ohlcv"] = "completed_best_effort"
         except Exception as e:
             availability["ohlcv"] = "failed"
@@ -3720,7 +3794,7 @@ def _live_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
             availability["benchmark"] = "failed"
             print(f"[ml_prebreakout] live benchmark context failed: {e}")
     try:
-        features = add_prebreakout_features(out, benchmark_context=context)
+        features = snapshot_feature_frame(out, history=history, benchmark_context=context)
         features.attrs["provenance_availability"] = availability
         return features
     except Exception as e:
@@ -3790,6 +3864,15 @@ RUN17_TARGET_SPECS = [
     {"name": "M1 - +3/-2 1-5D Setup", "upside": 0.03, "downside": -0.02, "lead_days": 5, "economic_horizon": RETURN_HORIZON_DAYS},
     {"name": "M2 - +5/-2 1-5D Setup", "upside": 0.05, "downside": -0.02, "lead_days": 5, "economic_horizon": RETURN_HORIZON_DAYS},
 ]
+
+
+def _prebreakout_purge_days(spec: dict) -> int:
+    """A candidate label can consume the setup lead plus its outcome horizon.
+
+    Taking the maximum lets training labels reach into validation. Sum the
+    sequential windows; expanding_window_folds excludes their boundary too.
+    """
+    return int(spec["lead_days"]) + int(spec["economic_horizon"])
 
 
 def _run17_target_rule(spec: dict) -> str:
@@ -3963,15 +4046,10 @@ def train_prebreakout_model_run17(
         print("[ml_prebreakout] ML dependencies are not installed. Install requirements-ml.txt to train Run #17.")
         return {}
 
-    if restore_previous_model_if_active_run16_incomplete is not None:
-        try:
-            rollback = restore_previous_model_if_active_run16_incomplete(min_valid_folds=RUN16_EXPECTED_VALID_FOLDS)
-        except Exception as e:
-            rollback = {"restored": False, "reason": str(e)}
-    else:
-        rollback = {"restored": False, "reason": "rollback helper unavailable"}
+    # Diagnostic reports must never reactivate or replace a production model.
+    rollback = {"restored": False, "reason": "report-only run; production state unchanged"}
 
-    df = load_run_history(days_back=days_back)
+    df = load_run_history(days_back=days_back, canonical_only=True)
     if df.empty:
         print("[ml_prebreakout] No history data found.")
         return {}
@@ -3982,10 +4060,11 @@ def train_prebreakout_model_run17(
 
     benchmark_context = load_benchmark_regime_context(days_back)
     df_feature_source = add_historical_ohlcv_context(df, days_back=days_back)
+    df_feature_source = snapshot_feature_frame(df_feature_source, benchmark_context=benchmark_context)
     symbols = sorted({str(s).upper() for s in df_feature_source.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
     bars_by_symbol = _download_label_bars(symbols, lookback_days=max(days_back, 120)) if symbols else {}
     if not bars_by_symbol:
-        print("[ml_prebreakout] Run #17 path labels will rely on existing close-return columns where available.")
+        print("[ml_prebreakout] Run #17 requires complete OHLC paths; cached close returns cannot supply path labels.")
 
     print("[ml_prebreakout] RUN #17 - PREBREAKOUT TARGET QUALITY & LEARNING OBJECTIVE")
     print(f"[ml_prebreakout] Champion source: {champion_source}")
@@ -4001,6 +4080,7 @@ def train_prebreakout_model_run17(
             "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
             "days_back": int(days_back),
             "target": PREBREAKOUT_TARGET_COLUMN,
+            "input_contract": PREBREAKOUT_INPUT_CONTRACT,
             "target_audit_description": _run17_target_audit_description(),
             "feature_names": list(champion_features),
             "feature_count": len(champion_features),
@@ -4050,7 +4130,7 @@ def train_prebreakout_model_run17(
                 df_labeled,
                 champion_features,
                 benchmark_context,
-                purge_days=max(RETURN_HORIZON_DAYS, int(spec["lead_days"]), int(spec["economic_horizon"])),
+                purge_days=_prebreakout_purge_days(spec),
                 return_column=return_col,
                 mfe_column=mfe_col,
                 mae_column=mae_col,
@@ -4058,7 +4138,7 @@ def train_prebreakout_model_run17(
             )
             result["target_spec"] = spec
             result["target_rule"] = _run17_target_rule(spec)
-            result["path_label_source"] = "OHLC path" if force_path else "existing close-return fallback or production target"
+            result["path_label_source"] = "complete OHLC path; no cached-return fallback"
         target_results.append(result)
         if spec.get("use_current_target"):
             baseline_eval = result
@@ -4079,7 +4159,7 @@ def train_prebreakout_model_run17(
         include_market_features=True,
         feature_cols=champion_features,
     )
-    base_folds = expanding_window_folds(X_base, y_base, df_base, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
+    base_folds = expanding_window_folds(X_base, y_base, df_base, n_splits=5, purge_days=_prebreakout_purge_days(RUN17_TARGET_SPECS[0]))
     ranking_eval = evaluate_prebreakout_ranking_feature_set(X_base, y_base, df_base, base_folds, list(X_base.columns))
     ranking_eval.update(
         {
@@ -4142,13 +4222,14 @@ def train_prebreakout_model_run17(
         "source": "local",
         "trained_at": _utc_now().isoformat().replace("+00:00", "Z"),
         "target": PREBREAKOUT_TARGET_COLUMN,
+        "input_contract": PREBREAKOUT_INPUT_CONTRACT,
         "target_rule": _run17_target_rule(RUN17_TARGET_SPECS[0]),
         "target_audit_description": _run17_target_audit_description(),
         "features": list(champion_features),
         "feature_names": list(champion_features),
         "feature_count": len(champion_features),
         "validation_method": "expanding_window_5fold_purged",
-        "purge_days": RETURN_HORIZON_DAYS,
+        "purge_days": _prebreakout_purge_days(RUN17_TARGET_SPECS[0]),
         "baseline": baseline_eval,
         "target_matrix": target_results,
         "ranking_objective_results": ranking_results,

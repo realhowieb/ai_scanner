@@ -190,9 +190,11 @@ class SigmoidCalibrationTests(unittest.TestCase):
         self.assertEqual(report["rows"], n)
         self.assertEqual(set(report["auc"]), {
             "stored", "per_scan", "history", "training",
-            "per_scan_bars", "per_scan_spy_qqq", "per_scan_bars_spy_qqq", "history_bars",
+            "per_scan_bars", "per_scan_spy_qqq", "per_scan_bars_spy_qqq", "history_bars", "current_contract",
         })
         self.assertEqual(report["auc"]["stored"], report["auc"]["per_scan"])
+        self.assertEqual(report["input_contract"], m.PREBREAKOUT_INPUT_CONTRACT)
+        self.assertEqual(report["current_contract_default_pct"], {"F1": 0.0})
         self.assertEqual(report["most_different_features"][0]["feature"], "F1")
 
 
