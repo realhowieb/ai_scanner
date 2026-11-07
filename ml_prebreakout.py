@@ -3792,6 +3792,15 @@ RUN17_TARGET_SPECS = [
 ]
 
 
+def _prebreakout_purge_days(spec: dict) -> int:
+    """A candidate label can consume the setup lead plus its outcome horizon.
+
+    Taking the maximum lets training labels reach into validation. Sum the
+    sequential windows; expanding_window_folds excludes their boundary too.
+    """
+    return int(spec["lead_days"]) + int(spec["economic_horizon"])
+
+
 def _run17_target_rule(spec: dict) -> str:
     return (
         f"Eligible rows use unchanged PreBreakout candidate rules; positive when a quality setup appears within "
@@ -3963,13 +3972,8 @@ def train_prebreakout_model_run17(
         print("[ml_prebreakout] ML dependencies are not installed. Install requirements-ml.txt to train Run #17.")
         return {}
 
-    if restore_previous_model_if_active_run16_incomplete is not None:
-        try:
-            rollback = restore_previous_model_if_active_run16_incomplete(min_valid_folds=RUN16_EXPECTED_VALID_FOLDS)
-        except Exception as e:
-            rollback = {"restored": False, "reason": str(e)}
-    else:
-        rollback = {"restored": False, "reason": "rollback helper unavailable"}
+    # Diagnostic reports must never reactivate or replace a production model.
+    rollback = {"restored": False, "reason": "report-only run; production state unchanged"}
 
     df = load_run_history(days_back=days_back)
     if df.empty:
@@ -3985,7 +3989,7 @@ def train_prebreakout_model_run17(
     symbols = sorted({str(s).upper() for s in df_feature_source.get("Symbol", pd.Series(dtype=str)).dropna() if str(s).strip()})
     bars_by_symbol = _download_label_bars(symbols, lookback_days=max(days_back, 120)) if symbols else {}
     if not bars_by_symbol:
-        print("[ml_prebreakout] Run #17 path labels will rely on existing close-return columns where available.")
+        print("[ml_prebreakout] Run #17 requires complete OHLC paths; cached close returns cannot supply path labels.")
 
     print("[ml_prebreakout] RUN #17 - PREBREAKOUT TARGET QUALITY & LEARNING OBJECTIVE")
     print(f"[ml_prebreakout] Champion source: {champion_source}")
@@ -4050,7 +4054,7 @@ def train_prebreakout_model_run17(
                 df_labeled,
                 champion_features,
                 benchmark_context,
-                purge_days=max(RETURN_HORIZON_DAYS, int(spec["lead_days"]), int(spec["economic_horizon"])),
+                purge_days=_prebreakout_purge_days(spec),
                 return_column=return_col,
                 mfe_column=mfe_col,
                 mae_column=mae_col,
@@ -4058,7 +4062,7 @@ def train_prebreakout_model_run17(
             )
             result["target_spec"] = spec
             result["target_rule"] = _run17_target_rule(spec)
-            result["path_label_source"] = "OHLC path" if force_path else "existing close-return fallback or production target"
+            result["path_label_source"] = "complete OHLC path; no cached-return fallback"
         target_results.append(result)
         if spec.get("use_current_target"):
             baseline_eval = result
@@ -4079,7 +4083,7 @@ def train_prebreakout_model_run17(
         include_market_features=True,
         feature_cols=champion_features,
     )
-    base_folds = expanding_window_folds(X_base, y_base, df_base, n_splits=5, purge_days=RETURN_HORIZON_DAYS)
+    base_folds = expanding_window_folds(X_base, y_base, df_base, n_splits=5, purge_days=_prebreakout_purge_days(RUN17_TARGET_SPECS[0]))
     ranking_eval = evaluate_prebreakout_ranking_feature_set(X_base, y_base, df_base, base_folds, list(X_base.columns))
     ranking_eval.update(
         {
@@ -4148,7 +4152,7 @@ def train_prebreakout_model_run17(
         "feature_names": list(champion_features),
         "feature_count": len(champion_features),
         "validation_method": "expanding_window_5fold_purged",
-        "purge_days": RETURN_HORIZON_DAYS,
+        "purge_days": _prebreakout_purge_days(RUN17_TARGET_SPECS[0]),
         "baseline": baseline_eval,
         "target_matrix": target_results,
         "ranking_objective_results": ranking_results,
