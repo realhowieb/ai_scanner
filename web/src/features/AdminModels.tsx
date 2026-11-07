@@ -240,7 +240,38 @@ function MonitoringCard() {
   );
 }
 
+type InputHealth = {
+  status: string; sample_limit: number; lookback_days: number; sampled_predictions: number;
+  comparable_predictions: number; unknown_predictions: number; other_identity_predictions: number;
+  latest_prediction_at: string | null; model_version: string | null; input_contract: string | null;
+  feature_count: number | null; latest_real_inputs: number | null; latest_defaulted_inputs: number | null;
+  features: { name: string; defaulted_predictions: number; predictions: number; defaulted_pct: number }[];
+  note: string;
+};
+
+function PrebreakoutInputHealth({ health }: { health?: InputHealth }) {
+  if (!health) return <p className="cap">Input health is not recorded yet.</p>;
+  const missing = health.features.filter((f) => f.defaulted_predictions > 0);
+  return <section aria-label="PreBreakout input health" className="stack-sm">
+    <h4 className="h3">Input health</h4>
+    <p><HealthPill status={health.status} /> {health.latest_real_inputs === null
+      ? "Latest input evidence is unavailable or incomplete."
+      : `${health.latest_real_inputs} of ${health.feature_count} inputs have recorded values; ${health.latest_defaulted_inputs} filled with defaults on the latest prediction.`}</p>
+    {health.status === "UNKNOWN" && health.latest_real_inputs !== null && <p className="cap">Input counts are recorded, but the model artifact identity is incomplete.</p>}
+    {health.status === "WATCH" && <p className="cap">Defaults or incomplete evidence were found in the recent sample. Review the affected inputs before using this as evidence of model readiness.</p>}
+    <p className="cap">Latest captured prediction: {etTime(health.latest_prediction_at)} · model: {health.model_version ?? "Not recorded"} · input contract: {health.input_contract ?? "Not recorded"}.</p>
+    <p className="cap">{health.comparable_predictions} comparable predictions out of {health.sampled_predictions} sampled over the last {health.lookback_days} days (up to {health.sample_limit}). Unknown evidence: {health.unknown_predictions}; other model, feature or input-contract identities: {health.other_identity_predictions}.</p>
+    {missing.length > 0 && <details><summary>Inputs filled with defaults ({missing.length})</summary>
+      <p className="cap">A default can mean missing source data or insufficient ticker history. The captured mask does not identify the cause.</p>
+      <div className="table-wrap"><table className="table"><thead><tr><th>Input</th><th>Defaulted predictions</th><th>Share</th></tr></thead><tbody>
+        {missing.map((f) => <tr key={f.name}><th scope="row">{f.name}</th><td>{f.defaulted_predictions} / {f.predictions}</td><td>{f.defaulted_pct}%</td></tr>)}
+      </tbody></table></div></details>}
+    <p className="cap">{health.note}</p>
+  </section>;
+}
+
 type Production = {
+  input_health?: InputHealth;
   configured_model: { model_version: string; trained_at: string | null; dataset_version: string | null } | null;
   latest_capture: { signal_at: string; inferred_at: string | null; artifact_sha256: string | null; model_version: string | null } | null;
 };
@@ -281,12 +312,14 @@ function ModelSummary() {
     </>}
     <section aria-label="Production PreBreakout" className="stack-sm">
       <h3 className="h3">Production PreBreakout</h3>
+      <button className="btn btn-sm" onClick={prebreakout.reload} disabled={prebreakout.refreshing}>Refresh PreBreakout health</button>
       <p className="cap">The separate model behind the Premium PreBreakout column and stock-page signals. It is not AI Confidence or an ML v4 challenger.</p>
       {prebreakout.error ? <ErrorState error={prebreakout.error} onRetry={prebreakout.reload} what="PreBreakout model evidence" /> : !prebreakout.data ? <Skeleton rows={2} label="Loading PreBreakout model evidence" /> : <>
         <p>Configured database model: <strong>{prebreakout.data.configured_model?.model_version ?? "No active database model recorded"}</strong>.</p>
         <p className="cap">Trained: {etTime(prebreakout.data.configured_model?.trained_at)} · dataset: {prebreakout.data.configured_model?.dataset_version ?? "Not recorded"}.</p>
         <p>Latest recorded PreBreakout prediction: {prebreakout.data.latest_capture ? `${prebreakout.data.latest_capture.model_version ?? "Model version not recorded"} · signal ${etTime(prebreakout.data.latest_capture.signal_at)}` : "No saved PreBreakout prediction with model evidence found"}.</p>
         <p className="cap">Inference time: {etTime(prebreakout.data.latest_capture?.inferred_at)} · artifact checksum: <span className="mono">{prebreakout.data.latest_capture?.artifact_sha256 ?? "Not recorded on this signal"}</span>.</p>
+        <PrebreakoutInputHealth health={prebreakout.data.input_health} />
         <p className="cap">Configuration and recorded predictions do not prove which artifact is currently cached in every process. A local fallback may be used. Missing evidence is unknown; a display zero without a model is not a prediction.</p>
       </>}
     </section>
