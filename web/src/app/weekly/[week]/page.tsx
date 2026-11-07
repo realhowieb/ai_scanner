@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 
+import { JsonLd } from "@/components/JsonLd";
 import { WeeklyRecapView, weekRange } from "@/features/WeeklyRecap";
 import { OG_IMAGE } from "@/lib/seo";
+import { articleSchema } from "@/lib/schema";
 import { loadRecap, loadRecapIndex } from "@/server/publicRecap";
 
 type Props = { params: Promise<{ week: string }> };
@@ -24,5 +26,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function Page({ params }: Props) {
   const [recap, index] = await Promise.all([loadRecap((await params).week), loadRecapIndex()]);
-  return <WeeklyRecapView recap={recap} weeks={index.weeks} />;
+  return (
+    <>
+      {recap && (
+        <JsonLd data={articleSchema({
+          headline: `HSF weekly recap: ${weekRange(recap.start, recap.end)}`,
+          description: `The stocks HSF's scanner ranked most the week of ${weekRange(recap.start, recap.end)}. A record of rankings, not recommendations.`,
+          path: `/weekly/${recap.week}`,
+          datePublished: recap.built_at,
+        })} />
+      )}
+      <WeeklyRecapView recap={recap} weeks={index.weeks} />
+    </>
+  );
 }
