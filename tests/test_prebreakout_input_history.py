@@ -30,6 +30,10 @@ class InputHistoryTests(unittest.TestCase):
             self.assertTrue(np.isfinite(actual[col]), col)
             self.assertAlmostEqual(actual[col], expected[col], msg=col)
         self.assertEqual(ml.snapshot_feature_frame(current, history=frame.iloc[:-1]).index.tolist(), [91])
+        # Compare the complete generated row, including missingness, rather
+        # than only the five formerly defaulted examples above.
+        pd.testing.assert_series_equal(actual.reindex(expected.index), expected, check_names=False)
+
 
     def test_other_ticker_and_future_rows_cannot_change_inputs(self):
         frame = history()
