@@ -77,3 +77,20 @@ class TrackRecordPostgresTests(unittest.TestCase):
             self.assertEqual(result[0]['entry_mode'], 'open')
             self.assertEqual(result[0]['methodology'], 'track-v2-next-open')
             self.assertEqual(store.load_leaderboard(5, entry_mode='close'), [])
+
+
+    def test_real_snapshot_timestamp_column_is_normalized_to_aware_utc(self):
+        from db import runs
+        stamp = dt.datetime(2026, 11, 5, 20, 56)
+        with self.connect() as conn, conn.cursor() as cur:
+            cur.execute("CREATE TABLE runs (id SERIAL PRIMARY KEY, name TEXT, label TEXT, username TEXT, row_count INT, "
+                        "duration_sec REAL, is_snapshot BOOLEAN, created_at TIMESTAMP WITHOUT TIME ZONE)")
+            cur.execute("INSERT INTO runs(name,label,username,is_snapshot,created_at) VALUES (%s,%s,%s,TRUE,%s)",
+                        ('US_MARKET', 'daily_snapshot', 'cron', stamp))
+        with patch.object(runs, 'get_neon_conn', side_effect=self.connect), patch.object(runs, 'ensure_neon_runs_schema'):
+            rows = runs.list_snapshot_runs(days=5000, public_only=True)
+        self.assertEqual(rows[0]['created_at'].tzinfo, dt.timezone.utc)
+        self.assertEqual(rows[0]['created_at'], stamp.replace(tzinfo=dt.timezone.utc))
+        # The helper remains strict about ambiguous naive inputs; the DB reader supplies the known timezone.
+        from analytics.track_method import window
+        self.assertNotIn('reason', window(rows[0]['created_at'], 1))

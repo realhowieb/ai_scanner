@@ -145,6 +145,7 @@ class OutcomeTests(unittest.TestCase):
         self.assertIn("username = 'cron' AND label = 'daily_snapshot'", query)
         self.assertTrue(params[1])
         self.assertIn('ORDER BY created_at DESC, id DESC', query)
+        self.assertIn("created_at AT TIME ZONE 'UTC' AS created_at", query)
 
 
     def test_invalid_bar_index_is_an_exclusion_not_a_crash(self):
