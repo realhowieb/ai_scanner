@@ -352,6 +352,10 @@ def list_snapshot_runs(days: int = 45, limit: int = 60, *, public_only: bool = F
     a handful of snapshots; this pushes the is_snapshot + recency filter into
     the query. Neon only (snapshot history features are cloud-backed); returns
     [] when Neon is unavailable.
+
+    The legacy created_at column is TIMESTAMP WITHOUT TIME ZONE storing UTC.
+    Project it as an aware timestamp; strict downstream entry timing must not
+    interpret known UTC wall time as unknown availability.
     """
     try:
         conn = get_neon_conn()
@@ -362,7 +366,7 @@ def list_snapshot_runs(days: int = 45, limit: int = 60, *, public_only: bool = F
         cur.execute(
             """
             SELECT id, name, label, username, row_count, duration_sec,
-                   is_snapshot, created_at
+                   is_snapshot, created_at AT TIME ZONE 'UTC' AS created_at
             FROM runs
             WHERE is_snapshot = TRUE
               AND created_at >= NOW() - make_interval(days => %s)
