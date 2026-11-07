@@ -80,6 +80,7 @@ class InputHistoryTests(unittest.TestCase):
 class HistoryQueryTests(unittest.TestCase):
     def test_history_query_is_batched_public_bounded_and_read_only(self):
         from unittest.mock import MagicMock
+
         from db.prebreakout_history import load_feature_history
         conn = MagicMock()
         cur = conn.cursor.return_value
