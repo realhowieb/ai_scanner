@@ -19,6 +19,28 @@ const ROUTES: Record<string, ReadonlyArray<"GET" | "POST">> = {
 const MAX_BODY = 4096;
 const GATEWAY = new Set([502, 503, 504]);
 
+// Plans change rarely, so the web server keeps the last good GET /v1/plans for five
+// minutes: one slow or failed API call can't blank the pricing section. After that the
+// last good copy (up to a day old) is served at once while a fresh one loads.
+const PLANS_PATH = "v1/plans";
+export const PLANS_TTL_MS = 5 * 60_000;
+const PLANS_STALE_MS = 24 * 60 * 60_000;
+let plansCache: { body: string; at: number } | null = null;
+let plansInFlight: Promise<Response> | null = null;
+
+/** Tests only: forget the cached plans. */
+export function _resetPlansCache(): void {
+  plansCache = null;
+  plansInFlight = null;
+}
+
+function plansResponse(body: string, rid: string, cache: "hit" | "miss" | "stale"): Response {
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "application/json", "x-request-id": rid, "cache-control": "no-store", "x-hsf-cache": cache },
+  });
+}
+
 /** Utm tags, the referrer and an invite code (ref), cleaned for the API (it cleans them again). */
 export function cleanAttribution(raw: unknown): Record<string, string> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -43,6 +65,41 @@ export async function publicApi(req: Request, segments: string[], upstream: Upst
     if (body.length > MAX_BODY) return json({ detail: "Request too large." }, 413, rid);
   }
   const query = new URL(req.url).search;
+  if (path === PLANS_PATH && method === "GET" && !query) return cachedPlans(rid, upstream);
+  return forward(path, query, method, body, rid, upstream);
+}
+
+async function cachedPlans(rid: string, upstream: Upstream): Promise<Response> {
+  const age = plansCache ? Date.now() - plansCache.at : Infinity;
+  if (plansCache && age < PLANS_TTL_MS) return plansResponse(plansCache.body, rid, "hit");
+  const refresh = refreshPlans(rid, upstream);
+  // Past five minutes, answer at once with the last good copy and refresh behind it,
+  // so a slow API call never holds up the page.
+  if (plansCache && age < PLANS_STALE_MS) {
+    refresh.catch(() => undefined);
+    return plansResponse(plansCache.body, rid, "stale");
+  }
+  return refresh;
+}
+
+/** One API call at a time; keeps the body when it is good JSON. */
+function refreshPlans(rid: string, upstream: Upstream): Promise<Response> {
+  plansInFlight ??= (async () => {
+    const res = await forward(PLANS_PATH, "", "GET", undefined, rid, upstream);
+    if (!res.ok) return res;
+    const text = await res.text();
+    try {
+      JSON.parse(text);
+    } catch {
+      return json({ detail: "Couldn't read plans from the HSF service. Try again." }, 502, rid);
+    }
+    plansCache = { body: text, at: Date.now() };
+    return plansResponse(text, rid, "miss");
+  })().finally(() => { plansInFlight = null; });
+  return plansInFlight.then((r) => r.clone());
+}
+
+async function forward(path: string, query: string, method: string, body: string | undefined, rid: string, upstream: Upstream): Promise<Response> {
   let res: Response;
   try {
     res = await upstream(`/${path}${query}`, {

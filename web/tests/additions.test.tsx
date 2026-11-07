@@ -96,16 +96,27 @@ describe("landing and pricing", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("says when plans can't load and retries", async () => {
+  it("shows the three plan names when plans can't load, and retries", async () => {
     let fail = true;
     serve({ "GET /v1/plans": () => (fail ? jsonResponse({ detail: "The HSF service is starting up. Try again in a moment." }, 503) : jsonResponse(PLANS)),
       "POST /v1/events": new Response(null, { status: 202 }) });
     const u = userEvent.setup();
     render(<PricingPage />);
-    expect(await screen.findByText(/starting up/)).toBeInTheDocument();
+    expect(await screen.findByTestId("plans-fallback")).toBeInTheDocument();
+    for (const name of ["Starter", "Pro", "Premium"]) expect(screen.getByRole("heading", { name })).toBeInTheDocument();
+    expect(screen.queryByText(/starting up/)).not.toBeInTheDocument();
     fail = false;
     await u.click(screen.getByRole("button", { name: /Try again/ }));
     expect((await screen.findAllByText("$40/mo")).length).toBeGreaterThan(0);
+  });
+
+  it("landing shows plan names and a link to full pricing when plans can't load", async () => {
+    serve({ "GET /v1/plans": jsonResponse({ detail: "The HSF service is starting up. Try again in a moment." }, 503),
+      "POST /v1/events": new Response(null, { status: 202 }) });
+    render(<Landing />);
+    expect(await screen.findByTestId("plans-fallback")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Premium" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See full pricing" })).toHaveAttribute("href", "/pricing");
   });
 
   it("switches pricing cards and comparison to yearly, and remembers the choice", async () => {
