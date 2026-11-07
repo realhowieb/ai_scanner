@@ -47,6 +47,61 @@ def production_confidence():
         conn.close()
 
 
+def prebreakout_input_health(rows):
+    """Describe captured input completeness, never prediction quality.
+
+    Rows arrive newest first. Compare only the newest artifact/schema; malformed
+    evidence remains unknown rather than counting as complete.
+    """
+    import math
+
+    def vector(row):
+        names, values, mask = (row.get(k) for k in ('names', 'values', 'mask'))
+        if not (isinstance(names, list) and names and len(set(str(n) for n in names)) == len(names)
+                and all(isinstance(n, str) and n for n in names)
+                and isinstance(values, list) and isinstance(mask, list)
+                and len(names) == len(values) == len(mask)
+                and all(isinstance(v, (float, int)) and not isinstance(v, bool) and math.isfinite(v) for v in values)
+                and all(isinstance(v, bool) for v in mask)):
+            return None
+        return names, mask
+
+    rows = list(rows)
+    latest = rows[0] if rows else {}
+    current = vector(latest)
+    result = {'status': 'UNKNOWN', 'sample_limit': 500, 'lookback_days': 7,
+              'sampled_predictions': len(rows), 'comparable_predictions': 0, 'unknown_predictions': 0,
+              'other_identity_predictions': 0, 'latest_prediction_at': latest.get('fired_at'),
+              'model_version': latest.get('version'), 'input_contract': latest.get('contract'),
+              'feature_count': None, 'latest_real_inputs': None, 'latest_defaulted_inputs': None,
+              'features': [], 'note': 'Input completeness only, not accuracy or calibration. '
+              'At most 500 recent predictions from seven days; comparison uses the latest artifact, feature schema and input contract. '
+              'A real zero is valid; only the captured default mask identifies a filled input.'}
+    if current is None:
+        result['unknown_predictions'] = len(rows)
+        return result
+    names, mask = current
+    counts = [0] * len(names)
+    for row in rows:
+        parsed = vector(row)
+        if parsed is None:
+            result['unknown_predictions'] += 1
+            continue
+        if row.get('version') != latest.get('version') or row.get('sha') != latest.get('sha') or row.get('contract') != latest.get('contract') or parsed[0] != names:
+            result['other_identity_predictions'] += 1
+            continue
+        result['comparable_predictions'] += 1
+        counts = [a + int(b) for a, b in zip(counts, parsed[1])]
+    result.update(feature_count=len(names), latest_real_inputs=len(names)-sum(mask), latest_defaulted_inputs=sum(mask))
+    n = result['comparable_predictions']
+    result['features'] = sorted([{'name': name, 'defaulted_predictions': count, 'predictions': n,
+                                 'defaulted_pct': round(100*count/n, 1)} for name, count in zip(names, counts)],
+                                key=lambda f: (-f['defaulted_predictions'], f['name']))
+    result['status'] = ('UNKNOWN' if not latest.get('sha') or not latest.get('version') else
+                        'WATCH' if any(counts) or result['unknown_predictions'] else 'HEALTHY')
+    return result
+
+
 def production_prebreakout():
     """Configured model metadata and recorded inference identity, without loading artifacts."""
     try:
@@ -61,6 +116,7 @@ def production_prebreakout():
         cur.execute("SELECT to_regclass('prebreakout_models') AS models, to_regclass('signal_outcomes') AS signals")
         tables = _values(cur.fetchone())
         configured, captured = None, None
+        input_rows = []
         if tables[0]:
             cur.execute("SELECT id, model_version, trained_at, metadata->>'dataset_version' AS dataset_version "
                         "FROM prebreakout_models WHERE is_active = TRUE ORDER BY created_at DESC, id DESC LIMIT 1")
@@ -81,7 +137,20 @@ def production_prebreakout():
             if row:
                 captured = {"signal_at": row[0], "artifact_sha256": row[1], "inferred_at": row[2],
                             "model_version": row[3] or row[4]}
+            cur.execute("SELECT fired_at, raw_signal->'models'->'prebreakout'->'feature_names' AS names, "
+                        "raw_signal->'models'->'prebreakout'->'feature_values' AS values, "
+                        "raw_signal->'models'->'prebreakout'->'default_mask' AS mask, "
+                        "raw_signal->'models'->'prebreakout'->'loaded_artifact'->>'version' AS version, "
+                        "raw_signal->'models'->'prebreakout'->'loaded_artifact'->>'sha256' AS sha, "
+                        "raw_signal->'models'->'prebreakout'->'enrichment_availability'->>'input_contract' AS contract "
+                        "FROM signal_outcomes WHERE source='opportunity' AND fired_at >= NOW()-INTERVAL '7 days' "
+                        "AND fired_at <= NOW() AND raw_signal->'models'->'prebreakout'->>'status'='captured' "
+                        "ORDER BY fired_at DESC, id DESC LIMIT 500")
+            keys = ('fired_at', 'names', 'values', 'mask', 'version', 'sha', 'contract')
+            input_rows = [{key: row.get(key) for key in keys} if isinstance(row, dict) else dict(zip(keys, row))
+                          for row in (cur.fetchall() or [])]
         return {"configured_model": configured, "latest_capture": captured,
+                "input_health": prebreakout_input_health(input_rows),
                 "note": "Configured database model and latest recorded inference are separate evidence. "
                         "The scorer can fall back to a local artifact; missing evidence is unknown."}
     except Exception as exc:

@@ -73,15 +73,23 @@ class PrebreakoutEvidenceTests(unittest.TestCase):
             (7, 'configured-pb', '2026-10-07', None),
             ('2026-11-06', 'pb-hash', '2026-11-06', 'actual-pb', 'legacy-pb'),
         ]
+        cursor.fetchall.return_value = [('2026-11-06', ['Price', 'Slope'], [1.0, 0.0],
+                                        [False, True], 'actual-pb', 'pb-hash', 'snapshot-v1')]
         with patch('db.ml_operations.get_neon_conn', return_value=conn):
             result = production_prebreakout()
         self.assertEqual(result['configured_model']['model_version'], 'configured-pb')
         self.assertEqual(result['latest_capture']['model_version'], 'actual-pb')
         self.assertEqual(result['latest_capture']['artifact_sha256'], 'pb-hash')
+        self.assertEqual(result['input_health']['latest_defaulted_inputs'], 1)
+        self.assertEqual(result['input_health']['status'], 'WATCH')
+        self.assertNotIn('values', result['input_health'])
+        conn.commit.assert_not_called()
         queries = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertTrue(all(q.startswith('SELECT ') and 'model_bytes' not in q for q in queries))
         self.assertIn("'captured'", queries[-1])
-        self.assertIn('prebreakout_prob > 0', queries[-1])
+        self.assertIn('prebreakout_prob > 0', queries[-2])
+        self.assertIn('LIMIT 500', queries[-1])
+        self.assertIn("INTERVAL '7 days'", queries[-1])
         self.assertNotIn('ai_confidence', ''.join(queries))
         conn.close.assert_called_once()
 
