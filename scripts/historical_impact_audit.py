@@ -170,7 +170,7 @@ def main():
                        "coalesce(username='cron' AND label='daily_snapshot',false) AS public, "
                        "CASE WHEN username='cron' AND label='daily_snapshot' THEN "
                        "(SELECT jsonb_agg(jsonb_build_object('Ticker',coalesce(x->'Ticker',x->'Symbol'),"
-                       "'BreakoutScore',x->'BreakoutScore','PreBreakoutProb%',x->'PreBreakoutProb%',"
+                       "'BreakoutScore',x->'BreakoutScore','PreBreakoutProb%%',x->'PreBreakoutProb%%',"
                        "'PreBreakoutProb',x->'PreBreakoutProb','ModelProvenance',x->'ModelProvenance') ORDER BY n) "
                        "FROM jsonb_array_elements(results_json::jsonb) WITH ORDINALITY a(x,n)) END AS rows "
                        "FROM runs WHERE is_snapshot AND created_at >= %s AND created_at <= %s "
