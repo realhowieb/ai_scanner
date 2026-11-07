@@ -5,7 +5,7 @@ import { API_STARTING, NOT_INVITED, changePassword, login, logout, publicAuth, s
 import { SESSION_EXPIRED, proxy } from "@/server/bff";
 import type { Upstream } from "@/server/bff";
 import { ACCESS_COOKIE, REFRESH_COOKIE, accessTokenUsable, secureCookies } from "@/server/cookies";
-import { cleanAttribution, publicApi } from "@/server/public";
+import { PLANS_TTL_MS, _resetPlansCache, cleanAttribution, publicApi } from "@/server/public";
 import { _resetRefreshState } from "@/server/refresh";
 
 import { jsonResponse, jwt, setCookies } from "./helpers";
@@ -39,7 +39,7 @@ function fakeUpstream(handler: (c: Call, calls: Call[]) => Response | Promise<Re
 
 const auth = (c: Call) => (c.init.headers as Record<string, string>).authorization;
 
-beforeEach(() => _resetRefreshState());
+beforeEach(() => { _resetRefreshState(); _resetPlansCache(); });
 
 describe("BFF proxy", () => {
   it("forwards with the cookie's access token and passes status, Retry-After and request id", async () => {
@@ -441,6 +441,46 @@ describe("signed-out API routes", () => {
     const waking = await publicApi(req("/api/public/v1/plans"), ["v1", "plans"], up);
     expect(waking.status).toBe(502);
     expect((await waking.json()).detail).toContain("starting up");
+  });
+
+  it("caches plans for five minutes and serves the last good copy when the API fails", async () => {
+    vi.useFakeTimers();
+    try {
+      let down = false;
+      const { up, calls } = fakeUpstream(() => (down ? new Response("bad gateway", { status: 502 }) : jsonResponse({ tiers: [{ id: "basic" }], rows: [] })));
+      const get = () => publicApi(req("/api/public/v1/plans"), ["v1", "plans"], up);
+      const first = await get();
+      expect(first.headers.get("x-hsf-cache")).toBe("miss");
+      expect((await (await get()).json()).tiers).toEqual([{ id: "basic" }]);
+      expect(calls).toHaveLength(1);
+      down = true;
+      vi.advanceTimersByTime(PLANS_TTL_MS + 1);
+      const stale = await get();
+      expect(stale.status).toBe(200);
+      expect(stale.headers.get("x-hsf-cache")).toBe("stale");
+      expect((await stale.json()).tiers).toEqual([{ id: "basic" }]);
+      await vi.runAllTimersAsync();
+      expect(calls).toHaveLength(2);
+      down = false;
+      await get(); // stale again; refreshes behind it
+      await vi.runAllTimersAsync();
+      expect((await get()).headers.get("x-hsf-cache")).toBe("hit");
+      expect(calls).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shares one API call between visitors arriving together", async () => {
+    let release: (r: Response) => void = () => undefined;
+    const { up, calls } = fakeUpstream(() => new Promise<Response>((r) => { release = r; }));
+    const a = publicApi(req("/api/public/v1/plans"), ["v1", "plans"], up);
+    const b = publicApi(req("/api/public/v1/plans"), ["v1", "plans"], up);
+    await new Promise((r) => setTimeout(r, 0));
+    release(jsonResponse({ tiers: [], rows: [] }));
+    expect((await a).status).toBe(200);
+    expect((await b).status).toBe(200);
+    expect(calls).toHaveLength(1);
   });
 
   it("sign-up forwards only utm tags and the referrer", async () => {
