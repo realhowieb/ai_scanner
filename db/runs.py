@@ -362,7 +362,7 @@ def list_snapshot_runs(days: int = 45, limit: int = 60, *, public_only: bool = F
         cur.execute(
             """
             SELECT id, name, label, username, row_count, duration_sec,
-                   is_snapshot, created_at
+                   is_snapshot, created_at AT TIME ZONE 'UTC' AS created_at
             FROM runs
             WHERE is_snapshot = TRUE
               AND created_at >= NOW() - make_interval(days => %s)
