@@ -23,7 +23,7 @@ describe("marketing host (www.hsfinest.com)", () => {
     for (const p of ["/", "/pricing", "/how-hsf-works", "/demo", "/weekly", "/weekly/2026-W44", "/founders",
       "/founders/card/abcd", "/founding-100/terms", "/terms", "/privacy", "/share/AAPL", "/api/public/v1/plans",
       "/api/public/v1/events", "/opengraph-image", "/robots.txt", "/sitemap.xml", "/landing/scanner-current.jpg",
-      "/icon-192.png", "/subscribe/confirm", "/unsubscribe"]) {
+      "/icon-192.png", "/subscribe/confirm", "/unsubscribe", "/api/auth/status"]) {
       expect(marketingRoute(p), p).toBe("serve");
     }
   });
