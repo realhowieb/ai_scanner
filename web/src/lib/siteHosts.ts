@@ -13,7 +13,9 @@ export function isMarketingHost(host: string | null | undefined): boolean {
 
 // Public pages and the files and public API calls they need.
 const SERVE_EXACT = new Set(["/", "/pricing", "/how-hsf-works", "/demo", "/terms", "/privacy", "/robots.txt",
-  "/sitemap.xml", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icon.svg", "/apple-icon.png", "/api/healthz"]);
+  "/sitemap.xml", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icon.svg", "/apple-icon.png", "/api/healthz",
+  // Public pages ask this to pick their signed-in view; sent to the app host, the browser blocks it (CORS).
+  "/api/auth/status"]);
 const SERVE_PREFIX = ["/weekly", "/founders", "/founding-100", "/share/", "/social/", "/subscribe/", "/unsubscribe",
   "/api/public/", "/api/logo/", "/landing/", "/licenses/"];
 // Generated files whose names Next may suffix (opengraph-image-abc123, icon-192.png).
