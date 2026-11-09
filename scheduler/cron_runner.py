@@ -949,11 +949,12 @@ def _refresh_earnings() -> None:
         return
 
     universe = _dedupe([*_load_universe("SP500"), *_load_universe("NASDAQ")])
-    print(f"[earnings] refreshing {len(universe)} symbols (FMP -> Finnhub, bulk)")
+    print(f"[earnings] refreshing {len(universe)} symbols (Finnhub + Nasdaq + FMP, bulk)")
     result = populate_earnings_calendar(universe, use_yf_fallback=False, sleep_s=0,
-                                          include_all_bulk=True)
+                                          include_all_bulk=True, nasdaq=True)
     found = sum(1 for info in result.values() if info.earnings_date is not None)
     print(f"[earnings] cron refresh complete: {found} dated of {len(universe)}")
+    _topup_earnings_from_yahoo()
     # Only mark as refreshed when we actually got dates. If all sources returned
     # nothing (keys missing, rate-limited, provider outage), leave today unmarked
     # so the next scheduled scan retries instead of waiting until tomorrow.
@@ -961,6 +962,29 @@ def _refresh_earnings() -> None:
         mark_earnings_refreshed_today(key)
     else:
         print("[earnings] 0 dates found — not marking refreshed; will retry next scan")
+
+
+EARNINGS_YAHOO_TOPUP_LIMIT = 300
+
+
+def _topup_earnings_from_yahoo() -> None:
+    """Watchlist and latest-scan names the bulk calendars left undated (foreign filers
+    like NVO, RACE, ENB): look each up on Yahoo, up to EARNINGS_YAHOO_TOPUP_LIMIT a day.
+    Best-effort. HSF_EARNINGS_YAHOO_TOPUP=0 turns it off."""
+    if os.getenv("HSF_EARNINGS_YAHOO_TOPUP", "1").strip().lower() in ("0", "false", "no", "off"):
+        print("[earnings] Yahoo top-up off (HSF_EARNINGS_YAHOO_TOPUP=0)")
+        return
+    try:
+        from db.earnings import topup_earnings_from_yahoo
+        from db.watchlist_autoscore import watched_tickers
+        from scheduler.watchlist_autoscore import ranked_tickers
+
+        names = _dedupe([*watched_tickers(1000), *sorted(ranked_tickers())])
+        found, tried = topup_earnings_from_yahoo(names, limit=EARNINGS_YAHOO_TOPUP_LIMIT)
+        print(f"[earnings] Yahoo top-up: dated {found} of {tried} undated watchlist/scan names")
+    except Exception as e:
+        print(f"[earnings] Yahoo top-up failed: {type(e).__name__}")
+        _capture(e)
 
 
 def main():

@@ -304,6 +304,7 @@ def populate_earnings_calendar(
     lookahead_days: int = 120,
     use_yf_fallback: bool = True,
     include_all_bulk: bool = False,
+    nasdaq: bool = False,
 ) -> Dict[str, EarningsInfo]:
     """Populate / refresh earnings_calendar for given symbols.
 
@@ -319,6 +320,8 @@ def populate_earnings_calendar(
     - include_all_bulk: also store every US-style symbol the bulk window returns,
       not just the ones in `symbols`. The bulk call is free, so this covers
       NYSE names, ADRs and new listings missing from the static universe files.
+    - nasdaq: also read Nasdaq's day-by-day calendar (the daily cron), which lists
+      foreign and cross-listed filers Finnhub's free calendar skips.
 
     Returns a dict symbol -> EarningsInfo for what we attempted.
     """
@@ -338,7 +341,7 @@ def populate_earnings_calendar(
 
         start = date.today()
         end = start + timedelta(days=int(lookahead_days))
-        bulk, source = fetch_earnings_window(start.isoformat(), end.isoformat())
+        bulk, source = fetch_earnings_window(start.isoformat(), end.isoformat(), nasdaq=nasdaq)
         if bulk:
             print(f"[earnings] {source}: {len(bulk)} symbols; yfinance fills the rest")
     except Exception as exc:
@@ -719,3 +722,47 @@ def _details_for_symbol(symbol: str, details: Dict[str, Tuple[Optional[date], Op
     if norm in details:
         return details[norm]
     return None
+
+
+# -------------------------
+# Yahoo top-up (daily cron)
+# -------------------------
+
+def undated_symbols(symbols: Iterable[str], *, conn=None) -> list[str]:
+    """The given symbols (order kept) with no earnings date today or later."""
+    c = _get_conn(conn)
+    ensure_earnings_table(c)
+    syms = list(dict.fromkeys(_norm_symbols(symbols)))
+    if not syms:
+        return []
+    with c.cursor() as cur:
+        cur.execute(
+            "SELECT symbol FROM earnings_calendar WHERE symbol = ANY(%s) AND earnings_date >= %s",
+            (syms, date.today()),
+        )
+        dated = {_norm_symbol(str(r[0])) for r in (cur.fetchall() or [])}
+    return [s for s in syms if s not in dated]
+
+
+def topup_earnings_from_yahoo(symbols: Iterable[str], *, limit: int = 300, conn=None,
+                              fetch=None, sleep_s: float = 0.1) -> Tuple[int, int]:
+    """Look up the next earnings date on Yahoo for up to `limit` of `symbols` that have
+    no upcoming date, and store the ones found (time unknown). Returns (found, tried)."""
+    if fetch is None:
+        from data.earnings_sources import fetch_next_earnings_yahoo as fetch
+    c = _get_conn(conn)
+    todo = undated_symbols(symbols, conn=c)[: max(0, int(limit))]
+    found = 0
+    with c.cursor() as cur:
+        for i, sym in enumerate(todo):
+            d = fetch(sym)
+            if d is not None:
+                cur.execute(UPSERT_EARNINGS_SQL, (sym, d, None))
+                found += 1
+            if sleep_s and i + 1 < len(todo):
+                time.sleep(sleep_s)
+    try:
+        c.commit()
+    except Exception:
+        pass
+    return found, len(todo)
