@@ -116,6 +116,79 @@ def set_admin(actor: str, username: str, make_admin: bool) -> Dict[str, Any]:
     return _done(set_role(username, make_admin, acting_user=actor), username)
 
 
+def _rename_conn():
+    from db.user_admin import _conn
+
+    conn = _conn()
+    if conn is None:
+        raise AdminError("Database unavailable; nothing was changed.")
+    return conn
+
+
+def preview_email_change(actor: str, username: str, new_email: str) -> Dict[str, Any]:
+    """What changing an account's email would touch (P2-36); writes nothing."""
+    from db.account_rename import RenameBlocked, preview_rename
+    from db.user_admin import normalize_email
+
+    if normalize_email(username) == normalize_email(actor):
+        raise AdminError("You can't change your own email here (it would sign you out mid-change).")
+    conn = _rename_conn()
+    try:
+        return preview_rename(conn, username, new_email)
+    except RenameBlocked as e:
+        raise AdminError(str(e)) from None
+    finally:
+        conn.close()
+
+
+def _stripe_email(customer_id: Optional[str], email: str) -> str:
+    """Point the Stripe customer at the new address so receipts follow; never raises."""
+    if not customer_id:
+        return ""
+    try:
+        from api.billing import embedded_enabled
+
+        if not embedded_enabled():
+            return " Update the email in Stripe too (billing isn't embedded here)."
+        from billing_service import main as billing
+
+        billing.stripe.Customer.modify(customer_id, email=email)
+        return " Stripe receipts now go to the new address."
+    except Exception:
+        return " Couldn't update the Stripe customer email; change it in the Stripe dashboard."
+
+
+def change_email(actor: str, username: str, new_email: str, keep_verified: bool) -> Dict[str, Any]:
+    """Move an account to a new email across every table in one transaction (P2-36)."""
+    from db.account_rename import RenameBlocked, rename_account
+    from db.admin_audit import record_admin_event
+    from db.user_admin import _clear_user_cache, normalize_email
+
+    old = normalize_email(username)
+    if old == normalize_email(actor):
+        raise AdminError("You can't change your own email here (it would sign you out mid-change).")
+    conn = _rename_conn()
+    try:
+        out = rename_account(conn, old, new_email, keep_verified=keep_verified)
+    except RenameBlocked as e:
+        raise AdminError(str(e)) from None
+    finally:
+        conn.close()
+    _clear_user_cache()
+    _forget(old)
+    _forget(out["new_email"])
+    moved = sum(out["moved"].values())
+    try:
+        record_admin_event(actor, "change_email", out["new_email"],
+                           {"email": [old, out["new_email"]], "rows_moved": moved, "kept_verified": bool(keep_verified)})
+    except Exception:
+        pass
+    note = _stripe_email(out.get("stripe_customer_id"), out["new_email"])
+    verified = "" if keep_verified else " The new address needs verifying: resend verification or mark it verified."
+    return {"ok": True, "message": f"Moved {old} to {out['new_email']} ({moved} rows). They're signed out everywhere "
+                                   f"and sign in with the new address.{verified}{note}"}
+
+
 def audit_log(limit: int = 50) -> List[Dict[str, Any]]:
     from db.admin_audit import describe, recent_admin_events
 

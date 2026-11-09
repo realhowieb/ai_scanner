@@ -798,6 +798,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change an account's email across every table and sign it out */
+        post: operations["admin_change_email_v1_admin_users_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/email/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview changing an account's email (writes nothing) */
+        post: operations["admin_preview_email_v1_admin_users_email_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/resend-verification": {
         parameters: {
             query?: never;
@@ -4068,6 +4102,48 @@ export interface components {
             webhook_configured: boolean;
             /** Webhook Failures */
             webhook_failures?: components["schemas"]["BillingFailure"][];
+        };
+        /** AdminChangeEmail */
+        AdminChangeEmail: {
+            /**
+             * Keep Verified
+             * @default false
+             */
+            keep_verified: boolean;
+            /** New Email */
+            new_email: string;
+            /** Username */
+            username: string;
+        };
+        /** AdminChangeEmailPreview */
+        AdminChangeEmailPreview: {
+            /**
+             * Clear
+             * @description Sessions and one-time links per table that are deleted
+             */
+            clear: {
+                [key: string]: number;
+            };
+            /** Email Verified */
+            email_verified: boolean;
+            /**
+             * Move
+             * @description Rows per table that move to the new address
+             */
+            move: {
+                [key: string]: number;
+            };
+            /** New Email */
+            new_email: string;
+            /** Old Email */
+            old_email: string;
+            /**
+             * Problems
+             * @description Reasons the change can't go ahead yet
+             */
+            problems: string[];
+            /** Stripe Customer */
+            stripe_customer: boolean;
         };
         /** AdminCheck */
         AdminCheck: {
@@ -13836,6 +13912,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_change_email_v1_admin_users_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminChangeEmail"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Refused (the detail says why) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_preview_email_v1_admin_users_email_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminChangeEmail"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminChangeEmailPreview"];
                 };
             };
             /** @description Not signed in */
