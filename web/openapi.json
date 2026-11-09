@@ -770,6 +770,86 @@
     "title": "AdminBilling",
     "type": "object"
    },
+   "AdminChangeEmail": {
+    "properties": {
+     "keep_verified": {
+      "default": false,
+      "title": "Keep Verified",
+      "type": "boolean"
+     },
+     "new_email": {
+      "maxLength": 254,
+      "title": "New Email",
+      "type": "string"
+     },
+     "username": {
+      "maxLength": 254,
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "new_email"
+    ],
+    "title": "AdminChangeEmail",
+    "type": "object"
+   },
+   "AdminChangeEmailPreview": {
+    "properties": {
+     "clear": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Sessions and one-time links per table that are deleted",
+      "title": "Clear",
+      "type": "object"
+     },
+     "email_verified": {
+      "title": "Email Verified",
+      "type": "boolean"
+     },
+     "move": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "Rows per table that move to the new address",
+      "title": "Move",
+      "type": "object"
+     },
+     "new_email": {
+      "title": "New Email",
+      "type": "string"
+     },
+     "old_email": {
+      "title": "Old Email",
+      "type": "string"
+     },
+     "problems": {
+      "description": "Reasons the change can't go ahead yet",
+      "items": {
+       "type": "string"
+      },
+      "title": "Problems",
+      "type": "array"
+     },
+     "stripe_customer": {
+      "title": "Stripe Customer",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "old_email",
+     "new_email",
+     "move",
+     "clear",
+     "problems",
+     "stripe_customer",
+     "email_verified"
+    ],
+    "title": "AdminChangeEmailPreview",
+    "type": "object"
+   },
    "AdminCheck": {
     "properties": {
      "detail": {
@@ -23225,6 +23305,98 @@
      }
     ],
     "summary": "Create an account (email username, password rules as sign-up)",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/email": {
+   "post": {
+    "operationId": "admin_change_email_v1_admin_users_email_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminChangeEmail"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Message"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Change an account's email across every table and sign it out",
+    "tags": [
+     "admin (admins only)"
+    ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/users/email/preview": {
+   "post": {
+    "operationId": "admin_preview_email_v1_admin_users_email_preview_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminChangeEmail"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminChangeEmailPreview"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused (the detail says why)"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Preview changing an account's email (writes nothing)",
     "tags": [
      "admin (admins only)"
     ],

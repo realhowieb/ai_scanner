@@ -90,6 +90,14 @@ def register(app: FastAPI) -> None:
     def admin_set_role(body: models.AdminSetRole, a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return _act(lambda: admin.set_admin(_user(a), body.username, body.is_admin))
 
+    @post("/v1/admin/users/email/preview", models.AdminChangeEmailPreview, "Preview changing an account's email (writes nothing)")
+    def admin_preview_email(body: models.AdminChangeEmail, a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _act(lambda: admin.preview_email_change(_user(a), body.username, body.new_email))
+
+    @post("/v1/admin/users/email", models.Message, "Change an account's email across every table and sign it out")
+    def admin_change_email(body: models.AdminChangeEmail, a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        return _act(lambda: admin.change_email(_user(a), body.username, body.new_email, body.keep_verified))
+
     @get("/v1/admin/audit", models.AdminAudit, "Recent admin actions, newest first")
     def admin_audit(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         return {"events": admin.audit_log()}

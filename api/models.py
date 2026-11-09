@@ -1712,6 +1712,21 @@ class AdminSetRole(AdminUserTarget):
     is_admin: bool
 
 
+class AdminChangeEmail(AdminUserTarget):
+    new_email: str = Field(max_length=254)
+    keep_verified: bool = False
+
+
+class AdminChangeEmailPreview(BaseModel):
+    old_email: str
+    new_email: str
+    move: Dict[str, int] = Field(description="Rows per table that move to the new address")
+    clear: Dict[str, int] = Field(description="Sessions and one-time links per table that are deleted")
+    problems: List[str] = Field(description="Reasons the change can't go ahead yet")
+    stripe_customer: bool
+    email_verified: bool
+
+
 class AdminAuditEvent(BaseModel):
     at: Optional[str] = None
     actor: Optional[str] = None

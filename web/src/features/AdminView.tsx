@@ -42,11 +42,65 @@ function Done({ message }: { message: string | null }) {
 }
 
 // ---- users -------------------------------------------------------------------------------------
+// P2-36: move an account to a new email across every table, after a preview.
+type EmailPreview = Schemas["AdminChangeEmailPreview"];
+function ChangeEmail({ u, onMoved }: { u: User; onMoved: (message: string) => void }) {
+  const [email, setEmail] = useState("");
+  const [keep, setKeep] = useState(false);
+  const [preview, setPreview] = useState<EmailPreview | null>(null);
+  const act = useAction();
+  const body = { username: u.username, new_email: email.trim(), keep_verified: keep };
+  const rows = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
+  const check = (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.includes("@")) return;
+    setPreview(null);
+    void act.run(async () => { setPreview(await unwrap(api.POST("/v1/admin/users/email/preview", { body }))); return true; });
+  };
+  const move = () => void act.run(async () => {
+    const out = await unwrap(api.POST("/v1/admin/users/email", { body }));
+    onMoved(out.message);
+    return true;
+  });
+  return (
+    <form className="stack-sm" onSubmit={check} aria-label="Change email">
+      <div className="inline-form">
+        <label className="field"><span>New email</span>
+          <input type="email" value={email} autoComplete="off" onChange={(e) => { setEmail(e.target.value); setPreview(null); }} />
+        </label>
+        <button type="submit" className="btn btn-sm" disabled={!email.includes("@") || act.busy}>{act.busy && !preview ? "Checking…" : "Preview"}</button>
+      </div>
+      {preview && (
+        <div className="stack-sm" role="status">
+          <p className="cap">
+            {rows(preview.move)} rows in {Object.keys(preview.move).length} tables move to {preview.new_email}.
+            {" "}{rows(preview.clear)} sessions and sign-in links are removed, so they sign in again with the new address.
+            {preview.stripe_customer ? " Their Stripe customer email is updated too." : ""}
+          </p>
+          {preview.problems.map((p) => <p key={p} className="error">{p}</p>)}
+          {preview.problems.length === 0 && (
+            <>
+              {preview.email_verified && (
+                <label className="check"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep the email marked verified (they asked you directly)</label>
+              )}
+              <div className="row-actions end">
+                <button type="button" className="btn btn-primary" disabled={act.busy} onClick={move}>{act.busy ? "Changing…" : `Change email to ${preview.new_email}`}</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <ErrorLine error={act.error} />
+    </form>
+  );
+}
+
 function ManageUser({ u, self, onClose, onChanged }: { u: User; self: string; onClose: () => void; onChanged: () => void }) {
   const [tier, setTier] = useState<string>(u.tier);
   const [active, setActive] = useState(u.is_active);
   const [role, setRole] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [moved, setMoved] = useState(false);
   const act = useAction();
   const roleAct = useAction();
   const legacyTier = !(PLANS as readonly string[]).includes(u.tier);
@@ -67,7 +121,7 @@ function ManageUser({ u, self, onClose, onChanged }: { u: User; self: string; on
   };
   return (
     <Dialog open title={u.username} onClose={onClose}>
-      <div className="stack-sm">
+      {moved ? <Done message={done} /> : <div className="stack-sm">
         <p className="cap">{u.full_name || "No name"} · email {u.email_verified ? "verified" : "not verified"} · {u.is_admin ? "admin" : "not admin"}</p>
         <form className="stack-sm" onSubmit={save} aria-label="Plan and status">
           <label className="field"><span>Plan</span>
@@ -94,9 +148,15 @@ function ManageUser({ u, self, onClose, onChanged }: { u: User; self: string; on
             </button>
           </div>
         )}
+        {!isSelf && (
+          <details>
+            <summary>Change email</summary>
+            <ChangeEmail u={u} onMoved={(message) => { setDone(message); setMoved(true); onChanged(); }} />
+          </details>
+        )}
         <ErrorLine error={act.error} />
         <Done message={done} />
-      </div>
+      </div>}
       <ConfirmDialog open={role} title={u.is_admin ? `Remove the admin role from ${u.username}?` : `Make ${u.username} an admin?`}
         confirmLabel={u.is_admin ? "Revoke admin" : "Make admin"} busy={roleAct.busy}
         body={<p>{u.is_admin ? "They lose the Admin page and admin-only data." : "They get this Admin page, every account and admin-only data."}</p>}
