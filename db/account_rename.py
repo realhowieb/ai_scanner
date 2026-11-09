@@ -99,8 +99,12 @@ def _count(cur, table: str, column: str, value: str) -> int:
 
 
 def _user(cur, username: str, lock: bool = False) -> Optional[Dict[str, Any]]:
-    cur.execute("SELECT username, tier, is_admin, stripe_customer_id, COALESCE(email_verified, FALSE) AS email_verified "
-                "FROM users WHERE lower(username) = %s" + (" FOR UPDATE" if lock else ""), (username,))
+    if lock:
+        cur.execute("SELECT username, tier, is_admin, stripe_customer_id, COALESCE(email_verified, FALSE) AS email_verified "
+                    "FROM users WHERE lower(username) = %s FOR UPDATE", (username,))
+    else:
+        cur.execute("SELECT username, tier, is_admin, stripe_customer_id, COALESCE(email_verified, FALSE) AS email_verified "
+                    "FROM users WHERE lower(username) = %s", (username,))
     row = cur.fetchone()
     if row is None:
         return None
@@ -185,8 +189,8 @@ def rename_account(conn, old_email: Any, new_email: Any, *, keep_verified: bool 
                 sql.Identifier(table), sql.Identifier(column)), (old,))
             parked.append((table, column, temp))
 
-        cur.execute("UPDATE users SET username = %s" + ("" if keep_verified else ", email_verified = FALSE")
-                    + " WHERE username = %s", (new, stored))
+        cur.execute("UPDATE users SET username = %s, email_verified = (email_verified AND %s) WHERE username = %s",
+                    (new, bool(keep_verified), stored))
         moved["users"] = cur.rowcount or 0
 
         for table, column, temp in parked:
