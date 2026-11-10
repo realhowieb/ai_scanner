@@ -21,7 +21,7 @@ import { useSession } from "@/session/SessionProvider";
 type Row = Schemas["DayTraderRow"];
 
 const SOURCES = [
-  { id: "watchlist", label: "My default watchlist" },
+  { id: "watchlist", label: "My watchlist" },
   { id: "movers", label: "Top movers (all U.S.)" },
   { id: "movers_sp500", label: "S&P 500 movers" },
   { id: "movers_nasdaq", label: "NASDAQ movers" },
@@ -32,16 +32,12 @@ const SOURCES = [
   { id: "megacaps", label: "Mega caps" },
 ] as const;
 type Source = (typeof SOURCES)[number]["id"];
-/** The Symbols menu value: a source id, or "wl:<id>" for one of the user's watchlists. */
+/** A request key: a source id, or "wl:<id>" for one watchlist (two lists share source "watchlist"). */
 type Pick = Source | `wl:${number}`;
 type ListSummary = { id: number; name: string; is_default: boolean };
-/** Menu entries: each watchlist by name (default first), then the other sources. With no
- * watchlists loaded, the single "My default watchlist" entry stays. */
-export function sourceOptions(lists: ListSummary[] | null | undefined): { id: Pick; label: string }[] {
-  const rest = SOURCES.filter((s) => s.id !== "watchlist");
-  if (!lists?.length) return [...SOURCES];
-  const sorted = [...lists].sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
-  return [...sorted.map((w) => ({ id: `wl:${w.id}` as Pick, label: w.is_default ? `${w.name} (default)` : w.name })), ...rest];
+/** The user's watchlists for the Watchlist menu: default first, then by name. */
+export function orderLists<T extends ListSummary>(lists: T[] | null | undefined): T[] {
+  return [...(lists ?? [])].sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
 }
 const toQuery = (p: Pick): { source: Source; watchlist_id?: number } =>
   p.startsWith("wl:") ? { source: "watchlist", watchlist_id: Number(p.slice(3)) } : { source: p as Source };
@@ -353,10 +349,12 @@ function RankMove({ n }: { n: number | undefined }) {
 }
 
 function Live() {
-  const [pick, setPick] = useState<Pick>("movers");
-  const source = toQuery(pick).source;
-  const lists = useApi("watchlists", (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
-  const options = useMemo(() => sourceOptions(Array.isArray(lists.data) ? lists.data : null), [lists.data]);
+  const [source, setSource] = useState<Source>("movers");
+  // Which watchlist "My watchlist" shows; null = the default list (the server picks it).
+  const [listId, setListId] = useState<number | null>(null);
+  const pick: Pick = source === "watchlist" && listId != null ? `wl:${listId}` : source;
+  const listsApi = useApi("watchlists", (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
+  const lists = useMemo(() => orderLists(Array.isArray(listsApi.data) ? listsApi.data : null), [listsApi.data]);
   const [tick, setTick] = useState(0);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true });
@@ -426,10 +424,15 @@ function Live() {
       <DayTraderHeading state={d?.state} />
       <section className="filters" aria-label="Source">
         <label className="inline-field">Symbols
-          <select value={pick} onChange={(e) => setPick(e.target.value as Pick)}>
-            {options.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
+            {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
+        {source === "watchlist" && lists.length > 1 && <label className="inline-field">Watchlist
+          <select value={listId ?? lists[0]!.id} onChange={(e) => setListId(Number(e.target.value))}>
+            {lists.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </label>}
         {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
         <span className="grow" />
         {d && (live
