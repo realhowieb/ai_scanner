@@ -143,7 +143,7 @@ class CheckoutFollowupTests(_Store):
         mock.patch("db.email_prefs.unsubscribe_url", return_value="https://u").start()
         mock.patch("api.store.get_account", return_value={"username": "a@x.com", "tier": "basic"}).start()
         mock.patch("api.plan_access.with_founder", side_effect=lambda u, t: t or "basic").start()
-        mock.patch("api.founding.public_status", return_value={"checkout_open": True, "remaining": 100}).start()
+        mock.patch.object(cf, "_seats_left", return_value=100).start()
         self.assertEqual(cf.run(now=self.NOW)["sent"], 1)
         subject, inner, text = send.call_args.args[1], send.call_args.args[2], send.call_args.args[3]
         self.assertEqual(subject, "You were one step from Pro")
