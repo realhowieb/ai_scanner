@@ -5,7 +5,9 @@
 // while the tab is hidden); rows slide to their new DT rank, with rank moves and changed
 // prices/scores highlighted, and a pause keeps the order still while you work.
 // Rows sort by any column, filter by side, price, RVOL and volume, explain their score,
-// and flag quotes that look wrong (split, bad print, stale prior close).
+// and flag quotes that look wrong (split, bad print, stale prior close). Rows reporting
+// earnings within 3 days get a tag; "Type your own tickers" checks a pasted list; the
+// source, watchlist, typed tickers, filters and sort are remembered on this device.
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { api, unwrap } from "@/api/client";
@@ -22,6 +24,7 @@ type Row = Schemas["DayTraderRow"];
 
 const SOURCES = [
   { id: "watchlist", label: "My watchlist" },
+  { id: "custom", label: "Type your own tickers" },
   { id: "movers", label: "Top movers (all U.S.)" },
   { id: "movers_sp500", label: "S&P 500 movers" },
   { id: "movers_nasdaq", label: "NASDAQ movers" },
@@ -32,15 +35,29 @@ const SOURCES = [
   { id: "megacaps", label: "Mega caps" },
 ] as const;
 type Source = (typeof SOURCES)[number]["id"];
-/** A request key: a source id, or "wl:<id>" for one watchlist (two lists share source "watchlist"). */
-type Pick = Source | `wl:${number}`;
+/** A request key: a source id, "wl:<id>" for one watchlist (two lists share source "watchlist"),
+ * or "c:<A,B,C>" for typed tickers. */
+type Pick = Source | `wl:${number}` | `c:${string}`;
 type ListSummary = { id: number; name: string; is_default: boolean };
 /** The user's watchlists for the Watchlist menu: default first, then by name. */
 export function orderLists<T extends ListSummary>(lists: T[] | null | undefined): T[] {
   return [...(lists ?? [])].sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
 }
-const toQuery = (p: Pick): { source: Source; watchlist_id?: number } =>
-  p.startsWith("wl:") ? { source: "watchlist", watchlist_id: Number(p.slice(3)) } : { source: p as Source };
+const toQuery = (p: Pick): { source: Source; watchlist_id?: number; symbols?: string } =>
+  p.startsWith("wl:") ? { source: "watchlist", watchlist_id: Number(p.slice(3)) }
+  : p.startsWith("c:") ? { source: "custom", symbols: p.slice(2) }
+  : { source: p as Source };
+export const MAX_CUSTOM = 50;
+/** Typed tickers: split on commas or spaces, uppercased, de-duplicated, at most MAX_CUSTOM. */
+export function parseTickers(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.toUpperCase().split(/[\s,;]+/)) {
+    const t = raw.replace(/^\$/, "");
+    if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(t) && !out.includes(t)) out.push(t);
+    if (out.length >= MAX_CUSTOM) break;
+  }
+  return out;
+}
 const STATE: Record<string, string> = { premarket: "Pre-market", open: "Market open", afterhours: "After hours", closed: "Market closed" };
 const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 export const DT_REFRESH_MS = 15_000;
@@ -83,6 +100,55 @@ const RVOL_MIN = [0, 1, 1.5, 2, 3];
 const VOLUME_MIN = [0, 100_000, 500_000, 1_000_000];
 
 const flagged = (r: Row) => (r.quote_flags?.length ?? 0) > 0;
+
+const EARN_TIME: Record<string, string> = { bmo: "before the open", amc: "after the close" };
+/** "Earnings today" / "Earnings tomorrow" / "Earnings Thu" for a row reporting within 3 days, else null. */
+export function earningsLabel(r: { earnings_days?: number | null; earnings_date?: string | null }): string | null {
+  const n = r.earnings_days;
+  if (n == null || n < 0 || !r.earnings_date) return null;
+  if (n === 0) return "Earnings today";
+  if (n === 1) return "Earnings tomorrow";
+  return `Earnings ${new Date(`${r.earnings_date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })}`;
+}
+
+function EarningsTag({ r }: { r: Row }) {
+  const label = earningsLabel(r);
+  if (!label) return null;
+  const when = r.earnings_time ? ` ${EARN_TIME[r.earnings_time]}` : "";
+  return <span title={`Reports ${r.earnings_date}${when}. Expect a big gap and wide spreads around the report.`}>
+    <Pill tone="warn">{label}{r.earnings_time === "amc" ? " · AMC" : r.earnings_time === "bmo" ? " · BMO" : ""}</Pill></span>;
+}
+
+// Saved on this device so the page opens the way you left it.
+const PREFS_KEY = "hsf.dayTrader.v1";
+type Prefs = { source: Source; listId: number | null; custom: string[]; filters: Filters; sort: { key: SortKey; desc: boolean } };
+const SORT_KEYS: SortKey[] = ["score", "ticker", "last", "chg", "gap", "vwap", "rvol", "volume"];
+export const DEFAULT_PREFS: Prefs = { source: "movers", listId: null, custom: [], filters: NO_FILTERS, sort: { key: "score", desc: true } };
+/** Saved prefs, checked field by field; anything unknown or malformed falls back to the default. */
+export function readPrefs(raw: string | null): Prefs {
+  let v: Record<string, unknown> = {};
+  try { v = (JSON.parse(raw || "{}") ?? {}) as Record<string, unknown>; } catch { return DEFAULT_PREFS; }
+  if (typeof v !== "object" || Array.isArray(v)) return DEFAULT_PREFS;
+  const source = SOURCES.some((x) => x.id === v.source) ? (v.source as Source) : DEFAULT_PREFS.source;
+  const listId = typeof v.listId === "number" && Number.isInteger(v.listId) && v.listId > 0 ? v.listId : null;
+  const custom = Array.isArray(v.custom) ? parseTickers(v.custom.filter((t) => typeof t === "string").join(",")) : [];
+  const f = (v.filters ?? {}) as Partial<Record<keyof Filters, unknown>>;
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0);
+  const filters: Filters = {
+    side: f.side === "long" || f.side === "short" ? f.side : "all",
+    minPrice: n(f.minPrice), maxPrice: n(f.maxPrice), minRvol: n(f.minRvol), minVolume: n(f.minVolume),
+    hideFlagged: f.hideFlagged === true,
+  };
+  const so = (v.sort ?? {}) as { key?: unknown; desc?: unknown };
+  const sort = SORT_KEYS.includes(so.key as SortKey) ? { key: so.key as SortKey, desc: so.desc !== false } : DEFAULT_PREFS.sort;
+  return { source: source === "custom" && !custom.length ? DEFAULT_PREFS.source : source, listId, custom, filters, sort };
+}
+function loadPrefs(): Prefs {
+  try { return typeof window === "undefined" ? DEFAULT_PREFS : readPrefs(window.localStorage.getItem(PREFS_KEY)); } catch { return DEFAULT_PREFS; }
+}
+function savePrefs(p: Prefs) {
+  try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* private mode or storage full: just don't remember */ }
+}
 
 export function applyFilters(rows: Row[], f: Filters): Row[] {
   return rows.filter((r) => {
@@ -190,6 +256,7 @@ function Why({ r }: { r: Row }) {
       {reasons.length > 0 && <div className="chips">{reasons.map((x) => <Pill key={x}>{x}</Pill>)}</div>}
       {conflicts.length > 0 && <div className="chips">{conflicts.map((x) => <Pill key={x} tone="warn">{x}</Pill>)}</div>}
       {flags.map((f) => <p key={f} className="cap"><Pill tone="warn">{f}</Pill> {FLAG_HELP[f]}</p>)}
+      {earningsLabel(r) && <p className="cap"><EarningsTag r={r} /> Reports {r.earnings_date}{r.earnings_time ? ` ${EARN_TIME[r.earnings_time]}` : ""}. The score doesn&apos;t know about the report, so expect gaps and wide spreads.</p>}
     </div>
   );
 }
@@ -349,22 +416,37 @@ function RankMove({ n }: { n: number | undefined }) {
 }
 
 function Live() {
-  const [source, setSource] = useState<Source>("movers");
+  const [saved] = useState(loadPrefs);
+  const [source, setSource] = useState<Source>(saved.source);
   // Which watchlist "My watchlist" shows; null = the default list (the server picks it).
-  const [listId, setListId] = useState<number | null>(null);
-  const pick: Pick = source === "watchlist" && listId != null ? `wl:${listId}` : source;
+  const [listId, setListId] = useState<number | null>(saved.listId);
+  // Typed tickers: `custom` is the list being checked, `draft` the text box.
+  const [custom, setCustom] = useState<string[]>(saved.custom);
+  const [draft, setDraft] = useState(saved.custom.join(", "));
   const listsApi = useApi("watchlists", (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
   const lists = useMemo(() => orderLists(Array.isArray(listsApi.data) ? listsApi.data : null), [listsApi.data]);
+  // A remembered watchlist that was since deleted falls back to the default list.
+  const listOk = listId == null || !listsApi.data || lists.some((w) => w.id === listId);
+  const needTickers = source === "custom" && custom.length === 0;
+  const pick: Pick = source === "watchlist" && listId != null && listOk ? `wl:${listId}`
+    : source === "custom" ? `c:${custom.join(",")}` : source;
   const [tick, setTick] = useState(0);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true });
+  const [filters, setFilters] = useState<Filters>(saved.filters);
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>(saved.sort);
+  useEffect(() => { savePrefs({ source, listId: listOk ? listId : null, custom, filters, sort }); }, [source, listId, listOk, custom, filters, sort]);
+  const submitTickers = (e: React.FormEvent) => {
+    e.preventDefault();
+    const list = parseTickers(draft);
+    setDraft(list.join(", "));
+    setCustom(list);
+  };
   const [open, setOpen] = useState<string | null>(null);
   const [held, setHeld] = useState<string[] | null>(null);
   const narrow = useNarrow();
   const visible = useVisible();
   // `at` is when this device received the answer. Timing uses it rather than the server's
   // as_of, so a phone whose clock runs ahead of the server doesn't refresh nonstop.
-  const dt = useApi(`dt:${pick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: toQuery(pick) }, signal }))
+  const dt = useApi(needTickers ? null : `dt:${pick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: toQuery(pick) }, signal }))
     .then((data) => ({ data, at: Date.now(), pick })), tick);
   const d = dt.data?.data ?? null;
   const dPick = dt.data?.pick;
@@ -429,10 +511,15 @@ function Live() {
           </select>
         </label>
         {source === "watchlist" && lists.length > 1 && <label className="inline-field">Watchlist
-          <select value={listId ?? lists[0]!.id} onChange={(e) => setListId(Number(e.target.value))}>
+          <select value={(listOk ? listId : null) ?? lists[0]!.id} onChange={(e) => setListId(Number(e.target.value))}>
             {lists.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </label>}
+        {source === "custom" && <form className="inline-field dt-custom" onSubmit={submitTickers} role="search" aria-label="Your tickers">
+          <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. NVDA, TSLA, PLTR"
+            aria-label={`Tickers, separated by commas or spaces (up to ${MAX_CUSTOM})`} autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
+          <button type="submit" className="btn btn-sm">Show</button>
+        </form>}
         {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
         <span className="grow" />
         {d && (live
@@ -456,12 +543,13 @@ function Live() {
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
       {d?.state === "premarket" && all.length > 0 && <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>}
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. The API does not supply the session date or individual trade timestamps; they cannot be verified here. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
-      {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
+      {needTickers ? <Card><Empty title="Type the tickers you want to watch.">Separate them with commas or spaces, up to {MAX_CUSTOM}, then press Show. We&apos;ll remember them on this device.</Empty></Card>
+        : dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
         : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
           ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick one of your watchlists to see last night&apos;s prices.</Empty></Card>
         : all.length === 0 ? <Card><Empty title={d.symbols.length ? "No live quotes for these symbols right now." : "No symbols in this source."}>
-            {source === "watchlist" ? "Add tickers to this watchlist on the Watchlists page, or pick another source." : "Try another source."}</Empty></Card>
+            {source === "custom" ? "Check the tickers are spelled right, or try another source." : source === "watchlist" ? "Add tickers to this watchlist on the Watchlists page, or pick another source." : "Try another source."}</Empty></Card>
         : rows.length === 0 ? <Card><Empty title="No rows match these filters."><button type="button" className="btn btn-sm" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button></Empty></Card>
         : narrow ? (
           <section ref={listRef} className={`dt-cards${switching ? " dim" : ""}`} aria-label="Day Trader symbols">
@@ -475,7 +563,7 @@ function Live() {
             {shownRows.map((r) => (
               <article key={r.ticker} data-t={r.ticker} className={`card dt-card${flagged(r) ? " row-muted" : ""}`}>
                 <div className="dt-card-head">
-                  <TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} />
+                  <TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /><EarningsTag r={r} />
                   <span className="grow" />
                   <Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash>
                 </div>
@@ -519,7 +607,7 @@ function Live() {
                   {shownRows.map((r) => (
                     <Fragment key={r.ticker}>
                       <tr data-t={r.ticker} className={flagged(r) ? "row-muted" : undefined}>
-                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /></span></td>
+                        <td><span className="dt-ticker"><TickerLink ticker={r.ticker} named /><RankMove n={moves[r.ticker]?.rank} /><Flags r={r} /><EarningsTag r={r} /></span></td>
                         <td className="num">
                           <button type="button" className="th-sort" aria-expanded={open === r.ticker} aria-label={`Why ${r.ticker} scores ${r.day_trade_score == null ? "no score" : Math.round(r.day_trade_score)}`}
                             onClick={() => toggle(r.ticker)}><Flash v={r.day_trade_score} dir={moves[r.ticker]?.score}><Score r={r} /></Flash></button>

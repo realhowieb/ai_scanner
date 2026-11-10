@@ -214,6 +214,46 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
                         stale_s=DT_MOVERS_STALE_S) or [])
 
 
+DT_EARNINGS_DAYS = 3        # tag names that report today through 3 days out
+DT_EARNINGS_TTL_S = 1800
+
+
+def _earn_key(sym: Any) -> str:
+    return str(sym or "").strip().upper().replace(".", "-")
+
+
+def dt_earnings_map(today: dt.date, fetch=None) -> Dict[str, Dict[str, Any]]:
+    """{ticker: {earnings_date, earnings_time, earnings_days}} for names reporting from `today`
+    (the ET market date) through DT_EARNINGS_DAYS out. DB only; an outage gives {}."""
+    if fetch is None:
+        from db.earnings import fetch_earnings_this_week as fetch
+    try:
+        raw = fetch(days_ahead=DT_EARNINGS_DAYS, start=today) or []
+    except Exception:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for r in raw:
+        d = r.get("earnings_date")
+        if isinstance(d, dt.datetime):
+            d = d.date()
+        key = _earn_key(r.get("symbol"))
+        if not key or not isinstance(d, dt.date) or key in out:
+            continue
+        t = str(r.get("earnings_time") or "").strip().lower()
+        out[key] = {"earnings_date": d.isoformat(), "earnings_time": t if t in ("bmo", "amc") else None,
+                    "earnings_days": (d - today).days}
+    return out
+
+
+def _dt_earnings(now: dt.datetime) -> Dict[str, Dict[str, Any]]:
+    from api.scans import _et_date
+    from api.today import _cached
+
+    today = _et_date(now)
+    return _cached(("dt_earnings", today.isoformat()), lambda: dt_earnings_map(today),
+                   ttl_s=DT_EARNINGS_TTL_S) or {}
+
+
 def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
     """The web's Day Trader table: live Alpaca snapshot metrics for the source's
     symbols, with the day-trade score; plus the market state."""
@@ -232,7 +272,8 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             return build_day_trader_metrics(list(symbols)) or []
 
         now = dt.datetime.now(dt.timezone.utc)
-        rows = sorted((enrich_row(r, state, now)
+        earn = _dt_earnings(now)
+        rows = sorted(({**enrich_row(r, state, now), **earn.get(_earn_key(r.get("ticker")), {})}
                        for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
                                         stale_s=DT_ROWS_STALE_S)), key=rank_key)
     flagged = [r for r in rows if r.get("quote_flags")]

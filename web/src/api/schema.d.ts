@@ -5943,6 +5943,21 @@ export interface components {
              * @default []
              */
             dt_reasons: string[];
+            /**
+             * Earnings Date
+             * @description Next earnings date (ISO) when it is today through 3 days out (ET)
+             */
+            earnings_date?: string | null;
+            /**
+             * Earnings Days
+             * @description Calendar days until earnings (0 = today)
+             */
+            earnings_days?: number | null;
+            /**
+             * Earnings Time
+             * @description bmo = before the open, amc = after the close
+             */
+            earnings_time?: ("bmo" | "amc") | null;
             /** Ewo */
             ewo?: number | null;
             /**
