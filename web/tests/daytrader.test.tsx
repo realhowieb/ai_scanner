@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, NO_FILTERS, applyFilters, diffRefresh, holdOrder, sortRows, sourceOptions } from "@/features/DayTraderView";
+import { DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, NO_FILTERS, applyFilters, diffRefresh, holdOrder, sortRows, orderLists } from "@/features/DayTraderView";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { me } from "./fixtures";
@@ -93,7 +93,7 @@ describe("Day Trader pre-market", () => {
 });
 
 describe("Day Trader watchlists", () => {
-  it("lists every watchlist by name, default first, and loads the one picked", async () => {
+  it("keeps one My watchlist entry and picks the list in a second menu, default first", async () => {
     const asked: string[] = [];
     watchlists = [{ id: 3, name: "Swing ideas", is_default: false, symbol_count: 1 }, { id: 7, name: "Core", is_default: true, symbol_count: 1 }];
     fetchMock.mockImplementation(async (req: Request) => {
@@ -101,26 +101,33 @@ describe("Day Trader watchlists", () => {
       if (url.pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
       const wid = url.searchParams.get("watchlist_id");
       asked.push(`${url.searchParams.get("source")}:${wid ?? ""}`);
-      const t = wid === "3" ? "SWNG" : wid === "7" ? "CORE" : "MOVR";
+      const t = wid === "3" ? "SWNG" : url.searchParams.get("source") === "watchlist" ? "CORE" : "MOVR";
       return jsonResponse({ state: "closed", source: url.searchParams.get("source"), symbols: [t], missing: 0, as_of: new Date().toISOString(),
         rows: [row({ ticker: t, day_trade_score: 50, last: 10 })] });
     });
     const u = userEvent.setup();
     render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
     const menu = screen.getByLabelText("Symbols");
-    await waitFor(() => expect(within(menu).getByRole("option", { name: "Core (default)" })).toBeInTheDocument());
-    expect(within(menu).getAllByRole("option").slice(0, 2).map((o) => o.textContent)).toEqual(["Core (default)", "Swing ideas"]);
-    expect(within(menu).queryByRole("option", { name: "My default watchlist" })).not.toBeInTheDocument();
-    await u.selectOptions(menu, "Swing ideas");
-    await waitFor(() => expect(tickers()).toEqual(["SWNG"]));
-    await u.selectOptions(menu, "Core (default)");
+    await waitFor(() => expect(tickers()).toEqual(["MOVR"]));
+    expect(within(menu).getByRole("option", { name: "My watchlist" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("option", { name: "Swing ideas" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Watchlist")).not.toBeInTheDocument();
+    await u.selectOptions(menu, "My watchlist");
     await waitFor(() => expect(tickers()).toEqual(["CORE"]));
-    expect(asked).toEqual(expect.arrayContaining(["watchlist:3", "watchlist:7"]));
+    const lists = screen.getByLabelText("Watchlist");
+    expect(within(lists).getAllByRole("option").map((o) => o.textContent)).toEqual(["Core", "Swing ideas"]);
+    expect(lists).toHaveValue("7");
+    await u.selectOptions(lists, "Swing ideas");
+    await waitFor(() => expect(tickers()).toEqual(["SWNG"]));
+    expect(asked).toEqual(expect.arrayContaining(["watchlist:", "watchlist:3"]));
+    await u.selectOptions(menu, "movers");
+    expect(screen.queryByLabelText("Watchlist")).not.toBeInTheDocument();
   });
 
-  it("keeps the single default entry when there are no watchlists", () => {
-    expect(sourceOptions([])[0]).toEqual({ id: "watchlist", label: "My default watchlist" });
-    expect(sourceOptions(null).map((o) => o.id)).toContain("movers");
+  it("orders watchlists default first, then by name", () => {
+    const l = [{ id: 1, name: "B", is_default: false }, { id: 2, name: "A", is_default: false }, { id: 3, name: "Z", is_default: true }];
+    expect(orderLists(l).map((w) => w.id)).toEqual([3, 2, 1]);
+    expect(orderLists(null)).toEqual([]);
   });
 });
 
