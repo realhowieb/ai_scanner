@@ -26,6 +26,7 @@ schedules for the rest).
 | When (UTC) | What | Workflow |
 |---|---|---|
 | 08:35 09:35 12:35 15:35 16:35 17:35 **ET** (UTC moves with DST) | Scheduled scans (pre-market, regular, post-market). Regular-session scans capture CANDIDATE / NEAR_MISS / CONTROL research observations with point-in-time metadata | `scheduled-scans.yml` (cron-job.org dispatch) |
+| 10:35 11:35 13:35 14:35 **ET** | Refresh scans (`record_research=false`): Scanner list, alerts and auto-scores only. They record no observations, cohorts or opportunity freezes, so research data keeps the six slots above and the market calendar is unchanged | `scheduled-scans.yml` (second cron-job.org job) |
 | every 30 min, 13–22 | Outcome maturation (batched Alpaca, 429-safe, first-write-wins, 2,000-symbol cap, 6-day retirement) | `mature-observations.yml` |
 | 23:15 | Forward-evidence readiness (Run 56, anti-peeking) | `forward-evidence-readiness.yml` |
 | 17:05, 23:45 | System health: 10 subsystems, incidents, human action | `system-health.yml` |

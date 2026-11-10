@@ -37,7 +37,9 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     days = max(1, min(50, int(args.days)))
     since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
-    runs = [r for r in market_runs(limit=1000) if r["created_at"] >= since]
+    # Hourly refresh scans record nothing for research (scheduler.cron_runner), so skip them here too.
+    runs = [r for r in market_runs(limit=1000) if r["created_at"] >= since
+            and not str(r.get("name") or "").endswith("| refresh")]
     print(f"runs in the last {days} days: {len(runs)}")
     total = empty = 0
     for run in sorted(runs, key=lambda r: r["created_at"]):

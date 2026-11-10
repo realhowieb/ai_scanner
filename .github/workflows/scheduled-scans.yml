@@ -17,6 +17,10 @@ on:
         type: choice
         options: [auto, regular, premarket, postmarket]
         default: auto
+      record_research:
+        description: "Record ML/research data. false = hourly refresh scan (Scanner, alerts, auto-scores only)."
+        type: boolean
+        default: true
 
   # No GitHub `schedule:` trigger (removed 2026-09-29). cron-job.org is the only
   # scheduler: it dispatches this workflow on main (force=false, session=auto)
@@ -25,6 +29,9 @@ on:
   # 2026-11-04 they were fixed UTC, see analytics/market_calendar.py). GitHub's own
   # cron fired hours late (e.g. the 21:10 UTC slot at 00:27 UTC) and duplicated
   # those slots; a late run after UTC midnight sent the morning digest at night.
+  # A second cron-job.org job (HSF_Refresh_Scan) dispatches record_research=false
+  # at 10:35, 11:35, 13:35 and 14:35 New York time, so the Scanner refreshes every
+  # hour in market hours while the ML/research data keeps the six slots above.
 
 concurrency:
   group: scheduled-scans
@@ -143,6 +150,9 @@ jobs:
           # Manual runs also bypass the per-alert cooldown so alerts can be
           # tested on demand; scheduled runs keep the normal 12h throttle.
           ALERT_THROTTLE_HOURS: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '0' || '12' }}
+          # Hourly refresh scans (record_research=false) save the Scanner run but
+          # record no observations, research cohorts or opportunity freezes.
+          CRON_RECORD_RESEARCH: ${{ (github.event_name == 'workflow_dispatch' && inputs.record_research == false) && '0' || '1' }}
         run: python -m scripts.db_traffic_job scheduler.cron_runner
 
       # Saved even when the scan fails, so the perf history keeps the failed run.
