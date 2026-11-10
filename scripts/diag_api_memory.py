@@ -68,7 +68,7 @@ def step(name: str, fn) -> None:
     gc.collect()
     if TRACE:
         tracemalloc.reset_peak()
-    before_t, before_r = traced_mb(), rss_mb()
+    before_t = traced_mb()
     started = time.monotonic()
     err = ""
     try:
