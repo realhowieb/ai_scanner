@@ -6057,6 +6057,46 @@
       "title": "Dt Reasons",
       "type": "array"
      },
+     "earnings_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Next earnings date (ISO) when it is today through 3 days out (ET)",
+      "title": "Earnings Date"
+     },
+     "earnings_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Calendar days until earnings (0 = today)",
+      "title": "Earnings Days"
+     },
+     "earnings_time": {
+      "anyOf": [
+       {
+        "enum": [
+         "bmo",
+         "amc"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "bmo = before the open, amc = after the close",
+      "title": "Earnings Time"
+     },
      "ewo": {
       "anyOf": [
        {

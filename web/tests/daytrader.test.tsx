@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, NO_FILTERS, applyFilters, diffRefresh, holdOrder, sortRows, orderLists } from "@/features/DayTraderView";
+import { DEFAULT_PREFS, DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, MAX_CUSTOM, NO_FILTERS, applyFilters, diffRefresh, earningsLabel, holdOrder, parseTickers, readPrefs, sortRows, orderLists } from "@/features/DayTraderView";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { me } from "./fixtures";
@@ -29,6 +29,7 @@ let watchlists: unknown[] = [];
 beforeEach(() => {
   fetchMock.mockReset();
   watchlists = [];
+  localStorage.clear();
   vi.stubGlobal("fetch", (req: Request) =>
     new URL(req.url).pathname.endsWith("/v1/watchlists") ? Promise.resolve(jsonResponse(watchlists)) : fetchMock(req));
   fetchMock.mockImplementation(async (req: Request) => {
@@ -270,5 +271,106 @@ describe("Day Trader live refresh", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Day Trader earnings tag", () => {
+  it("labels today, tomorrow and later days, and nothing without a date", () => {
+    expect(earningsLabel({ earnings_days: 0, earnings_date: "2026-11-10" })).toBe("Earnings today");
+    expect(earningsLabel({ earnings_days: 1, earnings_date: "2026-11-11" })).toBe("Earnings tomorrow");
+    expect(earningsLabel({ earnings_days: 3, earnings_date: "2026-11-13" })).toBe("Earnings Fri");
+    expect(earningsLabel({ earnings_days: null, earnings_date: null })).toBeNull();
+    expect(earningsLabel({})).toBeNull();
+  });
+
+  it("shows the tag on the row and explains it with the score", async () => {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      return jsonResponse({ state: "closed", source: "movers", symbols: ["NVDA", "AAA"], missing: 0, as_of: new Date().toISOString(), rows: [
+        row({ ticker: "NVDA", day_trade_score: 70, last: 190, earnings_days: 0, earnings_date: "2026-11-10", earnings_time: "amc" }),
+        row({ ticker: "AAA", day_trade_score: 60, last: 10 }),
+      ] });
+    });
+    const u = userEvent.setup();
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await waitFor(() => expect(tickers()).toEqual(["NVDA", "AAA"]));
+    const nvda = screen.getAllByRole("row").find((r) => within(r).queryByRole("link", { name: "NVDA" }))!;
+    expect(within(nvda).getByText("Earnings today · AMC")).toBeInTheDocument();
+    const aaa = screen.getAllByRole("row").find((r) => within(r).queryByRole("link", { name: "AAA" }))!;
+    expect(within(aaa).queryByText(/Earnings/)).not.toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Why NVDA scores 70" }));
+    expect(screen.getByText(/Reports 2026-11-10 after the close/)).toBeInTheDocument();
+  });
+});
+
+describe("Day Trader typed tickers", () => {
+  it("parses commas and spaces, drops junk and duplicates, and caps the list", () => {
+    expect(parseTickers("nvda, tsla  $pltr;NVDA brk.b 123 !!")).toEqual(["NVDA", "TSLA", "PLTR", "BRK.B"]);
+    expect(parseTickers(Array.from({ length: 80 }, (_, i) => `T${i}`).join(" "))).toHaveLength(MAX_CUSTOM);
+  });
+
+  it("asks for tickers, then checks only those", async () => {
+    const asked: string[] = [];
+    fetchMock.mockImplementation(async (req: Request) => {
+      const url = new URL(req.url);
+      if (url.pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      if (url.pathname.endsWith("/v1/day-trader")) asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
+      const syms = (url.searchParams.get("symbols") ?? "MOVR").split(",");
+      return jsonResponse({ state: "closed", source: url.searchParams.get("source"), symbols: syms, missing: 0, as_of: new Date().toISOString(),
+        rows: syms.map((t, i) => row({ ticker: t, day_trade_score: 60 - i, last: 10 })) });
+    });
+    const u = userEvent.setup();
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await waitFor(() => expect(tickers()).toEqual(["MOVR"]));
+    await u.selectOptions(screen.getByLabelText("Symbols"), "custom");
+    expect(screen.getByText("Type the tickers you want to watch.")).toBeInTheDocument();
+    const before = asked.length;
+    await u.type(screen.getByLabelText(/^Tickers/), "nvda tsla");
+    await u.click(screen.getByRole("button", { name: "Show" }));
+    await waitFor(() => expect(tickers()).toEqual(["NVDA", "TSLA"]));
+    expect(asked.slice(before)).toEqual(["custom:NVDA,TSLA"]);
+    expect(screen.getByLabelText(/^Tickers/)).toHaveValue("NVDA, TSLA");
+  });
+});
+
+describe("Day Trader remembers your setup", () => {
+  it("reopens with the saved source, tickers, filters and sort", async () => {
+    const asked: string[] = [];
+    fetchMock.mockImplementation(async (req: Request) => {
+      const url = new URL(req.url);
+      if (url.pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
+      if (url.pathname.endsWith("/v1/day-trader")) asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
+      return jsonResponse({ state: "closed", source: "custom", symbols: ["AMD", "INTC"], missing: 0, as_of: new Date().toISOString(),
+        rows: [row({ ticker: "AMD", day_trade_score: 80, last: 150 }), row({ ticker: "INTC", day_trade_score: 40, last: 20, dt_direction: "bearish" })] });
+    });
+    const u = userEvent.setup();
+    const first = render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await waitFor(() => expect(tickers().length).toBeGreaterThan(0));
+    await u.selectOptions(screen.getByLabelText("Symbols"), "custom");
+    await u.type(screen.getByLabelText(/^Tickers/), "amd,intc");
+    await u.click(screen.getByRole("button", { name: "Show" }));
+    await waitFor(() => expect(tickers()).toEqual(["AMD", "INTC"]));
+    await u.click(screen.getByRole("button", { name: /^Ticker/ }));
+    await waitFor(() => expect(tickers()).toEqual(["AMD", "INTC"]));
+    first.unmount();
+    const saved = readPrefs(localStorage.getItem("hsf.dayTrader.v1"));
+    expect(saved.source).toBe("custom");
+    expect(saved.custom).toEqual(["AMD", "INTC"]);
+    expect(saved.sort).toEqual({ key: "ticker", desc: false });
+    asked.length = 0;
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    expect(screen.getByLabelText("Symbols")).toHaveValue("custom");
+    await waitFor(() => expect(tickers()).toEqual(["AMD", "INTC"]));
+    expect(asked[0]).toBe("custom:AMD,INTC");
+  });
+
+  it("falls back to defaults for broken or unknown saved values", () => {
+    expect(readPrefs(null)).toEqual(DEFAULT_PREFS);
+    expect(readPrefs("not json")).toEqual(DEFAULT_PREFS);
+    expect(readPrefs("[1,2]")).toEqual(DEFAULT_PREFS);
+    const p = readPrefs(JSON.stringify({ source: "nope", listId: -3, custom: ["aapl", 5], filters: { side: "up", minRvol: 2, minPrice: "x" }, sort: { key: "bogus" } }));
+    expect(p).toEqual({ ...DEFAULT_PREFS, custom: ["AAPL"], filters: { ...NO_FILTERS, minRvol: 2 } });
+    // "Type your own tickers" with no tickers opens on Top movers instead of an empty page.
+    expect(readPrefs(JSON.stringify({ source: "custom", custom: [] })).source).toBe("movers");
   });
 });

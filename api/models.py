@@ -1090,6 +1090,11 @@ class DayTraderRow(BaseModel):
                                    "VWAP, Stale quote. Flagged rows rank last.")
     traded_today: Optional[bool] = Field(default=None, description="Pre-market only: false until the name trades "
                                          "today; such rows have no change and no DT score")
+    earnings_date: Optional[str] = Field(default=None, description="Next earnings date (ISO) when it is today "
+                                         "through 3 days out (ET)")
+    earnings_time: Optional[Literal["bmo", "amc"]] = Field(default=None, description="bmo = before the open, "
+                                                           "amc = after the close")
+    earnings_days: Optional[int] = Field(default=None, description="Calendar days until earnings (0 = today)")
 
     model_config = {"extra": "allow"}   # extra live fields (EMA cross, ranges, data source) pass through
 
