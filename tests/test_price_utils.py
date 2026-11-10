@@ -106,6 +106,38 @@ class PriceUtilsTests(unittest.TestCase):
         )
         prices.clear_price_cache()
 
+    def test_allow_yahoo_fallback_rescues_symbols_alpaca_lacks(self):
+        # Auto-score passes: OTC names Alpaca has no bars for fall through to Yahoo
+        # even under PRICE_SKIP_YF_FALLBACK=1, including ones an earlier scan in the
+        # same process skipped only because the fallback was off.
+        import pandas as pd
+
+        import data.prices as prices
+
+        prices.clear_price_cache()
+        bars = pd.DataFrame({"Open": [1.0, 1.1], "High": [1.2, 1.2], "Low": [0.9, 1.0],
+                             "Close": [1.1, 1.15], "Volume": [1000, 1200]},
+                            index=pd.to_datetime(["2026-11-09", "2026-11-10"]))
+        fake_yf = MagicMock()
+        fake_yf.Ticker.return_value.history.return_value = bars
+        cfg = prices.PriceFetchConfig(tickers=["OTCX"])
+        with (
+            patch.object(prices, "_get_alpaca_config", return_value={"api_key": "key"}),
+            patch.object(prices, "_download_multi_alpaca", return_value={}),
+            patch.object(prices, "_yf", fake_yf),
+            patch.dict("os.environ", {"PRICE_SKIP_YF_FALLBACK": "1"}, clear=False),
+        ):
+            _, skipped = prices._download_batch(["OTCX"], cfg)
+            self.assertEqual(skipped, [("OTCX", "skipped_yf_fallback")])
+            with prices.allow_yahoo_fallback():
+                data, skipped = prices._download_batch(["OTCX"], cfg)
+            self.assertIn("OTCX", data)
+            self.assertEqual(skipped, [])
+            fake_yf.Ticker.reset_mock()
+            _, skipped = prices._download_batch(["ZZZZ"], cfg)   # off again after the block
+            fake_yf.Ticker.assert_not_called()
+        prices.clear_price_cache()
+
     def test_alpaca_batch_timeout_is_provider_reason_not_policy(self):
         # Run 51: when the Alpaca BATCH fails (e.g. a chunk read-timeout), the
         # unreturned symbols are a PROVIDER failure — they must NOT be mislabeled

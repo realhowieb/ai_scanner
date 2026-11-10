@@ -12,6 +12,7 @@ All functions are safe to import in headless scheduler jobs.
 from __future__ import annotations
 
 import concurrent.futures as _fut
+import contextlib as _contextlib
 import datetime as _dt
 import os
 import threading as _threading
@@ -63,6 +64,13 @@ _PRICE_CACHE_TTL_SECONDS: float = float(os.getenv("PRICE_CACHE_TTL_SECONDS", "60
 _PRICE_CACHE: Dict[str, tuple[_pd.DataFrame, float]] = {}
 _MISSING_PRICE_CACHE_TTL_SECONDS: float = 900.0  # avoid repeated dead-symbol provider calls
 _MISSING_PRICE_CACHE: Dict[str, tuple[str, float]] = {}
+# allow_yahoo_fallback() turns the Yahoo fallback back on for a short list even when
+# PRICE_SKIP_YF_FALLBACK=1 (the cron's full-market scans): OTC and foreign names that
+# Alpaca's feed doesn't carry still get bars. A plain counter, not a ContextVar, so
+# the fetch threads see it too.
+_FORCE_YF_FALLBACK = 0
+_FORCE_YF_LOCK = _threading.Lock()
+_SKIPPED_YF = "skipped_yf_fallback"
 # Both caches used to keep every symbol ever fetched for the life of the process: an
 # entry only left when the same symbol was asked for again. In the API that meant
 # memory crept up all day (stock pages, sparklines, watchlists, Day Trader, alerts).
@@ -153,7 +161,22 @@ __all__ = [
     "fetch_price_data_streaming",
     "debug_yfinance_status",
     "clear_price_cache",
+    "allow_yahoo_fallback",
 ]
+
+
+@_contextlib.contextmanager
+def allow_yahoo_fallback() -> Iterator[None]:
+    """Within the block, symbols Alpaca has no bars for fall through to Yahoo even
+    when PRICE_SKIP_YF_FALLBACK=1. For short lists only (auto-score passes)."""
+    global _FORCE_YF_FALLBACK
+    with _FORCE_YF_LOCK:
+        _FORCE_YF_FALLBACK += 1
+    try:
+        yield
+    finally:
+        with _FORCE_YF_LOCK:
+            _FORCE_YF_FALLBACK -= 1
 
 
 @dataclass
@@ -376,12 +399,13 @@ def _download_batch(
     # into Alpaca-only mode. This applies even when Alpaca returns no bars for
     # the entire batch; otherwise all-empty chunks repeatedly fall through to
     # Yahoo and spam "possibly delisted" warnings for the same symbols.
-    if alpaca_configured and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1":
+    force_yf = _FORCE_YF_FALLBACK > 0
+    if alpaca_configured and os.getenv("PRICE_SKIP_YF_FALLBACK", "").strip() == "1" and not force_yf:
         # A batch-level failure attributes the skip to the provider (timeout/error);
         # otherwise Alpaca succeeded but didn't return the symbol (policy skip).
         for sym in remaining:
             sym_u = str(sym).upper()
-            reason = alpaca_failures.get(sym_u) or batch_error_reason or "skipped_yf_fallback"
+            reason = alpaca_failures.get(sym_u) or batch_error_reason or _SKIPPED_YF
             skipped.append((sym_u, reason))
             _remember_missing(sym_u, cfg, reason)
         remaining = []
@@ -389,7 +413,8 @@ def _download_batch(
     for sym in remaining:
         sym_u = str(sym).upper()
         cached_missing = _recent_missing_reason(sym_u, cfg)
-        if cached_missing:
+        # A skip only because the fallback was off isn't a real miss: try Yahoo now.
+        if cached_missing and not (force_yf and cached_missing == _SKIPPED_YF):
             skipped.append((sym_u, f"recent_missing:{cached_missing}"))
             continue
 
