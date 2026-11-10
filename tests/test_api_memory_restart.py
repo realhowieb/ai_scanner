@@ -54,6 +54,14 @@ class RestartDueTests(unittest.TestCase):
             kill.assert_not_called()
 
 
+try:
+    import fastapi  # noqa: F401
+    HAVE_FASTAPI = True
+except ImportError:  # the core-dependency job runs without the API's packages
+    HAVE_FASTAPI = False
+
+
+@unittest.skipUnless(HAVE_FASTAPI, "needs the API's dependencies")
 class MemoryLogTests(unittest.TestCase):
     def test_memory_lines_reach_stdout(self):
         import logging
