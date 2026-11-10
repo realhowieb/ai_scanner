@@ -7184,6 +7184,11 @@ export interface components {
              */
             max_results: number;
             /**
+             * Previous Scan At
+             * @description ISO time of the scan that previous_rank compares with; null when there is none (no row is new then)
+             */
+            previous_scan_at?: string | null;
+            /**
              * Scan At
              * @description ISO time of the market scan; null when none exists
              */
@@ -7193,6 +7198,12 @@ export interface components {
              * @description Setups in the scan before any filter (signal, score floor)
              */
             scan_total?: number | null;
+            /**
+             * Sectors
+             * @description Sectors among the plan's rows that pass the other filters, most first; the Sector filter's choices
+             * @default []
+             */
+            sectors: components["schemas"]["SectorCount"][];
             /**
              * Setups
              * @default []
@@ -10046,6 +10057,11 @@ export interface components {
             last?: number | null;
             /** N Signals */
             n_signals?: number | null;
+            /**
+             * Previous Rank
+             * @description Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)
+             */
+            previous_rank?: number | null;
             /** Primary Setup */
             primary_setup?: string | null;
             /**
@@ -10058,6 +10074,11 @@ export interface components {
              * @description Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.
              */
             prob_rank?: number | null;
+            /**
+             * Rank
+             * @description Position in the whole latest scan's HSF ranking (1 = best)
+             */
+            rank?: number | null;
             /** Rebound Candidate */
             rebound_candidate?: boolean | null;
             /** Rsi 14 */
@@ -10066,6 +10087,11 @@ export interface components {
             rvol?: number | null;
             /** Score */
             score: number;
+            /**
+             * Sector
+             * @description Sector from Nasdaq's stock screener; null when unknown
+             */
+            sector?: string | null;
             /**
              * Signals
              * @default []
@@ -10286,6 +10312,13 @@ export interface components {
             error: string;
             /** Section */
             section: string;
+        };
+        /** SectorCount */
+        SectorCount: {
+            /** Count */
+            count: number;
+            /** Sector */
+            sector: string;
         };
         /**
          * SessionCard
@@ -11639,6 +11672,11 @@ export interface components {
             last?: number | null;
             /** N Signals */
             n_signals?: number | null;
+            /**
+             * Previous Rank
+             * @description Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)
+             */
+            previous_rank?: number | null;
             /** Primary Setup */
             primary_setup?: string | null;
             /**
@@ -11664,6 +11702,11 @@ export interface components {
             rvol?: number | null;
             /** Score */
             score: number;
+            /**
+             * Sector
+             * @description Sector from Nasdaq's stock screener; null when unknown
+             */
+            sector?: string | null;
             /**
              * Signals
              * @default []
@@ -20758,6 +20801,8 @@ export interface operations {
                 max_price?: number | null;
                 /** @description Relative volume at least this (x) */
                 min_rvol?: number | null;
+                /** @description Only setups in this sector (see sectors) */
+                sector?: string | null;
             };
             header?: never;
             path?: never;

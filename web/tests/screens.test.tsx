@@ -37,7 +37,7 @@ function urlOf(call: unknown[]): URL {
 
 const latest = (over: Partial<Schemas["LatestScan"]> = {}): Schemas["LatestScan"] => ({
   scan_at: new Date().toISOString(), total: 140, max_results: 25, limited: true,
-  setups: [setup("AAA", 88), setup("BBB", 70, { prob: 62.4 })], ...over,
+  sectors: [], setups: [setup("AAA", 88), setup("BBB", 70, { prob: 62.4 })], ...over,
 });
 
 describe("Scanner", () => {

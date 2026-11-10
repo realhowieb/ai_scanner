@@ -109,6 +109,15 @@ await step("find a setup and save it to a new watchlist from the Scanner", async
   check("find a setup and save it to a new watchlist from the Scanner", true, ticker);
 });
 
+await step("Scanner quick view opens a setup without leaving the page", async () => {
+  await page.getByRole("button", { name: `Quick view ${ticker}` }).first().click();
+  const panel = page.getByRole("dialog", { name: ticker });
+  await panel.getByRole("link", { name: "Open full page" }).waitFor();
+  await page.keyboard.press("Escape");
+  await panel.waitFor({ state: "hidden" });
+  check("Scanner quick view opens a setup without leaving the page", /\/scanner/.test(page.url()), ticker);
+});
+
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
   await page.locator(`table a.tk[href="/stocks/${encodeURIComponent(ticker)}"]`).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));

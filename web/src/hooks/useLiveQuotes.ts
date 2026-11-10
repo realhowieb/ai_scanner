@@ -9,7 +9,7 @@ import { inMarketHours, useAutoRefresh } from "@/hooks/useAutoRefresh";
 export const LIVE_QUOTES_MS = 60_000;
 
 type Quote = Schemas["LatestQuote"];
-type Priced = { ticker: string; last?: number | null; chg_pct?: number | null; gap_pct?: number | null };
+type Priced = { ticker: string; last?: number | null; chg_pct?: number | null; gap_pct?: number | null; scan_last?: number | null };
 
 /** Latest trades for the rows on screen, re-read every minute while the market is open and
  * the tab is visible. Outside market hours (or with nothing on screen) it asks for nothing,
@@ -26,12 +26,12 @@ export function useLiveQuotes(tickers: string[], enabled: boolean) {
 
 /** The rows with Last, Chg % and Gap % taken from a live trade where there is one. A row with
  * no trade (or only a daily-bar fallback) keeps the scan's numbers; a quote without a gap
- * keeps the scan's gap. */
+ * keeps the scan's gap. A live row keeps the scan's price as `scan_last` (for "since scan"). */
 export function withLiveQuotes<T extends Priced>(rows: T[], quotes: Record<string, Quote | undefined>): T[] {
   if (!Object.keys(quotes).length) return rows;
   return rows.map((r) => {
     const q = quotes[r.ticker.toUpperCase()];
     if (!q || q.source !== "trade" || q.last == null) return r;
-    return { ...r, last: q.last, chg_pct: q.chg_pct ?? r.chg_pct, gap_pct: q.gap_pct ?? r.gap_pct };
+    return { ...r, scan_last: r.last, last: q.last, chg_pct: q.chg_pct ?? r.chg_pct, gap_pct: q.gap_pct ?? r.gap_pct };
   });
 }
