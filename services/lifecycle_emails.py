@@ -1,5 +1,5 @@
 """Lifecycle emails: a welcome note when an account verifies its email, a heads-up
-a few days before a free Pro trial (from an invite) runs out, and a note when it has.
+a few days before a free Pro trial (new-account trial or invite) runs out, and a note when it has.
 
     welcome        sent once per account, right after its first email verification
     trial_ending   sent once per trial end, when free Pro ends within REMINDER_DAYS;
@@ -86,9 +86,9 @@ def welcome_content(trial_until: Optional[dt.datetime] = None) -> tuple:
     trial_text = trial_html = ""
     if trial_until:
         day = _day(trial_until)
-        trial_text = (f"Your invite gave you free Pro until {day}, so every feature is open to you now. "
+        trial_text = (f"You have free Pro until {day}, so every Pro feature is open to you now. No card needed. "
                       "Nothing is charged when it ends; your account just goes back to Starter.\n\n")
-        trial_html = (f"<p>Your invite gave you <strong>free Pro until {html.escape(day)}</strong>, so every "
+        trial_html = (f"<p>You have <strong>free Pro until {html.escape(day)}</strong>, so every Pro "
                       "feature is open to you now. Nothing is charged when it ends; your account just goes "
                       "back to Starter.</p>")
     text = ("Your email is verified and your account is ready.\n\n" + trial_text +
@@ -140,12 +140,12 @@ def trial_ending_content(until: dt.datetime, now: Optional[dt.datetime] = None) 
     pricing = f"{_base_url()}/pricing"
     perks = ", ".join(PRO_PERKS[:-1]) + f" and {PRO_PERKS[-1]}"
     subject = f"Your free Pro ends in {left}"
-    text = (f"Your free Pro from an invite ends on {day} ({left} from now).\n\n"
+    text = (f"Your free Pro ends on {day} ({left} from now).\n\n"
             f"After that your account goes back to Starter, which stays free. You'd lose {perks}.\n\n"
             f"To keep Pro, upgrade here: {pricing}\n\n"
             "If Starter is all you need, there's nothing to do. You won't be charged.\n")
     inner = (f"<h2 style='font-size:20px;margin:16px 0 8px'>Your free Pro ends in {left}</h2>"
-             f"<p>Your free Pro from an invite ends on <strong>{html.escape(day)}</strong>.</p>"
+             f"<p>Your free Pro ends on <strong>{html.escape(day)}</strong>.</p>"
              f"<p>After that your account goes back to Starter, which stays free. You'd lose {html.escape(perks)}.</p>"
              + _button(pricing, "Keep Pro") +
              "<p style='color:#555'>If Starter is all you need, there's nothing to do. You won't be charged.</p>")
@@ -216,7 +216,7 @@ def trial_ended_content() -> tuple:
     pricing = f"{_base_url()}/pricing"
     perks = ", ".join(PRO_PERKS[:-1]) + f" and {PRO_PERKS[-1]}"
     subject = "Your free Pro has ended"
-    text = ("Your free Pro from an invite has ended, so your account is on Starter now. Nothing was charged.\n\n"
+    text = ("Your free Pro has ended, so your account is on Starter now. Nothing was charged.\n\n"
             "You keep Today, the Scanner, your watchlists, 1 alert and your journal.\n"
             f"Paused until you upgrade: {perks}.\n\n"
             f"To get Pro back: {pricing}\n")

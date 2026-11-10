@@ -87,7 +87,7 @@ export function storedAttribution(now = Date.now()): Attribution | null {
   return null;
 }
 
-export type FunnelEvent = "landing_visit" | "primary_cta_click" | "signup_started";
+export type FunnelEvent = "landing_visit" | "primary_cta_click" | "signup_started" | "signup_failed";
 
 /** Fire-and-forget; survives the page navigating away (keepalive). */
 export function track(event: FunnelEvent, surface: string): void {

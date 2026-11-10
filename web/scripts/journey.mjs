@@ -251,6 +251,20 @@ if (email2) {
 
 // Clean up from a fresh sign-in, so a step that failed half way (signed out, closed page)
 // doesn't also leave this run's records behind.
+await step("sign-up form is short and keeps a plan picked on Pricing", async () => {
+  const anon = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ap = await anon.newPage();
+  await ap.goto(`${BASE}/signup?plan=pro&interval=month`);
+  await ap.getByText(/You picked Pro/).waitFor();
+  const fields = { email: await ap.getByLabel("Email").count(), password: await ap.getByLabel("Password", { exact: true }).count(),
+    name: await ap.getByLabel("Display name").count(), repeat: await ap.getByLabel("Repeat password").count() };
+  const intent = await ap.evaluate(() => localStorage.getItem("hsf-plan-intent") || "");
+  await anon.close();
+  check("sign-up form is short and keeps a plan picked on Pricing",
+    fields.email === 1 && fields.password === 1 && fields.name === 0 && fields.repeat === 0 && intent.includes('"pro"'),
+    `fields ${JSON.stringify(fields)}`);
+});
+
 const cleanCtx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 await step("clean up: delete the alert and the watchlist (confirmed)", async () => {
   page = await signIn(cleanCtx, email, password);

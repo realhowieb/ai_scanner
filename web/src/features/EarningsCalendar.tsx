@@ -10,6 +10,7 @@ import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
 import { Card, ErrorState, Locked, ScoreBadge, Skeleton } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
+import { LockedPreview } from "@/features/LockedPreview";
 
 type Day = Schemas["EarningsWeekDay"];
 type Name = Schemas["EarningsWeekName"];
@@ -76,7 +77,7 @@ export function EarningsCalendar({ pro }: { pro: boolean }) {
     unwrap(api.GET("/v1/earnings/week", { params: { query: { per_day: PER_DAY } }, signal })));
   if (!pro) {
     return (
-      <Card><Locked title="The earnings calendar is part of Pro" plan="pro">
+      <Card><Locked title="The earnings calendar is part of Pro" plan="pro" preview={<LockedPreview kind="earnings" />}>
         See every big company reporting this week at a glance, day by day, with before-open and after-close timing.
       </Locked></Card>
     );

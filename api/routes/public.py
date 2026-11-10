@@ -19,7 +19,8 @@ FUNNEL_EVENTS = ("landing_visit", "primary_cta_click", "signup_started")
 
 
 class FunnelEvent(BaseModel):
-    event: Literal["landing_visit", "primary_cta_click", "signup_started"]
+    event: Literal["landing_visit", "primary_cta_click", "signup_started", "signup_failed"] = Field(
+        description="signup_failed: the sign-up form refused (surface = why: email, password, taken, captcha, ...)")
     attribution: Dict[str, str] = Field(default_factory=dict, max_length=12,
                                         description="utm_* tags and referrer from the visitor's first page")
     surface: Optional[str] = Field(default=None, max_length=40, description="Which button or page")
@@ -57,7 +58,9 @@ def register(app: FastAPI) -> None:
                   "highlights": highlights.get(t, [])} for t in p.TIERS]
         rows = [{"label": label, **{t: (int(p.ALERT_LIMIT_BY_TIER.get(t, 1)) if flag == p.ALERTS else p.included(flag, t))
                                      for t in p.TIERS}} for label, flag in p.ROWS]
-        return {"tiers": tiers, "rows": rows}
+        from api.referrals import new_trial_days
+
+        return {"tiers": tiers, "rows": rows, "trial_days": new_trial_days()}
 
     @app.post("/v1/events", status_code=202, responses={429: {"description": "Too many events from this address"}},
               summary="Record a signed-out funnel event")

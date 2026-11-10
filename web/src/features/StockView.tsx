@@ -15,7 +15,7 @@ import { Card, Empty, ErrorLine, ErrorState, Locked, Pill, Skeleton } from "@/co
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { useCompanyName } from "@/lib/companyNames";
-import { etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
+import { compact, etTime, pct, price, probPct, setupLabel, shortDate } from "@/lib/format";
 
 import { stateHorizon } from "@/lib/researchTime";
 
@@ -40,6 +40,18 @@ const SIGNAL_NAMES: Record<string, string> = {
 const etDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
 /** The sessions where the scans saw a signal start, for the price chart. */
+/** Sector, industry and market cap from Nasdaq's stock screener (refreshed weekly). */
+export function CompanyFacts({ facts }: { facts?: Schemas["CompanyFacts"] | null }) {
+  if (!facts || (!facts.sector && !facts.industry && facts.market_cap == null)) return null;
+  return (
+    <dl className="company-facts cap" aria-label="Company facts">
+      {facts.market_cap != null && <div><dt>Market cap</dt><dd className="mono">${compact(facts.market_cap)}{facts.size ? ` · ${facts.size} cap` : ""}</dd></div>}
+      {facts.sector && <div><dt>Sector</dt><dd>{facts.sector}</dd></div>}
+      {facts.industry && <div><dt>Industry</dt><dd>{facts.industry}</dd></div>}
+    </dl>
+  );
+}
+
 export function signalEvents(s: Stock): ChartEvent[] {
   return s.lifecycle.flatMap((e) => (e.time && e.signals_added.length
     ? [{ date: etDay(new Date(e.time)), label: e.signals_added.map((k) => SIGNAL_NAMES[k] ?? k).join(", ") }]
@@ -331,6 +343,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             {s.status && <Pill tone={s.status === "STRONG" ? "up" : s.status === "CAUTION" || s.status === "FADING" ? "warn" : undefined}>{s.status}</Pill>}
           </div>
           {companyName && <p className="cap stock-company">{companyName}</p>}
+          <CompanyFacts facts={s.company} />
           {s.price !== null && s.price !== undefined ? (
             <div className="quote">
               <span className="mono big">{price(s.price)}</span>

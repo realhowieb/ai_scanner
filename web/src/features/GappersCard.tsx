@@ -9,6 +9,7 @@ import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/session/SessionProvider";
 
 import { SectionFailed } from "./TodayView";
+import { LockedPreview } from "@/features/LockedPreview";
 
 export const GAPPERS_REFRESH_MS = 3 * 60_000;   // the API rebuilds the list every 3 minutes
 const ROW_LIMIT = 10;
@@ -28,7 +29,7 @@ export function GappersCard() {
   if (!allowed) {
     return (
       <Card title="Pre-market gappers" id="gap">
-        <Locked title="Pre-market gappers are part of Pro" plan="pro">See which stocks are gapping before the open across the whole U.S. market, with pre-market volume.</Locked>
+        <Locked title="Pre-market gappers are part of Pro" plan="pro" preview={<LockedPreview kind="gappers" />}>See which stocks are gapping before the open across the whole U.S. market, with pre-market volume.</Locked>
       </Card>
     );
   }

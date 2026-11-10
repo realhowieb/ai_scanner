@@ -106,6 +106,17 @@ def register(app: FastAPI) -> None:
         return json_safe(market.stair_steppers(symbols.split(","), window=window, direction=direction, r2_min=r2_min,
                                                max_pullback_pct=max_pullback, min_trend_pct_per_hour=min_trend))
 
+    @app.get("/v1/previews/{kind}", response_model=models.FeaturePreview, responses=_AUTH,
+             summary="Preview of a locked feature")
+    def feature_preview(kind: Literal["day_trader", "gappers", "earnings"],
+                        account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """One real example and a count for a Pro feature (any plan can ask): the top Day Trader
+        mover, the biggest pre-market gap, or the biggest company reporting this week. Shown
+        on the locked card so Starter sees what an upgrade adds. Shared for 2 minutes."""
+        from api.previews import preview
+
+        return preview(kind)
+
     @app.get("/v1/brief", response_model=models.Brief, responses=_AUTH, summary="Market Brief")
     def brief(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         """The web's Market Brief (same builder as the morning email): market backdrop, top

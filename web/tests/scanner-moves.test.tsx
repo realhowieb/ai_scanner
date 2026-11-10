@@ -76,7 +76,7 @@ describe("Scanner moves, sectors and quick view", () => {
     expect(within(table).getByRole("columnheader", { name: "Sector" })).toBeInTheDocument();
     expect(within(table).getAllByText("Technology")).toHaveLength(2);
     expect(screen.getByText(/New and ▲▼ compare each rank with the/)).toBeInTheDocument();
-    await userEvent.setup().selectOptions(screen.getByLabelText("Sector"), "Finance");
+    await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: "Sector" }), "Finance");
     expect(replace).toHaveBeenCalledWith("/scanner?sector=Finance", { scroll: false });
   });
 
@@ -97,5 +97,16 @@ describe("Scanner moves, sectors and quick view", () => {
     expect(await within(panel).findByText("Broke out on 3x volume")).toBeInTheDocument();
     expect(within(panel).getByText("Extended above the 20-day average")).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Open full page" })).toHaveAttribute("href", "/stocks/AAA");
+  });
+});
+
+describe("Sector in Table display", () => {
+  it("lists Sector so it can be turned off", async () => {
+    route();
+    wrap();
+    await screen.findByRole("region", { name: /Ranked setups table/ });
+    await userEvent.setup().click(screen.getByText("Table display"));
+    expect(screen.getByRole("checkbox", { name: "Sector" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Move Sector later" })).toBeInTheDocument();
   });
 });

@@ -147,7 +147,8 @@ export function ErrorState({ error, onRetry, what = "this" }: { error: ApiError;
   );
 }
 
-export function Locked({ title, plan, children }: { title: string; plan: "pro" | "premium"; children?: ReactNode }) {
+/** `preview`: a real example of what the plan shows (features/LockedPreview), under the text. */
+export function Locked({ title, plan, children, preview }: { title: string; plan: "pro" | "premium"; children?: ReactNode; preview?: ReactNode }) {
   return (
     <div className="locked">
       <div className="locked-head">
@@ -156,6 +157,7 @@ export function Locked({ title, plan, children }: { title: string; plan: "pro" |
         <Pill tone="gold">{plan === "pro" ? "Pro" : "Premium"}</Pill>
       </div>
       {children && <p className="cap">{children}</p>}
+      {preview}
       <UpgradeButton plan={plan} />
     </div>
   );

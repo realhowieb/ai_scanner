@@ -76,9 +76,10 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
                 min_score: int = 0, signal: Optional[str] = None, sort: str = "score",
                 min_price: Optional[float] = None, max_price: Optional[float] = None,
-                min_rvol: Optional[float] = None, sector: Optional[str] = None) -> Dict[str, Any]:
+                min_rvol: Optional[float] = None, sector: Optional[str] = None,
+                size: Optional[str] = None) -> Dict[str, Any]:
     from analytics.data_freshness import describe
-    from api.sectors import sector_for
+    from api.sectors import cap_bucket, market_cap_for, sector_for
     from ui.entitlement_view import redact_prebreakout_rows
 
     cap = max_results_for(tier)
@@ -94,6 +95,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     rank = {id(o): i + 1 for i, o in enumerate(opps)}
     prev_rank = previous_ranks(runs)
     sector_of = {id(o): sector_for(o.get("ticker")) for o in opps}
+    cap_of = {id(o): market_cap_for(o.get("ticker")) for o in opps}
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
     # Price and relative volume use the scan's own numbers, like scan alerts (SCAN_MATCH);
@@ -113,6 +115,9 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
         opps = [o for o in opps if id(o) in picked]
     elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
+    if size:
+        # Company size from the screener's market cap; a name without one never passes.
+        opps = [o for o in opps if cap_bucket(cap_of[id(o)]) == size]
     # Sector choices come from the rows the other filters leave, before the sector itself.
     sector_counts: Dict[str, int] = {}
     for o in opps[:cap]:
@@ -133,7 +138,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             'freshness': run_freshness(runs[0]),
             "previous_scan_at": _iso(runs[1]["created_at"]) if prev_rank is not None else None,
             "sectors": [{"sector": k, "count": v} for k, v in sorted(sector_counts.items(), key=lambda kv: (-kv[1], kv[0]))],
-            "setups": [{**_scan_row(o), "rank": rank[id(o)], "sector": sector_of[id(o)],
+            "setups": [{**_scan_row(o), "rank": rank[id(o)], "sector": sector_of[id(o)], "market_cap": cap_of[id(o)],
                         "previous_rank": (prev_rank or {}).get(str(o.get("ticker") or "").upper())}
                        for o in visible[offset:offset + limit]]}
 

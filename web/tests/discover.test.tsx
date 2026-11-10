@@ -67,7 +67,8 @@ describe("Market Brief", () => {
     expect(within(sectors).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("PreBreakout is part of Premium")).toBeInTheDocument();
     expect(screen.getByText("The 7-day earnings calendar is part of Pro")).toBeInTheDocument();
-    expect(urls().map((u) => u.pathname)).toEqual(["/api/hsf/v1/brief"]);            // no Pro calls on Free
+    // No Pro calls on Free; the locked earnings card asks only for its free preview.
+    expect(urls().map((u) => u.pathname)).toEqual(["/api/hsf/v1/brief", "/api/hsf/v1/previews/earnings"]);
     expect(screen.queryByRole("region", { name: "AI market narrative" })).not.toBeInTheDocument();
   });
 
@@ -195,5 +196,16 @@ describe("Scanner sort", () => {
     expect(screen.queryByRole("option", { name: "PreBreakout" })).not.toBeInTheDocument();
     await userEvent.setup().selectOptions(screen.getByLabelText("Sort by"), "rvol");
     expect(replace).toHaveBeenCalledWith("/scanner?sort=rvol", { scroll: false });
+  });
+});
+
+describe("locked feature previews", () => {
+  it("shows one real example and how many more the plan shows", async () => {
+    const { LockedPreview } = await import("@/features/LockedPreview");
+    route({ "/v1/previews/day_trader": () => jsonResponse({ kind: "day_trader", count: 25, state: "open", as_of: "2026-11-10T15:00:00Z",
+      example: { ticker: "NVDA", detail: "+6.2% · 3.4x volume" } }) });
+    wrap(<LockedPreview kind="day_trader" />, "basic");
+    const p = await screen.findByTestId("preview-day_trader");
+    expect(p).toHaveTextContent("Top mover right now: NVDA +6.2% · 3.4x volume · 24 more movers ranked in Day Trader");
   });
 });

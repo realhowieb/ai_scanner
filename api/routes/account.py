@@ -27,7 +27,8 @@ from api.scans import json_safe
 class SignupBody(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=256)
-    username: str = Field(min_length=1, max_length=40, description="Shown in the app; can also be used to sign in on the web")
+    username: Optional[str] = Field(default=None, max_length=40, description=(
+        "Display name, shown in the app; can also be used to sign in on the web. Optional: made from the email when left out"))
     accept_terms: bool = Field(description="The sign-up agreement checkbox (Terms of Service and research-only use)")
     client: Optional[str] = Field(default=None, max_length=80)
     attribution: Optional[Dict[str, str]] = Field(
@@ -131,18 +132,24 @@ def register(app: FastAPI) -> None:
     def verify_email(body: TokenBody, background: BackgroundTasks,
                      _l: None = Depends(ratelimit.limit("verify"))) -> Dict[str, Any]:
         """Confirm an email address with the token from the verification link. An account that
-        signed up with an invite link starts the free Pro month for both people here. The
+        signed up with an invite link starts the free Pro month for both people here; any other
+        new Starter account starts its free Pro trial (HSF_NEW_TRIAL_DAYS). The
         welcome email (once per account) goes out after the response."""
         from api import referrals
         from services.lifecycle_emails import send_welcome
 
         email = acct.verify_email(body.token)
         rewarded = referrals.reward_on_verify(email)
+        # Without an invite reward, a new account starts its free Pro trial here (once).
+        trial = None if rewarded else referrals.start_new_trial(email)
         background.add_task(send_welcome, email)
         if rewarded:
             forget_account(email)
             return {"message": f"Email verified. You and your friend each get {referrals.reward_days()} days of Pro."
                     if referrals.reward_days() else "Email verified."}
+        if trial:
+            forget_account(email)
+            return {"message": f"Email verified. Your {referrals.new_trial_days()} days of free Pro have started."}
         return {"message": "Email verified."}
 
     @app.post("/v1/me/verify-email", response_model=models.Message,
@@ -259,6 +266,9 @@ def register(app: FastAPI) -> None:
         out = acct.checkout_url(_user(account), body.plan, body.interval)
         if out.get("mode") != "portal":
             legal.record_checkout(_user(account), out.get("url") or "", body.plan)
+            from services.checkout_followup import record_start
+
+            record_start(_user(account), body.plan, body.interval, "checkout")
         return out
 
     @app.post("/v1/billing/portal", response_model=models.BillingLink,
