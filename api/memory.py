@@ -14,6 +14,7 @@ import ctypes
 import ctypes.util
 import os
 import sys
+import time
 from contextlib import contextmanager
 from typing import Optional
 
@@ -50,6 +51,7 @@ def tune_allocator() -> Optional[int]:
     return arenas if lib.mallopt(M_ARENA_MAX, arenas) == 1 else None
 
 
+_STARTED = time.monotonic()  # when this process imported the module (about when it started)
 _peak_mb = 0.0  # highest rss_mb() seen since this process started
 _container_peak_mb = 0.0  # highest container_mb() seen since this process started
 
@@ -197,3 +199,53 @@ def maintain_memory() -> dict:
     if expired or (before is not None and before >= _env_mb("HSF_MEMORY_WARN_MB", 400.0)):
         logging.getLogger("hsf.memory").info(json.dumps({"event": "memory_maintenance", **result}))
     return result
+
+
+# ---- nightly fresh start ----------------------------------------------------------------------------
+# Memory climbs through each trading day and is never handed back (the Brief, Day Trader and
+# scheduled scans leave the allocator holding their peak), so a day with no deploy starts
+# the next one already high. Between 3:00 and 4:00 ET on weekdays, when nobody uses the
+# app, a process still above HSF_MEMORY_RESTART_MB (default 420; 0 turns this off) that
+# has run for at least an hour and holds no custom scan asks itself to stop gracefully;
+# Render starts it again (about a minute) and the day begins from a clean slate.
+RESTART_WINDOW_ET = (3, 4)  # [start hour, end hour)
+RESTART_MIN_UPTIME_S = 3600
+
+
+def restart_due(now, mb: Optional[float], uptime_s: float, scans_held: int) -> bool:
+    from analytics import market_calendar as mc
+
+    limit = _env_mb("HSF_MEMORY_RESTART_MB", 420.0)
+    if limit <= 0 or mb is None or mb < limit or uptime_s < RESTART_MIN_UPTIME_S or scans_held:
+        return False
+    et = now.astimezone(mc.ET)
+    return et.weekday() < 5 and RESTART_WINDOW_ET[0] <= et.hour < RESTART_WINDOW_ET[1]
+
+
+def maybe_restart_for_memory(now=None) -> bool:
+    """Ops-jobs hook (every pass). Sends this process SIGTERM when restart_due(); uvicorn
+    finishes the requests in flight and exits, and Render starts a fresh instance."""
+    import datetime as dt
+    import json
+    import logging
+    import signal
+
+    now = now or dt.datetime.now(dt.timezone.utc)
+    mb = container_mb()
+    if mb is None:
+        mb = rss_mb()
+    try:
+        from api import scan_jobs
+
+        with scan_jobs._held_lock:
+            held = len(scan_jobs._held)
+    except Exception:
+        held = 0
+    uptime = time.monotonic() - _STARTED
+    if not restart_due(now, mb, uptime, held):
+        return False
+    logging.getLogger("hsf.memory").warning(json.dumps({
+        "event": "memory_restart", "container_mb": mb, "uptime_h": round(uptime / 3600, 1),
+        "limit_mb": _env_mb("HSF_MEMORY_RESTART_MB", 420.0)}))
+    os.kill(os.getpid(), signal.SIGTERM)
+    return True

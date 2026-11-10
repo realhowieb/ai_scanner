@@ -29,6 +29,9 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
     premium automations every pass (services.premium_auto): the Brief's AI summary and AI
                         notes for newly ranked watchlist stocks after each market scan, the
                         Sunday watchlist rundown email and the Friday journal coach email.
+    memory              every pass: expire unused cache entries, trim the allocator when
+                        memory is high, and between 3:00 and 4:00 ET on weekdays restart
+                        the API when it is still above HSF_MEMORY_RESTART_MB (api.memory).
 
 Env (all default on; set to 0 to stop one):
     HSF_OPS_JOBS_ENABLED          the whole thread
@@ -357,9 +360,11 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
     if _on("HSF_PREMIUM_AUTO_ENABLED"):
         _premium_auto(now)
     try:
-        from api.memory import maintain_memory
+        from api.memory import maintain_memory, maybe_restart_for_memory
 
         maintain_memory()
+        if os.environ.get("RENDER", "").strip().lower() == "true":
+            maybe_restart_for_memory(now)
     except Exception as e:
         log.warning(json.dumps({"event": "memory_maintenance_failed", "error": type(e).__name__}))
 

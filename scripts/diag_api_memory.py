@@ -107,6 +107,14 @@ def main() -> None:
         import ui.opportunities  # noqa: F401
 
     step("import Brief modules (ML, scipy...)", import_brief_libs)
+
+    def picks_only() -> None:
+        from scheduler.morning_digest import _prebreakout_picks
+        from ui.market_brief import _brief_scan_df
+
+        _prebreakout_picks(_brief_scan_df())
+
+    step("PreBreakout picks alone (scan + ML score)", picks_only)
     step("Market Brief (_brief_core)", market._brief_core)
     step("Day Trader movers", lambda: market.day_trader("movers"))
     for i in (2, 3):
