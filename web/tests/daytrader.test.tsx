@@ -314,7 +314,7 @@ describe("Day Trader typed tickers", () => {
     fetchMock.mockImplementation(async (req: Request) => {
       const url = new URL(req.url);
       if (url.pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
-      asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
+      if (url.pathname.endsWith("/v1/day-trader")) asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
       const syms = (url.searchParams.get("symbols") ?? "MOVR").split(",");
       return jsonResponse({ state: "closed", source: url.searchParams.get("source"), symbols: syms, missing: 0, as_of: new Date().toISOString(),
         rows: syms.map((t, i) => row({ ticker: t, day_trade_score: 60 - i, last: 10 })) });
@@ -339,7 +339,7 @@ describe("Day Trader remembers your setup", () => {
     fetchMock.mockImplementation(async (req: Request) => {
       const url = new URL(req.url);
       if (url.pathname.endsWith("/sparklines")) return jsonResponse({ checked: [], series: {} });
-      asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
+      if (url.pathname.endsWith("/v1/day-trader")) asked.push(`${url.searchParams.get("source")}:${url.searchParams.get("symbols") ?? ""}`);
       return jsonResponse({ state: "closed", source: "custom", symbols: ["AMD", "INTC"], missing: 0, as_of: new Date().toISOString(),
         rows: [row({ ticker: "AMD", day_trade_score: 80, last: 150 }), row({ ticker: "INTC", day_trade_score: 40, last: 20, dt_direction: "bearish" })] });
     });
