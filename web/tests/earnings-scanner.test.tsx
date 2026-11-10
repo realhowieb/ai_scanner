@@ -177,6 +177,16 @@ describe("Earnings scanner", () => {
     expect(screen.getByText(/1 stock reports today but isn't in the latest scan/)).toBeInTheDocument();
   });
 
+  it("says how many reporters are shown when the list is cut off", async () => {
+    search = new URLSearchParams("signal=earnings&all=1");
+    earnings = () => jsonResponse(scan([
+      row("IBM", "2026-10-21", 0, { score: 50 }),
+      row("ACGL", "2026-10-21", 0, { ranked: false, rank: null, score: 47, score_source: "auto", last: 100.14 }),
+    ], { window: "today", unranked_total: 1294, unranked_shown: 1, auto_scored_at: "2026-10-21T14:35:00Z" }));
+    wrap("premium");
+    expect(await screen.findByTestId("earn-shown")).toHaveTextContent("Showing 2 of 1,295 reporters today, soonest first, then highest HSF Score.");
+  });
+
   it("tells Pro that Premium scores every reporter automatically", async () => {
     search = new URLSearchParams("signal=earnings&all=1");
     earnings = () => jsonResponse(scan([

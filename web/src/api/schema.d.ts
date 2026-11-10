@@ -6229,6 +6229,11 @@ export interface components {
              */
             total: number;
             /**
+             * Unranked Shown
+             * @description With include_unranked: how many of those are in setups (the plan cap, or EARNINGS_UNRANKED_PREMIUM on Premium)
+             */
+            unranked_shown?: number | null;
+            /**
              * Unranked Total
              * @description Names that report in the window but did not rank in the scan
              */

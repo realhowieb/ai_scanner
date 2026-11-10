@@ -422,6 +422,8 @@ class EarningsScan(BaseModel):
     stale: Optional[bool] = None
     total: int = Field(description="Ranked setups that report in the window, before the plan cap")
     unranked_total: int = Field(description="Names that report in the window but did not rank in the scan")
+    unranked_shown: Optional[int] = Field(default=None, description="With include_unranked: how many of those are "
+                                          "in setups (the plan cap, or EARNINGS_UNRANKED_PREMIUM on Premium)")
     max_results: int
     custom_scan_id: Optional[str] = Field(default=None, description="Your earnings scan whose scores fill unranked names")
     custom_scan_at: Optional[str] = Field(default=None, description="When that scan finished (ISO)")
