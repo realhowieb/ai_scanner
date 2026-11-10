@@ -41,6 +41,7 @@ def scan_setups(tickers: List[str], *, premarket: bool = False) -> List[Dict[str
     """Scanner rows (api.scans._scan_row shape, strict JSON) for `tickers` from one scan
     with the screens off, best score first. Raises on scan failure."""
     from api.scans import _scan_row, json_safe
+    from data.prices import allow_yahoo_fallback
     from scan.engine import run_breakout_scan
     from scan.execution import run_manual_scan_execution
     from ui.market_scans import top_setups
@@ -49,12 +50,15 @@ def scan_setups(tickers: List[str], *, premarket: bool = False) -> List[Dict[str
     tickers = sanitize_universe_symbols(list(dict.fromkeys(t for t in tickers if t)))
     if not tickers:
         return []
-    df = run_manual_scan_execution(
-        runner=run_breakout_scan, tickers=tickers, premarket=premarket, afterhours=False,
-        unusual_volume=False, min_gap=0.0, min_price=0.0, max_price=1_000_000.0,
-        top_n=len(tickers), profile="regular", apply_gap_filter=False, diagnostics=False,
-        extended_price_transform=apply_alpaca_extended_prices, min_dollar_vol=0.0,
-    )
+    # Reporters and watchlists hold OTC and foreign names Alpaca's feed doesn't carry;
+    # the cron turns Yahoo off for its full-market scans, so turn it back on here.
+    with allow_yahoo_fallback():
+        df = run_manual_scan_execution(
+            runner=run_breakout_scan, tickers=tickers, premarket=premarket, afterhours=False,
+            unusual_volume=False, min_gap=0.0, min_price=0.0, max_price=1_000_000.0,
+            top_n=len(tickers), profile="regular", apply_gap_filter=False, diagnostics=False,
+            extended_price_transform=apply_alpaca_extended_prices, min_dollar_vol=0.0,
+        )
     rows, seen = [], set()
     for o in top_setups(df, n=100_000):
         row = _scan_row(o)

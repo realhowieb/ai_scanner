@@ -160,6 +160,23 @@ describe("Earnings scanner", () => {
     expect(screen.queryByText(/Premium scores every reporter automatically/)).not.toBeInTheDocument();
   });
 
+  it("marks Premium reporters the pass couldn't price as No price data, with no Score it", async () => {
+    search = new URLSearchParams("signal=earnings&all=1");
+    earnings = () => jsonResponse(scan([
+      row("ACGL", "2026-10-21", 0, { ranked: false, rank: null, score: 47, score_source: "auto", last: 100.14 }),
+      row("ADVM", "2026-10-21", 0, { ranked: false, rank: null, score: null, primary_setup: null, score_source: null, last: null }),
+      row("BSPK", "2026-10-21", 0, { ranked: false, rank: null, score: null, primary_setup: null, score_source: null, last: 0.0006 }),
+    ], { window: "today", unranked_total: 3, auto_scored_at: "2026-10-21T14:35:00Z" }));
+    wrap("premium");
+    const table = await screen.findByRole("table");
+    const advm = within(table).getByText("ADVM").closest("tr")!;
+    expect(within(advm).getByText("No price data")).toBeInTheDocument();
+    expect(within(advm).queryByRole("link", { name: "Score it" })).not.toBeInTheDocument();
+    const bspk = within(table).getByText("BSPK").closest("tr")!;
+    expect(within(bspk).getByRole("link", { name: "Score it" })).toBeInTheDocument();
+    expect(screen.getByText(/1 stock reports today but isn't in the latest scan/)).toBeInTheDocument();
+  });
+
   it("tells Pro that Premium scores every reporter automatically", async () => {
     search = new URLSearchParams("signal=earnings&all=1");
     earnings = () => jsonResponse(scan([

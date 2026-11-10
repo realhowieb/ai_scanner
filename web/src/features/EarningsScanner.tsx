@@ -102,11 +102,16 @@ function Tags({ r }: { r: Row }) {
 const scoreHref = (f: EarningsFilters) => `/scanner/custom?universe=earnings&when=${f.when}&start=1`;
 /** Scored by the market scan, the user's own earnings scan or (Premium) the scheduled auto-score. */
 const hasScore = (r: Row) => r.score !== null && r.score !== undefined;
+/** Premium's auto-score pass (which also tries Yahoo) found no price and neither did the live
+ * quote (often OTC, foreign or halted), so a scan can't score it either. */
+const noPrice = (r: Row, autoPass: boolean) => autoPass && !r.ranked && !hasScore(r) && (r.last === null || r.last === undefined);
+const NO_PRICE_TIP = "No price history from our data providers (often OTC, foreign or halted stocks), so it can't be scored";
 
-function SetupCell({ r, f }: { r: Row; f: EarningsFilters }) {
+function SetupCell({ r, f, autoPass }: { r: Row; f: EarningsFilters; autoPass: boolean }) {
   if (r.ranked) return <Pill>{setupLabel(r.primary_setup)}</Pill>;
   if (hasScore(r) && r.score_source === "auto") return <><Pill>{setupLabel(r.primary_setup)}</Pill> <span className="pill earn-yours" title="Scored automatically by the scheduled scan (Premium)">Auto</span></>;
   if (hasScore(r)) return <><Pill>{setupLabel(r.primary_setup)}</Pill> <span className="pill earn-yours" title="Scored by your earnings scan">Your scan</span></>;
+  if (noPrice(r, autoPass)) return <span className="cap" title={NO_PRICE_TIP}>No price data</span>;
   return <><span className="cap">Not ranked</span> <Link className="earn-score-link" href={scoreHref(f)}>Score it</Link></>;
 }
 
@@ -154,7 +159,9 @@ const earnFeatures = tableFeatures({ rowSortingFeature, sortedRowModel: createSo
 const ecol = createColumnHelper<typeof earnFeatures, Row>();
 const blank = (v: number | null | undefined) => v ?? undefined;
 const FiltersCtx = createContext<EarningsFilters>({ when: "today", time: "", all: false });
-function EarnSetupCell({ row }: { row: { original: Row } }) { return <SetupCell r={row.original} f={useContext(FiltersCtx)} />; }
+/** True when Premium's auto-score pass ran for this view. */
+const AutoPassCtx = createContext(false);
+function EarnSetupCell({ row }: { row: { original: Row } }) { return <SetupCell r={row.original} f={useContext(FiltersCtx)} autoPass={useContext(AutoPassCtx)} />; }
 const EARN_COLUMNS = ecol.columns([
   ecol.display({ id: "ticker", header: "Ticker", cell: (c) => <><TickerLink ticker={c.row.original.ticker} named /><Tags r={c.row.original} /></> }),
   ecol.display({ id: "reports", header: "Reports", cell: (c) => <When time={c.row.original.time} /> }),
@@ -174,13 +181,13 @@ const EARN_HINTS: Record<string, [string, string]> = {
   rvol: ["Relative volume", "Today's volume compared with the stock's recent average. 2.0 means twice as much trading as usual."],
 };
 
-function EarningsTable({ rows, days, f }: { rows: Row[]; days: { date: string; label: string; rows: Row[] }[]; f: EarningsFilters }) {
+function EarningsTable({ rows, days, f, autoPass }: { rows: Row[]; days: { date: string; label: string; rows: Row[] }[]; f: EarningsFilters; autoPass: boolean }) {
   const t = useTable({ features: earnFeatures, columns: EARN_COLUMNS, data: rows, sortDescFirst: true, enableMultiSort: false });
   const sorted = t.getRowModel().rows;
   const tdClass = (id: string, r: Row) => id === "last" || id === "gap" ? "num mono"
     : id === "change" ? `num mono ${(r.chg_pct ?? 0) > 0 ? "up" : (r.chg_pct ?? 0) < 0 ? "down" : ""}` : id === "save" ? "num" : undefined;
   return (
-    <FiltersCtx.Provider value={f}>
+    <FiltersCtx.Provider value={f}><AutoPassCtx.Provider value={autoPass}>
       <div className="table-wrap only-wide" tabIndex={0} role="region" aria-label="Setups reporting earnings">
         <table className="table earn-table">
           <thead>
@@ -216,7 +223,7 @@ function EarningsTable({ rows, days, f }: { rows: Row[]; days: { date: string; l
           ))}
         </table>
       </div>
-    </FiltersCtx.Provider>
+    </AutoPassCtx.Provider></FiltersCtx.Provider>
   );
 }
 
@@ -249,11 +256,13 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
   }
   const days = groups(data.setups);
   // Premium: the scheduled scan already scored every reporter, so only offer a scan for any it missed.
-  const unscored = data.auto_scored_at ? data.setups.filter((r) => !r.ranked && !hasScore(r)).length : data.unranked_total;
+  // Stocks with no price data are left out: a scan can't score them either.
+  const autoPass = !!data.auto_scored_at;
+  const unscored = autoPass ? data.setups.filter((r) => !r.ranked && !hasScore(r) && !noPrice(r, autoPass)).length : data.unranked_total;
   return (
     <>
       <section className={`card flush${refreshing ? " dim" : ""}`} aria-busy={refreshing}>
-        <EarningsTable rows={data.setups} days={days} f={f} />
+        <EarningsTable rows={data.setups} days={days} f={f} autoPass={autoPass} />
         <div className="only-narrow">
           {days.map((g) => (
             <section key={g.date} aria-label={g.label}>
@@ -279,7 +288,9 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
                     </dl>
                     {!r.ranked && (hasScore(r)
                       ? <p className="cap">{r.score_source === "auto" ? "Scored automatically (Premium)." : "Scored by your earnings scan."}</p>
-                      : <p className="cap">Reports, but didn&apos;t rank in the latest scan. <Link href={scoreHref(f)}>Score it</Link></p>)}
+                      : noPrice(r, autoPass)
+                        ? <p className="cap" title={NO_PRICE_TIP}>Reports, but has no price data, so it can&apos;t be scored.</p>
+                        : <p className="cap">Reports, but didn&apos;t rank in the latest scan. <Link href={scoreHref(f)}>Score it</Link></p>)}
                   </li>
                 ))}
               </ul>
