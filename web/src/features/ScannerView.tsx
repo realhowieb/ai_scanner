@@ -9,6 +9,7 @@ import { Card, Empty, ErrorState, Locked, Skeleton, UpgradeButton } from "@/comp
 import { AIScanPanel } from "@/features/AIScanPanel";
 import { useApi } from "@/hooks/useApi";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { useLiveQuotes, withLiveQuotes } from "@/hooks/useLiveQuotes";
 import { useSession } from "@/session/SessionProvider";
 
 import { EarningsControls, EarningsResults, EARNINGS_WHEN, earningsLocked, readEarningsFilters, useEarningsScan } from "./EarningsScanner";
@@ -105,6 +106,9 @@ export function ScannerView() {
   const { data, error, loading, refreshing, updatedAt, reload } = useApi(key, (signal) =>
     unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: f.size, offset, ...filterQuery } }, signal })));
   useAutoRefresh(reload, { enabled: key !== null });
+  // Live Last / Chg % / Gap % for the rows on screen (market hours only); ranks and scores stay the scan's.
+  const live = useLiveQuotes(!ownRows && data ? data.setups.map((r) => r.ticker) : [], key !== null && !ownRows);
+  const rows = data ? withLiveQuotes(data.setups, live.quotes) : [];
 
   const set = (patch: Record<string, string | number>) => {
     const next = new URLSearchParams(sp.toString());
@@ -149,7 +153,7 @@ export function ScannerView() {
         </div>
       </section>
       {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
-        checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} />}
+        checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} liveAt={ownRows ? null : live.updatedAt} />}
 
       {leader && !ownRows && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 
@@ -235,13 +239,13 @@ export function ScannerView() {
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading || refreshing ? " dim" : ""}`} aria-busy={loading || refreshing}>
-          <SetupTable rows={data.setups} offset={offset} premium={premium} numbered={sort === "score"} sparks displayControls={false} prefs={preferences}
+          <SetupTable rows={rows} offset={offset} premium={premium} numbered={sort === "score"} sparks displayControls={false} prefs={preferences}
             sort={sort} onSort={(next) => set({ sort: next })} />
         </section>
       ) : null}
 
       {!ownRows && <>
-      {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups.</p>}
+      {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups{live.updatedAt && sort !== "rvol" && sort !== "prob" ? ", as of the scan" : ""}.</p>}
       {data && data.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{data.max_results}</b> of <b>{data.total}</b> setups in this scan.</p>

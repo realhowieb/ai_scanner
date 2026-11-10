@@ -47,3 +47,11 @@ it("keeps failed refreshes actionable without relabeling the snapshot as live", 
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(reload).toHaveBeenCalledOnce();
 });
+
+it("says when the rows show live prices on top of the saved ranking", () => {
+  render(<ScannerDataStatus {...base} info={info} liveAt={Date.parse("2026-10-16T19:15:00Z")} />);
+  expect(screen.getByText(/Prices live/)).toHaveTextContent("Ranked Oct 16, 12:44 PM ET · Prices live 3:15 PM ET");
+  fireEvent.click(screen.getByText("Details"));
+  expect(screen.getByText(/Last, Chg % and Gap % are live trades/)).toBeVisible();
+  expect(screen.queryByText(/It does not mean the prices are live/)).not.toBeInTheDocument();
+});

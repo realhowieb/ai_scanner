@@ -16,7 +16,7 @@ function ageLabel(at: string | null | undefined, checked: string | null | undefi
 }
 
 /** A scheduled snapshot can be on time while its prices are hours old. */
-export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, error, reload }: {
+export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, error, reload, liveAt }: {
   info?: Schemas["DataFreshness"] | null;
   scanAt?: string | null;
   stale?: boolean | null;
@@ -24,6 +24,8 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
   refreshing: boolean;
   error: ApiError | null;
   reload: () => void;
+  /** When the rows' live prices were last read (market hours); null shows the scan's prices. */
+  liveAt?: number | null;
 }) {
   const delayed = info?.state === "stale" || stale === true;
   const label = delayed ? "Scan delayed" : info?.state === "fresh" ? "On schedule"
@@ -40,20 +42,25 @@ export function ScannerDataStatus({ info, scanAt, stale, checkedAt, refreshing, 
     <details>
       <summary>
         <span className="scanner-data-badge">{label}</span>
-        <span className="scanner-data-time">{asOf ? `Snapshot prices as of ${time(asOf)}` : savedAt ? `Saved scan ${time(savedAt)} · Price time unavailable` : "Snapshot time unavailable"}{age && ` · ${age}`}
+        <span className="scanner-data-time">{liveAt
+          ? `Ranked ${time(savedAt)} · Prices live ${etTime(new Date(liveAt).toISOString(), false)}`
+          : <>{asOf ? `Snapshot prices as of ${time(asOf)}` : savedAt ? `Saved scan ${time(savedAt)} · Price time unavailable` : "Snapshot time unavailable"}{age && ` · ${age}`}</>}
           {sessionNote && <span className="cap scanner-session-note">{sessionNote}</span>}
         </span>
         <span className="scanner-data-details">Details</span>
       </summary>
       <div className="scanner-data-body">
-        <p>These are saved scan prices. Refresh checks for a newer scan; it does not fetch live prices.</p>
+        {liveAt
+          ? <p>Ranks and scores come from the saved scan. Last, Chg % and Gap % are live trades, read every minute while the market is open. Refresh checks for a newer scan.</p>
+          : <p>These are saved scan prices. Refresh checks for a newer scan; it does not fetch live prices.</p>}
         <dl>
           <div><dt>Scan saved</dt><dd>{time(savedAt)}</dd></div>
           <div><dt>Scan completed</dt><dd>{time(info?.scan_completed_at)}</dd></div>
           <div><dt>Market data as of</dt><dd>{time(asOf)}</dd></div>
           <div><dt>Last checked for a newer scan</dt><dd>{time(checked)}</dd></div>
+          {liveAt && <div><dt>Live prices read</dt><dd>{time(new Date(liveAt).toISOString())}</dd></div>}
         </dl>
-        {info?.state === "fresh" && !delayed && <p>On schedule means no expected scan has been missed. It does not mean the prices are live.</p>}
+        {info?.state === "fresh" && !delayed && !liveAt && <p>On schedule means no expected scan has been missed. It does not mean the prices are live.</p>}
         {delayed && <p>A scheduled scan is overdue. Scores and prices still come from the saved snapshot.</p>}
         {info?.market_data_note && <p>{info.market_data_note}</p>}
       </div>
