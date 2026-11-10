@@ -101,6 +101,12 @@ def main() -> None:
         print(f"    market runs listed: {len(runs)}")
 
     step("market_runs() (60 runs with snapshots)", load_runs)
+    def import_brief_libs() -> None:
+        import ml_prebreakout  # noqa: F401
+        import ui.market_brief  # noqa: F401
+        import ui.opportunities  # noqa: F401
+
+    step("import Brief modules (ML, scipy...)", import_brief_libs)
     step("Market Brief (_brief_core)", market._brief_core)
     step("Day Trader movers", lambda: market.day_trader("movers"))
     for i in (2, 3):
@@ -154,3 +160,8 @@ if __name__ == "__main__":
     if TRACE:  # tracing inflates RSS; replay once more untraced for true RSS figures
         sys.stdout.flush()
         subprocess.run([sys.executable, __file__], env={**os.environ, "HSF_DIAG_NO_TRACE": "1"})
+        sys.stdout.flush()
+        print("\n### same, with numeric libraries limited to one thread")
+        sys.stdout.flush()
+        one = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+        subprocess.run([sys.executable, __file__], env={**os.environ, "HSF_DIAG_NO_TRACE": "1", **one})
