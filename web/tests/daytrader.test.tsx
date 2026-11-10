@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PREFS, DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, MAX_CUSTOM, NO_FILTERS, applyFilters, diffRefresh, earningsLabel, holdOrder, parseTickers, readPrefs, sortRows, orderLists } from "@/features/DayTraderView";
+import { sparkBatches, DEFAULT_PREFS, DT_REFRESH_MS, DT_RETRY_MS, DayTraderView, MAX_CUSTOM, NO_FILTERS, applyFilters, diffRefresh, earningsLabel, holdOrder, parseTickers, readPrefs, sortRows, orderLists } from "@/features/DayTraderView";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { me } from "./fixtures";
@@ -372,5 +372,40 @@ describe("Day Trader remembers your setup", () => {
     expect(p).toEqual({ ...DEFAULT_PREFS, custom: ["AAPL"], filters: { ...NO_FILTERS, minRvol: 2 } });
     // "Type your own tickers" with no tickers opens on Top movers instead of an empty page.
     expect(readPrefs(JSON.stringify({ source: "custom", custom: [] })).source).toBe("movers");
+  });
+});
+
+describe("Day Trader sparklines", () => {
+  it("batches the rows on screen, sorted, 40 per request", () => {
+    const t = Array.from({ length: 85 }, (_, i) => `T${String(i).padStart(2, "0")}`);
+    const b = sparkBatches([...t].reverse().concat("T01"));
+    expect(b.map((x) => x.length)).toEqual([40, 40, 5]);
+    expect(b[0]![0]).toBe("T00");
+    expect(sparkBatches([])).toEqual([]);
+  });
+
+  it("asks for the rows you see, not the top DT scores", async () => {
+    const many = Array.from({ length: 50 }, (_, i) => row({ ticker: `S${String(i).padStart(2, "0")}`, day_trade_score: 90 - i, last: 10, chg_pct: i, session_chg_pct: i }));
+    const asked: string[][] = [];
+    fetchMock.mockImplementation(async (req: Request) => {
+      const url = new URL(req.url);
+      if (url.pathname.endsWith("/sparklines")) {
+        const syms = (url.searchParams.get("symbols") ?? "").split(",");
+        asked.push(syms);
+        return jsonResponse({ checked: syms, series: Object.fromEntries(syms.map((s) => [s, [1, 2, 3]])) });
+      }
+      if (!url.pathname.endsWith("/v1/day-trader")) return jsonResponse({ rows: [], checked: [] });
+      return jsonResponse({ state: "closed", source: "movers", symbols: many.map((r) => r.ticker), missing: 0, as_of: new Date().toISOString(), rows: many });
+    });
+    const u = userEvent.setup();
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    await waitFor(() => expect(tickers()[0]).toMatch(/S00$/));
+    await waitFor(() => expect(asked.at(-1)).toEqual(many.slice(0, 15).map((r) => r.ticker)));
+    // Sort by Chg %: the lowest DT scores (S35-S49) move on screen and get charts too.
+    await u.click(screen.getByRole("button", { name: /^Chg %/ }));
+    await waitFor(() => expect(tickers()[0]).toMatch(/S49$/));
+    await waitFor(() => expect(asked.at(-1)).toEqual(many.slice(35).map((r) => r.ticker)));
+    const s49 = screen.getAllByRole("row").find((r) => within(r).queryByRole("link", { name: /S49/ }))!;
+    await waitFor(() => expect(within(s49).getByRole("img", { name: /S49 today/ })).toBeInTheDocument());
   });
 });

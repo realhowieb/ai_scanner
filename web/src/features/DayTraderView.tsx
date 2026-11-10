@@ -65,7 +65,15 @@ export const DT_REFRESH_MS = 15_000;
 /** After a failed refresh, wait this long before trying again (no tight retry loop). */
 export const DT_RETRY_MS = 30_000;
 const SPARK_EVERY = 8;   // sparklines reload every 8th quote refresh (~2 min; 1-minute bars change slowly)
-const SPARK_MAX = 40;
+const SPARK_MAX = 40;    // symbols per sparklines request (the API checks at most 40)
+/** The rows on screen, as sorted symbol batches of SPARK_MAX: sorted so a re-sort of the same
+ * rows reuses the same requests (and the server's per-batch cache). */
+export function sparkBatches(tickers: string[]): string[][] {
+  const syms = [...new Set(tickers)].sort();
+  const out: string[][] = [];
+  for (let i = 0; i < syms.length; i += SPARK_MAX) out.push(syms.slice(i, i + SPARK_MAX));
+  return out;
+}
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
 
 const QUALITY: Record<string, { label: string; tone?: "up" | "warn" }> = {
@@ -489,11 +497,18 @@ function Live() {
   };
   const listRef = useRef<HTMLElement>(null);
   useSlide(listRef, rows.map((r) => r.ticker).join(","));
-  // Sparklines for the top names; 1-minute bars change slowly, so reload every third quote refresh.
-  const sparkSyms = all.slice(0, SPARK_MAX).map((r) => r.ticker).join(",");
-  const spark = useApi(sparkSyms ? `dt-spark:${sparkSyms}` : null, (signal) =>
-    unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: sparkSyms } }, signal })), Math.floor(tick / SPARK_EVERY));
-  const series = spark.data?.series ?? {};
+  // Sparklines for the rows on screen (in batches of SPARK_MAX), not the top DT scores, so a
+  // re-sorted or filtered list still has a chart on every row. 1-minute bars change slowly,
+  // so they reload every SPARK_EVERY quote refreshes. Charts already loaded stay up while a
+  // new set of rows loads.
+  const batches = useMemo(() => sparkBatches(shownRows.map((r) => r.ticker)), [shownRows]);
+  const sparkKey = batches.map((b) => b.join(",")).join("|");
+  const spark = useApi(sparkKey ? `dt-spark:${sparkKey}` : null, (signal) =>
+    Promise.all(batches.map((b) => unwrap(api.GET("/v1/day-trader/sparklines", { params: { query: { symbols: b.join(",") } }, signal }))))
+      .then((res) => Object.assign({}, ...res.map((r) => r.series ?? {})) as Record<string, number[]>), Math.floor(tick / SPARK_EVERY));
+  const [seenSeries, setSeenSeries] = useState<Record<string, number[]>>({});
+  if (spark.data && Object.keys(spark.data).some((k) => seenSeries[k] !== spark.data![k])) setSeenSeries({ ...seenSeries, ...spark.data });
+  const series = seenSeries;
   const sortBy = (key: SortKey) => {
     setHeld(null);
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "ticker" }));
