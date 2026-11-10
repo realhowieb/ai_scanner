@@ -111,12 +111,13 @@ describe("Day Trader", () => {
     expect(screen.getByText("Day Trader is part of Pro")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     unmount();
-    fetchMock.mockResolvedValue(jsonResponse({ state: "closed", source: "movers", symbols: ["A", "B", "C"], missing: 1, as_of: new Date().toISOString(),
-      rows: [{ ticker: "A", day_trade_score: 40, last: 5 }, { ticker: "B", day_trade_score: 80, last: 7 }] }));
+    fetchMock.mockImplementation(async (req: Request) => new URL(req.url).pathname.endsWith("/v1/watchlists") ? jsonResponse([])
+      : jsonResponse({ state: "closed", source: "movers", symbols: ["A", "B", "C"], missing: 1, as_of: new Date().toISOString(),
+        rows: [{ ticker: "A", day_trade_score: 40, last: 5 }, { ticker: "B", day_trade_score: 80, last: 7 }] }));
     render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
     await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(3));
     expect(screen.getAllByRole("row")[1]).toHaveTextContent("B");
     expect(screen.getByText(/1 symbol has no live quote/)).toBeInTheDocument();
-    expect(new URL((fetchMock.mock.calls[0]![0] as Request).url).searchParams.get("source")).toBe("movers");
+    expect(new URL((fetchMock.mock.calls.map((c) => c[0] as Request).find((r) => new URL(r.url).pathname.endsWith("/v1/day-trader"))!).url).searchParams.get("source")).toBe("movers");
   });
 });
