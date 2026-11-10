@@ -1332,3 +1332,16 @@ a.chip { display: inline-flex; align-items: center; }
 }
 .card:not(.flush) .indicator-checks-table td { padding-right: 20px; white-space: normal; vertical-align: top; }
 .indicator-checks-table tbody th { vertical-align: top; }
+
+/* Plan picked on Pricing, waiting for checkout (features/PlanIntent.tsx) */
+.plan-intent { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+
+/* One real example behind a locked feature (features/LockedPreview.tsx) */
+.locked-preview { margin: 4px 0 0; padding: 8px 12px; border-radius: var(--radius-lg, 8px); background: var(--surface-2, rgba(127,127,127,.08)); font-size: 14px; }
+.locked-preview .tk { font-weight: 600; }
+
+/* Company facts on the stock page */
+.company-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.company-facts div { display: flex; gap: 6px; }
+.company-facts dt { color: var(--muted, #667085); }
+.company-facts dd { margin: 0; font-weight: 500; }

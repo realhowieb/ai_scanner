@@ -17,6 +17,7 @@ import { EarningsCalendar } from "./EarningsCalendar";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { RvolMeter } from "./Sparks";
 import { Hint } from "@/components/Hint";
+import { LockedPreview } from "@/features/LockedPreview";
 
 export const EARNINGS_WHEN = [
   { id: "today", label: "Today" },
@@ -226,7 +227,7 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
   if (f.calendar) return <EarningsCalendar pro={pro} />;
   if (earningsLocked(f, pro)) {
     return (
-      <Card><Locked title="The earnings week ahead is part of Pro" plan="pro">
+      <Card><Locked title="The earnings week ahead is part of Pro" plan="pro" preview={<LockedPreview kind="earnings" />}>
         Who reports today is free. Pro adds tomorrow and the next 7 days, so you can line up setups before they report.
       </Locked></Card>
     );

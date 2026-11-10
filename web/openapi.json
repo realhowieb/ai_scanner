@@ -5508,6 +5508,58 @@
     "title": "ClientErrorReport",
     "type": "object"
    },
+   "CompanyFacts": {
+    "properties": {
+     "industry": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Industry"
+     },
+     "market_cap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Dollars, from Nasdaq's stock screener (refreshed weekly)",
+      "title": "Market Cap"
+     },
+     "sector": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sector"
+     },
+     "size": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Micro, Small, Mid, Large or Mega cap",
+      "title": "Size"
+     }
+    },
+    "title": "CompanyFacts",
+    "type": "object"
+   },
    "CompanyNames": {
     "properties": {
      "names": {
@@ -7283,6 +7335,58 @@
     "title": "EmailPrefsUpdate",
     "type": "object"
    },
+   "FeaturePreview": {
+    "properties": {
+     "as_of": {
+      "title": "As Of",
+      "type": "string"
+     },
+     "count": {
+      "description": "How many names the full feature shows right now",
+      "title": "Count",
+      "type": "integer"
+     },
+     "example": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PreviewExample"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The single top name; null when there is none"
+     },
+     "kind": {
+      "enum": [
+       "day_trader",
+       "gappers",
+       "earnings"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Market session for live previews (premarket, open, closed...)",
+      "title": "State"
+     }
+    },
+    "required": [
+     "kind",
+     "count",
+     "as_of"
+    ],
+    "title": "FeaturePreview",
+    "type": "object"
+   },
    "FeatureRef": {
     "properties": {
      "key": {
@@ -8144,10 +8248,12 @@
       "type": "object"
      },
      "event": {
+      "description": "signup_failed: the sign-up form refused (surface = why: email, password, taken, captcha, ...)",
       "enum": [
        "landing_visit",
        "primary_cta_click",
-       "signup_started"
+       "signup_started",
+       "signup_failed"
       ],
       "title": "Event",
       "type": "string"
@@ -13642,6 +13748,12 @@
       },
       "title": "Tiers",
       "type": "array"
+     },
+     "trial_days": {
+      "default": 0,
+      "description": "Days of free Pro a new account gets when it confirms its email (0 = none)",
+      "title": "Trial Days",
+      "type": "integer"
      }
     },
     "required": [
@@ -13997,6 +14109,25 @@
      "feed"
     ],
     "title": "PremarketGappers",
+    "type": "object"
+   },
+   "PreviewExample": {
+    "properties": {
+     "detail": {
+      "description": "Short line, e.g. \"+6.2% \u00b7 3.4x volume\"",
+      "title": "Detail",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "detail"
+    ],
+    "title": "PreviewExample",
     "type": "object"
    },
    "ProratedQuote": {
@@ -16529,6 +16660,18 @@
       ],
       "title": "Last"
      },
+     "market_cap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Market cap in dollars from Nasdaq's stock screener; null when unknown",
+      "title": "Market Cap"
+     },
      "n_signals": {
       "anyOf": [
        {
@@ -17441,17 +17584,22 @@
       "title": "Turnstile Token"
      },
      "username": {
-      "description": "Shown in the app; can also be used to sign in on the web",
-      "maxLength": 40,
-      "minLength": 1,
-      "title": "Username",
-      "type": "string"
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Display name, shown in the app; can also be used to sign in on the web. Optional: made from the email when left out",
+      "title": "Username"
      }
     },
     "required": [
      "email",
      "password",
-     "username",
      "accept_terms"
     ],
     "title": "SignupBody",
@@ -17957,6 +18105,17 @@
        }
       ],
       "title": "Change Pct"
+     },
+     "company": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CompanyFacts"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Sector, industry and market cap; null when unknown"
      },
      "earnings_days": {
       "anyOf": [
@@ -20588,6 +20747,18 @@
        }
       ],
       "title": "Last"
+     },
+     "market_cap": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Market cap in dollars from Nasdaq's stock screener; null when unknown",
+      "title": "Market Cap"
      },
      "n_signals": {
       "anyOf": [
@@ -25522,7 +25693,7 @@
   },
   "/v1/auth/verify-email": {
    "post": {
-    "description": "Confirm an email address with the token from the verification link. An account that\nsigned up with an invite link starts the free Pro month for both people here. The\nwelcome email (once per account) goes out after the response.",
+    "description": "Confirm an email address with the token from the verification link. An account that\nsigned up with an invite link starts the free Pro month for both people here; any other\nnew Starter account starts its free Pro trial (HSF_NEW_TRIAL_DAYS). The\nwelcome email (once per account) goes out after the response.",
     "operationId": "verify_email_v1_auth_verify_email_post",
     "requestBody": {
      "content": {
@@ -30632,6 +30803,59 @@
     "summary": "Pre-market gappers (Pro)"
    }
   },
+  "/v1/previews/{kind}": {
+   "get": {
+    "description": "One real example and a count for a Pro feature (any plan can ask): the top Day Trader\nmover, the biggest pre-market gap, or the biggest company reporting this week. Shown\non the locked card so Starter sees what an upgrade adds. Shared for 2 minutes.",
+    "operationId": "feature_preview_v1_previews__kind__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "kind",
+      "required": true,
+      "schema": {
+       "enum": [
+        "day_trader",
+        "gappers",
+        "earnings"
+       ],
+       "title": "Kind",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FeaturePreview"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Preview of a locked feature"
+   }
+  },
   "/v1/public/founder-badge/{code}": {
    "get": {
     "operationId": "founder_badge_v1_public_founder_badge__code__get",
@@ -32183,6 +32407,31 @@
        ],
        "description": "Only setups in this sector (see sectors)",
        "title": "Sector"
+      }
+     },
+     {
+      "description": "Only setups of this company size by market cap: micro <$300M, small $300M-2B, mid $2-10B, large $10-200B, mega $200B+",
+      "in": "query",
+      "name": "cap",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "micro",
+          "small",
+          "mid",
+          "large",
+          "mega"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Only setups of this company size by market cap: micro <$300M, small $300M-2B, mid $2-10B, large $10-200B, mega $200B+",
+       "title": "Cap"
       }
      }
     ],

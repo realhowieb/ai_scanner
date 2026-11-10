@@ -62,8 +62,19 @@ const VIEWS = [
 
 const VISIT_KEY = "hsf-landing-visit";
 
-function SignupLink({ surface, children, className = "btn btn-primary" }: { surface: string; children: ReactNode; className?: string }) {
-  return <Link href="/signup" className={className} onClick={() => track("primary_cta_click", surface)}>{children}</Link>;
+function SignupLink({ surface, children, className = "btn btn-primary", href = "/signup" }: { surface: string; children: ReactNode; className?: string; href?: string }) {
+  return <Link href={href} className={className} onClick={() => track("primary_cta_click", surface)}>{children}</Link>;
+}
+
+/** Signed-out plan buttons carry the plan (and billing interval) through sign-up to checkout. */
+function planSignupHref(plan: string, interval: string): string {
+  return plan === "basic" ? "/signup" : `/signup?plan=${plan}&interval=${interval}`;
+}
+
+function planCta(id: string, name: string, trialDays: number): string {
+  if (id === "basic") return "Start free";
+  if (id === "pro" && trialDays > 0) return `Try ${name} free for ${trialDays} days`;
+  return `Choose ${name}`;
 }
 
 export function PublicHeader() {
@@ -198,6 +209,7 @@ export function PlansSection({ table = false }: { table?: boolean }) {
   if (plans.error && !plans.data) return <PlansFallback onRetry={table ? plans.reload : undefined} />;
   if (!plans.data) return <Skeleton rows={6} label="Loading plans" />;
   const { tiers, rows } = plans.data;
+  const trialDays = plans.data.trial_days ?? 0;
   const price = (tier: Plans["tiers"][number]) => interval === "year" && tier.yearly_price ? tier.yearly_price : tier.price;
   return (
     <div className="stack">
@@ -224,13 +236,15 @@ export function PlansSection({ table = false }: { table?: boolean }) {
               ? <Link href={t.id === "basic" ? "/today" : "/account#plan"} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
                 {t.id === "basic" ? "Open HSF" : `Upgrade to ${t.name} in Account`}
               </Link>
-              : <SignupLink surface={`plan_${t.id}`} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
-                {t.id === "basic" ? "Start free" : `Start free, upgrade to ${t.name}`}
+              : <SignupLink surface={`plan_${t.id}`} href={planSignupHref(t.id, interval)} className={t.id === "pro" ? "btn btn-primary" : "btn"}>
+                {planCta(t.id, t.name, trialDays)}
               </SignupLink>}
           </article>
         ))}
       </div>
-      <p className="cap">{signedIn ? "You're signed in, so change your plan from Account." : `Every account starts on ${tiers[0]!.name}. Upgrade from Account after you verify your email.`} Payments run through Stripe and you can cancel any time.</p>
+      <p className="cap">{signedIn ? "You're signed in, so change your plan from Account." : trialDays > 0
+        ? `Every new account gets ${trialDays} days of ${tiers[1]?.name ?? "Pro"} free when you confirm your email. No card needed. Choosing a paid plan takes you to checkout right after you confirm.`
+        : `Every account starts on ${tiers[0]!.name}. Choosing a paid plan takes you to checkout right after you confirm your email.`} Payments run through Stripe and you can cancel any time.</p>
       {table && (
         <><div className="only-narrow card stack-sm"><label className="field">Compare a plan<select value={mobilePlan} onChange={(e) => setMobilePlan(e.target.value)}>{tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
           <dl className="kv">{rows.map((r) => <div key={r.label}><dt>{r.label}</dt><dd>{cell(r[mobilePlan as "basic" | "pro" | "premium"])}</dd></div>)}</dl>

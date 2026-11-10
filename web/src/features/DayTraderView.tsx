@@ -19,6 +19,7 @@ import { StairSteppers } from "@/features/StairSteppers";
 import { useApi } from "@/hooks/useApi";
 import { compact, etTime, num, pct, price } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
+import { LockedPreview } from "@/features/LockedPreview";
 
 type Row = Schemas["DayTraderRow"];
 
@@ -663,6 +664,6 @@ export function DayTraderView() {
   const { can } = useSession();
   return <div className="stack">{can("can_day_trader") ? <Live /> : <>
     <DayTraderHeading />
-    <Card><Locked title="Day Trader is part of Pro" plan="pro">Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>
+    <Card><Locked title="Day Trader is part of Pro" plan="pro" preview={<LockedPreview kind="day_trader" />}>Live quotes, VWAP and relative volume for movers or your watchlist, refreshed through the session.</Locked></Card>
   </>}</div>;
 }

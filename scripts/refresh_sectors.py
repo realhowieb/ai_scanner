@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Refresh sectors.csv (ticker -> sector) from Nasdaq's public stock screener.
+"""Refresh sectors.csv (ticker -> sector, industry, market cap) from Nasdaq's public stock screener.
 
 The screener lists every US-listed stock on Nasdaq, NYSE and NYSE American with its
-sector, so one request covers the whole scan universe. The Scanner's Sector column
-and filter read this file (api/sectors.py); a ticker missing from it simply shows
-no sector.
+sector, industry and market cap, so one request covers the whole scan universe. The
+Scanner's Sector and Size filters and the stock page's company facts read this file
+(api/sectors.py); a ticker missing from it simply shows no sector.
 
 Safety: sectors.csv is only rewritten when the fetch yields a plausible list
 (>= a minimum count and mega-cap sentinels present), so a bad/empty download can
@@ -40,18 +40,28 @@ def _norm(sym: object) -> str:
     return s
 
 
-def parse_screener(payload: dict) -> dict[str, str]:
-    """Screener JSON -> {ticker: sector}; rows without a sector are left out."""
+def _cap(value: object) -> str:
+    """Screener market cap ("2,345,678,000.00", "" or "NA") -> whole dollars as text, or ""."""
+    raw = str(value or "").replace(",", "").replace("$", "").strip()
+    try:
+        cap = float(raw)
+    except ValueError:
+        return ""
+    return str(int(cap)) if cap > 0 else ""
+
+
+def parse_screener(payload: dict) -> dict[str, tuple[str, str, str]]:
+    """Screener JSON -> {ticker: (sector, industry, market_cap)}; rows without a sector are left out."""
     rows = ((payload or {}).get("data") or {}).get("rows") or []
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, str, str]] = {}
     for r in rows:
         sym, sector = _norm(r.get("symbol")), str(r.get("sector") or "").strip()
         if sym and sector:
-            out[sym] = sector
+            out[sym] = (sector, str(r.get("industry") or "").strip(), _cap(r.get("marketCap")))
     return dict(sorted(out.items()))
 
 
-def fetch_sectors() -> dict[str, str]:
+def fetch_sectors() -> dict[str, tuple[str, str, str]]:
     import requests
 
     resp = requests.get(SCREENER_URL, headers=HEADERS, timeout=60)
@@ -59,11 +69,11 @@ def fetch_sectors() -> dict[str, str]:
     return parse_screener(resp.json())
 
 
-def to_csv(sectors: dict[str, str]) -> str:
+def to_csv(sectors: dict[str, tuple[str, str, str]]) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
-    w.writerow(["ticker", "sector"])
-    w.writerows(sectors.items())
+    w.writerow(["ticker", "sector", "industry", "market_cap"])
+    w.writerows((t, *facts) for t, facts in sectors.items())
     return buf.getvalue()
 
 

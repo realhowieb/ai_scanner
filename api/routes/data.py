@@ -128,7 +128,10 @@ def register(app: FastAPI) -> None:
                      min_price: Optional[float] = Query(None, ge=0, le=1_000_000, description="Last price at least this"),
                      max_price: Optional[float] = Query(None, ge=0, le=1_000_000, description="Last price at most this"),
                      min_rvol: Optional[float] = Query(None, ge=0, le=1000, description="Relative volume at least this (x)"),
-                     sector: Optional[str] = Query(None, max_length=64, description="Only setups in this sector (see sectors)")
+                     sector: Optional[str] = Query(None, max_length=64, description="Only setups in this sector (see sectors)"),
+                     cap: Optional[Literal["micro", "small", "mid", "large", "mega"]] = Query(
+                         None, description="Only setups of this company size by market cap: micro <$300M, small "
+                                           "$300M-2B, mid $2-10B, large $10-200B, mega $200B+")
                      ) -> Dict[str, Any]:
         """The latest market scan's HSF setups, ranked as in the Scanner, up to the plan's row cap."""
         from api.scans import latest_scan
@@ -138,7 +141,8 @@ def register(app: FastAPI) -> None:
             raise HTTPException(403, "PreBreakout is a Premium feature.")
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort,
-                           min_price=min_price, max_price=max_price, min_rvol=min_rvol, sector=sector)
+                           min_price=min_price, max_price=max_price, min_rvol=min_rvol, sector=sector,
+                           size=cap)
 
     @app.get("/v1/scans/latest/earnings", response_model=models.EarningsScan,
              responses={**_AUTH, 403: {"description": "Pro feature"}}, summary="Earnings scanner")
@@ -226,6 +230,9 @@ def register(app: FastAPI) -> None:
         except Exception:  # chart data is optional; the page still renders
             bars = {"bars": [], "as_of": None}
         out["indicator_evidence"] = daily_indicator_evidence(bars["bars"])
+        from api.sectors import company_facts
+
+        out["company"] = company_facts(t)
         out.update({"bars": bars["bars"], "bars_as_of": bars["as_of"], "volume_feed": volume_feed(),
                     "watchlists": user_data.watchlists_with(user, t),
                     "alerts": json_safe(user_data.alerts_for(user, t))})

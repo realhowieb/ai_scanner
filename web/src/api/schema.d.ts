@@ -1436,7 +1436,8 @@ export interface paths {
         /**
          * Verify Email
          * @description Confirm an email address with the token from the verification link. An account that
-         *     signed up with an invite link starts the free Pro month for both people here. The
+         *     signed up with an invite link starts the free Pro month for both people here; any other
+         *     new Starter account starts its free Pro trial (HSF_NEW_TRIAL_DAYS). The
          *     welcome email (once per account) goes out after the response.
          */
         post: operations["verify_email_v1_auth_verify_email_post"];
@@ -2807,6 +2808,28 @@ export interface paths {
          *     yesterday's close, biggest moves first, with pre-market volume. Refreshed every 3 min.
          */
         get: operations["premarket_gappers_v1_premarket_gappers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/previews/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview of a locked feature
+         * @description One real example and a count for a Pro feature (any plan can ask): the top Day Trader
+         *     mover, the biggest pre-market gap, or the biggest company reporting this week. Shown
+         *     on the locked card so Starter sees what an upgrade adds. Shared for 2 minutes.
+         */
+        get: operations["feature_preview_v1_previews__kind__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5735,6 +5758,23 @@ export interface components {
             /** Stack */
             stack?: string | null;
         };
+        /** CompanyFacts */
+        CompanyFacts: {
+            /** Industry */
+            industry?: string | null;
+            /**
+             * Market Cap
+             * @description Dollars, from Nasdaq's stock screener (refreshed weekly)
+             */
+            market_cap?: number | null;
+            /** Sector */
+            sector?: string | null;
+            /**
+             * Size
+             * @description Micro, Small, Mid, Large or Mega cap
+             */
+            size?: string | null;
+        };
         /** CompanyNames */
         CompanyNames: {
             /** Names */
@@ -6407,6 +6447,28 @@ export interface components {
             /** Weekly */
             weekly?: boolean | null;
         };
+        /** FeaturePreview */
+        FeaturePreview: {
+            /** As Of */
+            as_of: string;
+            /**
+             * Count
+             * @description How many names the full feature shows right now
+             */
+            count: number;
+            /** @description The single top name; null when there is none */
+            example?: components["schemas"]["PreviewExample"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "day_trader" | "gappers" | "earnings";
+            /**
+             * State
+             * @description Market session for live previews (premarket, open, closed...)
+             */
+            state?: string | null;
+        };
         /** FeatureRef */
         FeatureRef: {
             /** Key */
@@ -6760,9 +6822,10 @@ export interface components {
             };
             /**
              * Event
+             * @description signup_failed: the sign-up form refused (surface = why: email, password, taken, captcha, ...)
              * @enum {string}
              */
-            event: "landing_visit" | "primary_cta_click" | "signup_started";
+            event: "landing_visit" | "primary_cta_click" | "signup_started" | "signup_failed";
             /**
              * Surface
              * @description Which button or page
@@ -8914,6 +8977,12 @@ export interface components {
             rows: components["schemas"]["PlanRow"][];
             /** Tiers */
             tiers: components["schemas"]["PlanTier"][];
+            /**
+             * Trial Days
+             * @description Days of free Pro a new account gets when it confirms its email (0 = none)
+             * @default 0
+             */
+            trial_days: number;
         };
         /** Policy */
         Policy: {
@@ -9050,6 +9119,16 @@ export interface components {
              * @default []
              */
             rows: components["schemas"]["PremarketGapper"][];
+        };
+        /** PreviewExample */
+        PreviewExample: {
+            /**
+             * Detail
+             * @description Short line, e.g. "+6.2% · 3.4x volume"
+             */
+            detail: string;
+            /** Ticker */
+            ticker: string;
         };
         /** ProratedQuote */
         ProratedQuote: {
@@ -10055,6 +10134,11 @@ export interface components {
             indicator_evidence?: components["schemas"]["IndicatorEvidence"] | null;
             /** Last */
             last?: number | null;
+            /**
+             * Market Cap
+             * @description Market cap in dollars from Nasdaq's stock screener; null when unknown
+             */
+            market_cap?: number | null;
             /** N Signals */
             n_signals?: number | null;
             /**
@@ -10429,9 +10513,9 @@ export interface components {
             turnstile_token?: string | null;
             /**
              * Username
-             * @description Shown in the app; can also be used to sign in on the web
+             * @description Display name, shown in the app; can also be used to sign in on the web. Optional: made from the email when left out
              */
-            username: string;
+            username?: string | null;
         };
         /** SignupResult */
         SignupResult: {
@@ -10663,6 +10747,8 @@ export interface components {
             breakout_score?: number | null;
             /** Change Pct */
             change_pct?: number | null;
+            /** @description Sector, industry and market cap; null when unknown */
+            company?: components["schemas"]["CompanyFacts"] | null;
             /** Earnings Days */
             earnings_days?: number | null;
             /**
@@ -11672,6 +11758,11 @@ export interface components {
             indicator_evidence?: components["schemas"]["IndicatorEvidence"] | null;
             /** Last */
             last?: number | null;
+            /**
+             * Market Cap
+             * @description Market cap in dollars from Nasdaq's stock screener; null when unknown
+             */
+            market_cap?: number | null;
             /** N Signals */
             n_signals?: number | null;
             /**
@@ -19722,6 +19813,44 @@ export interface operations {
             };
         };
     };
+    feature_preview_v1_previews__kind__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "day_trader" | "gappers" | "earnings";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeaturePreview"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     founder_badge_v1_public_founder_badge__code__get: {
         parameters: {
             query?: never;
@@ -20805,6 +20934,8 @@ export interface operations {
                 min_rvol?: number | null;
                 /** @description Only setups in this sector (see sectors) */
                 sector?: string | null;
+                /** @description Only setups of this company size by market cap: micro <$300M, small $300M-2B, mid $2-10B, large $10-200B, mega $200B+ */
+                cap?: ("micro" | "small" | "mid" | "large" | "mega") | null;
             };
             header?: never;
             path?: never;

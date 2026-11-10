@@ -220,7 +220,8 @@ export async function changePassword(req: Request, upstream: Upstream): Promise<
   }
 }
 
-type Fields = Record<string, "string" | "boolean">;
+/** "string?" is optional: left out of the result when missing or empty. */
+type Fields = Record<string, "string" | "string?" | "boolean">;
 
 async function readFields(req: Request, fields: Fields): Promise<Record<string, string | boolean> | null> {
   let body: Record<string, unknown>;
@@ -233,6 +234,7 @@ async function readFields(req: Request, fields: Fields): Promise<Record<string, 
   for (const [k, t] of Object.entries(fields)) {
     const v = body[k];
     if (t === "boolean") out[k] = v === true;
+    else if (t === "string?") { if (typeof v === "string" && v.trim().length > 0 && v.length <= 1024) out[k] = v; }
     else if (typeof v === "string" && v.length > 0 && v.length <= 1024) out[k] = v;
     else return null;
   }
@@ -295,7 +297,7 @@ export async function signup(req: Request, upstream: Upstream, allow: Set<string
   if (!sameOrigin(req)) return json({ detail: "Cross-site request refused." }, 403, rid);
   const attribution = cleanAttribution(((await req.clone().json().catch(() => null)) as { attribution?: unknown } | null)?.attribution);
   const token = await turnstileToken(req);
-  const body = await readFields(req, { email: "string", password: "string", username: "string", accept_terms: "boolean" });
+  const body = await readFields(req, { email: "string", password: "string", username: "string?", accept_terms: "boolean" });
   if (!body) return json({ detail: "Fill in every field." }, 400, rid);
   const email = String(body.email).trim().toLowerCase();
   if (allow && !allow.has(email)) return json({ detail: NOT_INVITED, code: "not_invited" }, 403, rid);

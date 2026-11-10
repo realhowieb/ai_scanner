@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ForgotPasswordForm, ResetPasswordForm, SignupForm, VerifyEmail } from "@/features/AuthForms";
+import { ForgotPasswordForm, ResetPasswordForm, SignupForm, VerifyEmail, signupFailureKind } from "@/features/AuthForms";
 
 import { jsonResponse } from "./helpers";
 
@@ -31,22 +31,18 @@ describe("sign-up and account recovery pages", () => {
     }
   });
 
-  it("sign-up: needs matching passwords and the agreement, shows the API's rule, then opens Today", async () => {
+  it("sign-up: email, password and the agreement, shows the API's rule, then opens Today", async () => {
     const answers = [jsonResponse({ detail: "Password must be at least 10 characters." }, 400),
       jsonResponse({ ok: true, email: "a@b.co", verification_sent: true }, 201)];
     fetchMock.mockImplementation(async (url: string) => (url.endsWith("/v1/events") ? new Response(null, { status: 202 }) : answers.shift()!));
     localStorage.setItem("hsf-attribution", JSON.stringify({ at: Date.now(), attribution: { utm_source: "reddit" } }));
     const u = userEvent.setup();
     render(<SignupForm />);
+    expect(screen.queryByLabelText("Display name")).toBeNull();
+    expect(screen.queryByLabelText("Repeat password")).toBeNull();
     await u.type(screen.getByLabelText("Email"), "a@b.co");
-    await u.type(screen.getByLabelText("Display name"), "ann");
     await u.type(screen.getByLabelText("Password"), "short");
-    await u.type(screen.getByLabelText("Repeat password"), "shorx");
-    expect(screen.getByText("The passwords don't match.")).toBeInTheDocument();
     const go = screen.getByRole("button", { name: "Create account" });
-    expect(go).toBeDisabled();
-    await u.clear(screen.getByLabelText("Repeat password"));
-    await u.type(screen.getByLabelText("Repeat password"), "short");
     expect(go).toBeDisabled();
     await u.click(screen.getByRole("checkbox"));
     await u.click(go);
@@ -54,31 +50,43 @@ describe("sign-up and account recovery pages", () => {
     await u.click(go);
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/today"));
     const signups = bodies().filter(([url]) => url === "/api/auth/signup");
-    expect(signups[1]).toEqual(["/api/auth/signup", { email: "a@b.co", username: "ann", password: "short", accept_terms: true,
+    expect(signups[1]).toEqual(["/api/auth/signup", { email: "a@b.co", password: "short", accept_terms: true,
       attribution: { utm_source: "reddit" } }]);
-    // Each attempt also records "sign-up started" with the first visit's tags.
-    expect(bodies().filter(([url]) => url === "/api/public/v1/events").map(([, b]) => b.event)).toEqual(["signup_started", "signup_started"]);
+    // Each attempt records "sign-up started"; the refused one also records why (no personal data).
+    const events = bodies().filter(([url]) => url === "/api/public/v1/events").map(([, b]) => [b.event, b.surface]);
+    expect(events).toEqual([["signup_started", "signup_form"], ["signup_failed", "password"], ["signup_started", "signup_form"]]);
     localStorage.clear();
   });
 
-  it("keeps password guidance available and reveals both fields without submitting", async () => {
+  it("keeps the plan picked on Pricing for checkout after the email is confirmed", async () => {
+    search = new URLSearchParams("plan=premium&interval=year");
+    render(<SignupForm />);
+    expect(screen.getByText(/You picked Premium/)).toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("hsf-plan-intent") || "{}")).toMatchObject({ plan: "premium", interval: "year" }));
+    localStorage.clear();
+  });
+
+  it("keeps password guidance available and reveals the password without submitting", async () => {
     const u = userEvent.setup();
     render(<SignupForm />);
     const password = screen.getByLabelText("Password");
-    const repeat = screen.getByLabelText("Repeat password");
-    expect(password).toHaveAccessibleDescription(/at least 10 characters/);
-    expect(screen.getByLabelText("Display name")).toHaveAccessibleDescription(/use it to sign in/);
+    expect(password).toHaveAccessibleDescription(/At least 10 characters/);
     expect(screen.getByRole("link", { name: "HSFinest.com home" })).toHaveAttribute("href", "/");
     await u.type(password, "example-passphrase");
-    await u.type(repeat, "example-passphrase");
-    await u.click(screen.getByRole("button", { name: "Show passwords" }));
+    await u.click(screen.getByRole("button", { name: "Show password" }));
     expect(password).toHaveAttribute("type", "text");
-    expect(repeat).toHaveAttribute("type", "text");
     expect(password).toHaveValue("example-passphrase");
-    await u.click(screen.getByRole("button", { name: "Hide passwords" }));
+    await u.click(screen.getByRole("button", { name: "Hide password" }));
     expect(password).toHaveAttribute("type", "password");
-    expect(repeat).toHaveAttribute("type", "password");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("names why a sign-up was refused, without personal data", () => {
+    expect(signupFailureKind(409, "That email or username is already taken.")).toBe("taken");
+    expect(signupFailureKind(400, "Password must be at least 10 characters.")).toBe("password");
+    expect(signupFailureKind(400, "Please enter a valid email address.")).toBe("email");
+    expect(signupFailureKind(0, "Couldn't reach HSF.")).toBe("network");
+    expect(signupFailureKind(503, "Try again")).toBe("server");
   });
 
   it("forgot password: same answer either way", async () => {

@@ -237,7 +237,7 @@ def load_signup_funnel(days: int = 30) -> dict[str, Any]:
             pass
 
 
-MARKETING_EVENTS = ("landing_visit", "primary_cta_click", "signup_started", "signup_completed",
+MARKETING_EVENTS = ("landing_visit", "primary_cta_click", "signup_started", "signup_failed", "signup_completed",
                     "successful_paid_conversion")
 
 

@@ -17,6 +17,7 @@ import { NavIcon } from "@/components/NavIcon";
 import { WhatsNew } from "@/components/WhatsNew";
 import { FOUNDER_HREF, FoundingNudge, usePublicFounding } from "@/features/FoundingBanner";
 import { useSession } from "@/session/SessionProvider";
+import { PlanIntentBanner } from "@/features/PlanIntent";
 
 /** Desktop sidebar groups (every section, always visible). `tab`: in the phone tab bar
  * (the rest sit under the tab bar's More). */
@@ -179,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <InstallHint />
       <WhatsNew />
       <FeedbackDialog open={feedback} onClose={() => setFeedback(false)} />
-      <main id="main" className="main"><PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
+      <main id="main" className="main">{me && !path.startsWith("/account") && <PlanIntentBanner me={me} />}<PreviousPage.Provider value={trail.prev}>{children}</PreviousPage.Provider></main>
       <footer className="foot">
         <p className="cap">HSF Score is an opportunity ranking, not a probability of profit. Educational research only, not financial advice. <Link href="/how-hsf-works">How HSF works</Link> · <button type="button" className="link-btn cap" onClick={() => setFeedback(true)}>Send feedback</button> · <LegalLinks refunds={!!founding} /></p>
         <p className="cap">Data: scheduled HSF scans · Alpaca. Setup prices come from the latest scan; SPY, QQQ and the price strip are quotes refreshed every few minutes.</p>
