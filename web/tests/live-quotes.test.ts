@@ -14,9 +14,9 @@ it("takes Last, Chg % and Gap % from live trades and keeps everything else", () 
     BBB: { last: 19, chg_pct: null, gap_pct: null, source: "trade" },
     CCC: { last: 31, chg_pct: 5, gap_pct: 2, source: "daily_bar" },
   });
-  expect(out[0]).toEqual({ ticker: "AAA", last: 11, chg_pct: 3.2, gap_pct: 0.4, score: 90 });
+  expect(out[0]).toEqual({ ticker: "AAA", scan_last: 10, last: 11, chg_pct: 3.2, gap_pct: 0.4, score: 90 });
   // No change or gap in the quote keeps the scan's.
-  expect(out[1]).toEqual({ ticker: "BBB", last: 19, chg_pct: -1, gap_pct: null, score: 80 });
+  expect(out[1]).toEqual({ ticker: "BBB", scan_last: 20, last: 19, chg_pct: -1, gap_pct: null, score: 80 });
   // A daily-bar fallback is not a live trade.
   expect(out[2]).toBe(rows[2]);
 });

@@ -360,6 +360,16 @@ class ScanSetup(Setup):
     prob_rank: Optional[int] = Field(default=None, description=(
         "Premium. Where the raw PreBreakout model score sits among this scan's setups, as "
         "'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob."))
+    rank: Optional[int] = Field(default=None, description="Position in the whole latest scan's HSF ranking (1 = best)")
+    previous_rank: Optional[int] = Field(default=None, description=(
+        "Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan "
+        "(see LatestScan.previous_scan_at)"))
+    sector: Optional[str] = Field(default=None, description="Sector from Nasdaq's stock screener; null when unknown")
+
+
+class SectorCount(BaseModel):
+    sector: str
+    count: int
 
 
 class LatestScan(BaseModel):
@@ -370,6 +380,10 @@ class LatestScan(BaseModel):
     max_results: int = Field(description="Rows this plan sees (Starter 25, Pro 100, Premium 200)")
     limited: bool = Field(description="True when the plan cap hides some matching setups")
     stale: Optional[bool] = Field(default=None, description="A scheduled full-market scan was missed (see Market.stale)")
+    previous_scan_at: Optional[str] = Field(default=None, description=(
+        "ISO time of the scan that previous_rank compares with; null when there is none (no row is new then)"))
+    sectors: List[SectorCount] = Field(default=[], description=(
+        "Sectors among the plan's rows that pass the other filters, most first; the Sector filter's choices"))
     setups: List[ScanSetup] = []
 
 

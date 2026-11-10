@@ -76,8 +76,9 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
 def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset: int,
                 min_score: int = 0, signal: Optional[str] = None, sort: str = "score",
                 min_price: Optional[float] = None, max_price: Optional[float] = None,
-                min_rvol: Optional[float] = None) -> Dict[str, Any]:
+                min_rvol: Optional[float] = None, sector: Optional[str] = None) -> Dict[str, Any]:
     from analytics.data_freshness import describe
+    from api.sectors import sector_for
     from ui.entitlement_view import redact_prebreakout_rows
 
     cap = max_results_for(tier)
@@ -88,6 +89,11 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     allowed = bool(entitlements.get("can_early_breakout"))
     opps = redact_prebreakout_rows(run_opportunities(int(runs[0]["id"])), allowed=allowed)
     scan_total = len(opps)
+    # Each row's place in the whole scan, and in the scan before (shared with the Brief's
+    # radar and watchlist intel, so the previous run is usually cached already).
+    rank = {id(o): i + 1 for i, o in enumerate(opps)}
+    prev_rank = previous_ranks(runs)
+    sector_of = {id(o): sector_for(o.get("ticker")) for o in opps}
     if min_score:
         opps = [o for o in opps if int(o.get("score") or 0) >= int(min_score)]
     # Price and relative volume use the scan's own numbers, like scan alerts (SCAN_MATCH);
@@ -107,6 +113,13 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
         opps = [o for o in opps if id(o) in picked]
     elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
+    # Sector choices come from the rows the other filters leave, before the sector itself.
+    sector_counts: Dict[str, int] = {}
+    for o in opps[:cap]:
+        if sector_of[id(o)]:
+            sector_counts[sector_of[id(o)]] = sector_counts.get(sector_of[id(o)], 0) + 1
+    if sector:
+        opps = [o for o in opps if sector_of[id(o)] == sector]
     visible = opps[:cap]
     if sort != "score":
         # Re-orders only the rows the plan already sees (its top HSF-ranked setups); missing values last.
@@ -118,7 +131,25 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "max_results": cap, "limited": len(opps) > cap,
             "stale": scan_freshness(runs[0]["created_at"], dt.datetime.now(dt.timezone.utc))["stale"],
             'freshness': run_freshness(runs[0]),
-            "setups": [_scan_row(o) for o in visible[offset:offset + limit]]}
+            "previous_scan_at": _iso(runs[1]["created_at"]) if prev_rank is not None else None,
+            "sectors": [{"sector": k, "count": v} for k, v in sorted(sector_counts.items(), key=lambda kv: (-kv[1], kv[0]))],
+            "setups": [{**_scan_row(o), "rank": rank[id(o)], "sector": sector_of[id(o)],
+                        "previous_rank": (prev_rank or {}).get(str(o.get("ticker") or "").upper())}
+                       for o in visible[offset:offset + limit]]}
+
+
+def previous_ranks(runs: List[Dict[str, Any]]) -> Optional[Dict[str, int]]:
+    """Ticker -> rank in the scan before the latest one; None when there is no earlier scan
+    (or it can't be read), so rows aren't all marked new."""
+    if len(runs) < 2:
+        return None
+    try:
+        prev = run_opportunities(int(runs[1]["id"]))
+    except Exception:
+        return None
+    if not prev:
+        return None
+    return {str(o.get("ticker") or "").upper(): i + 1 for i, o in enumerate(prev)}
 
 
 # ---- Setup mix (Today) -------------------------------------------------------------------------
