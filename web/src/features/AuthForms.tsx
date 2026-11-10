@@ -17,6 +17,7 @@ import { messageFrom, newRequestId } from "@/api/client";
 import { WAKING_UP, useSlow } from "@/components/ui";
 import { captureAttribution, track } from "@/lib/funnel";
 import { safeNext, withNext } from "@/lib/nextPath";
+import { PLAN_NAME, parseInterval, parsePlan, readPlanIntent, savePlanIntent, upgradeHref } from "@/lib/planIntent";
 
 type Outcome = { ok: boolean; status: number; body: Record<string, unknown> | null; requestId: string | null };
 
@@ -56,6 +57,13 @@ export function AuthShell({ title, subtitle, mark, children }: { title: string; 
 
 const noSubscribe = () => () => {};
 
+// useSyncExternalStore needs a stable snapshot, so the stored intent is read once per page load.
+let intentSnapshot: ReturnType<typeof readPlanIntent> | undefined;
+function readPlanIntentCached() {
+  if (intentSnapshot === undefined) intentSnapshot = readPlanIntent();
+  return intentSnapshot;
+}
+
 /** A shared stock link sends people to that stock after sign-up (?next=/stocks/X). */
 function nextAfterSignup(): string {
   try {
@@ -65,16 +73,31 @@ function nextAfterSignup(): string {
   }
 }
 
-/** `terms`: the Terms of Service are published, so the agreement links them. */
+/** Why the API refused a sign-up, as a short tag for the funnel (no personal data). */
+export function signupFailureKind(status: number, message: string): string {
+  const m = message.toLowerCase();
+  if (status === 0) return "network";
+  if (status === 409 || m.includes("taken")) return "taken";
+  if (m.includes("verification") || m.includes("captcha") || m.includes("turnstile") || m.includes("security check")) return "captcha";
+  if (m.includes("password")) return "password";
+  if (m.includes("email")) return "email";
+  if (m.includes("agreement") || m.includes("terms")) return "terms";
+  if (status === 429) return "rate_limited";
+  return status >= 500 ? "server" : "other";
+}
+
+/** `terms`: the Terms of Service are published, so the agreement links them. A `?plan=pro|premium`
+ * from Pricing is kept (lib/planIntent) so the account lands on that plan's checkout. */
 export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
   const fieldId = useId();
-  const [showPasswords, setShowPasswords] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
   const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
   const [agree, setAgree] = useState(false);
-  const nextParam = useSearchParams().get("next");
+  const params = useSearchParams();
+  const nextParam = params.get("next");
+  const plan = parsePlan(params.get("plan"));
+  const interval = parseInterval(params.get("interval"));
   const invited = useSyncExternalStore(noSubscribe, () => !!captureAttribution().ref, () => false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,50 +105,47 @@ export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
   const [captchaReset, setCaptchaReset] = useState(0);
   const needsCaptcha = !!TURNSTILE_SITE_KEY && !captcha;
   const slow = useSlow(busy);
-  const mismatch = !!pw2 && pw !== pw2;
+  useEffect(() => {
+    if (plan) savePlanIntent(plan, interval);
+  }, [plan, interval]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (pw !== pw2) return;
     setBusy(true);
     setError(null);
     const attribution = captureAttribution();
-    track("signup_started", "signup_form");
-    const o = await postAuth("signup", { email, username, password: pw, accept_terms: agree, attribution, ...(captcha ? { turnstile_token: captcha } : {}) });
+    track("signup_started", plan ? `signup_form_${plan}` : "signup_form");
+    const o = await postAuth("signup", { email, password: pw, accept_terms: agree, attribution, ...(captcha ? { turnstile_token: captcha } : {}) });
     if (o.ok) {
       captureUsage("signup_completed");
       // A full page load: the new session's cookies are already set.
       window.location.assign(nextAfterSignup());
       return;
     }
-    setError(errorOf(o));
+    const message = errorOf(o);
+    track("signup_failed", signupFailureKind(o.status, message));
+    setError(message);
     setCaptchaReset((n) => n + 1);
     setBusy(false);
   };
   return (
     <form onSubmit={submit} noValidate>
       <AuthShell title="Create your account">
-        <p className="cap">Starter plan, free. Upgrade any time from Account.</p>
+        {plan
+          ? <p className="notice" role="status">You picked {PLAN_NAME[plan]}. Create your account and confirm your email, and we&apos;ll take you straight to checkout.</p>
+          : <p className="cap">Free to start. No card needed.</p>}
         {invited && <p className="notice" role="status">You were invited by a friend. Confirm your email after signing up and you both get free Pro time.</p>}
         <label className="field"><span>Email</span>
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
-        <label className="field"><span>Display name</span>
-          <input autoComplete="nickname" aria-describedby={`${fieldId}-name-help`} required maxLength={40} value={username} onChange={(e) => setUsername(e.target.value)} />
-        </label>
-        <p className="cap" id={`${fieldId}-name-help`}>Shown in your account. You can also use it to sign in.</p>
-        <div className="password-guidance">
-          <p className="cap" id={`${fieldId}-password-help`}>Use at least 10 characters. Avoid common passwords, repeated patterns, and your name or email.</p>
-          <button type="button" className="btn btn-sm" aria-pressed={showPasswords} aria-controls={`${fieldId}-password ${fieldId}-repeat`}
-            onClick={() => setShowPasswords((v) => !v)}>{showPasswords ? "Hide passwords" : "Show passwords"}</button>
-        </div>
         <label className="field"><span>Password</span>
-          <input id={`${fieldId}-password`} type={showPasswords ? "text" : "password"} autoComplete="new-password" required value={pw}
+          <input id={`${fieldId}-password`} type={showPassword ? "text" : "password"} autoComplete="new-password" required value={pw}
             aria-describedby={`${fieldId}-password-help`} onChange={(e) => setPw(e.target.value)} />
         </label>
-        <label className="field"><span>Repeat password</span>
-          <input id={`${fieldId}-repeat`} type={showPasswords ? "text" : "password"} autoComplete="new-password" required value={pw2} onChange={(e) => setPw2(e.target.value)} aria-invalid={mismatch || undefined} aria-describedby={mismatch ? `${fieldId}-mismatch` : undefined} />
-        </label>
-        {mismatch && <p className="form-error" id={`${fieldId}-mismatch`} role="status">The passwords don&apos;t match.</p>}
+        <div className="password-guidance">
+          <p className="cap" id={`${fieldId}-password-help`}>At least 10 characters. Avoid common passwords and your email.</p>
+          <button type="button" className="btn btn-sm" aria-pressed={showPassword} aria-controls={`${fieldId}-password`}
+            onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide password" : "Show password"}</button>
+        </div>
         <label className="check"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           {terms ? (
             <span>I agree to the <Link href="/terms" target="_blank">Terms of Service</Link> and have read the{" "}
@@ -133,11 +153,11 @@ export function SignupForm({ terms = false }: { terms?: boolean } = {}) {
           ) : <span>I agree to use this tool for educational/informational purposes only.</span>}</label>
         <Turnstile action="signup" onToken={setCaptcha} resetKey={captchaReset} />
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !username || !pw || pw !== pw2 || !agree || needsCaptcha}>
+        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email || !pw || !agree || needsCaptcha}>
           {busy ? "Creating account…" : "Create account"}
         </button>
         {slow && <p className="cap" role="status">{WAKING_UP}</p>}
-        <p className="cap">Next, you&apos;ll open Today. We&apos;ll email a verification link so you can upgrade and receive email alerts.</p>
+        <p className="cap">Next, you&apos;ll open Today. We&apos;ll email a link to confirm your address{plan ? ", then checkout opens" : ""}. You can change your display name in Account.</p>
         <p className="cap login-links">Already have an account? <Link href={withNext("/login", nextParam)}>Sign in</Link></p>
       </AuthShell>
     </form>
@@ -231,6 +251,7 @@ export function ResetPasswordForm() {
 export function VerifyEmail() {
   const token = useSearchParams().get("token") || "";
   const [state, setState] = useState<{ ok: boolean; text: string } | null>(null);
+  const intent = useSyncExternalStore(noSubscribe, readPlanIntentCached, () => null);
   const started = useRef(false);
   useEffect(() => {
     if (!token || started.current) return;
@@ -242,9 +263,11 @@ export function VerifyEmail() {
     <AuthShell title="Verify your email">
       {!token ? <p className="body-sm">Open the link from the verification email. Signed in, you can send a new one from Account.</p>
         : !state ? <p className="cap" role="status">Checking your link…</p>
-        : state.ok ? <p className="notice" role="status">{state.text} You can upgrade and get email alerts now.</p>
+        : state.ok ? <p className="notice" role="status">{state.text} {intent ? `Next, finish choosing ${PLAN_NAME[intent.plan]}.` : "You can upgrade and get email alerts now."}</p>
         : <p className="form-error" role="alert">{state.text} Signed in, you can send a new link from Account.</p>}
-      <div className="row-actions"><Link href="/today" className="btn btn-primary">Open HSF</Link><Link href="/account">Account</Link></div>
+      {state?.ok && intent
+        ? <div className="row-actions"><Link href={upgradeHref(intent.plan, intent.interval)} className="btn btn-primary">Continue to {PLAN_NAME[intent.plan]} checkout</Link><Link href="/today">Not now</Link></div>
+        : <div className="row-actions"><Link href="/today" className="btn btn-primary">Open HSF</Link><Link href="/account">Account</Link></div>}
     </AuthShell>
   );
 }

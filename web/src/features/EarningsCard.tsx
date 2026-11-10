@@ -6,6 +6,7 @@ import { useApi } from "@/hooks/useApi";
 import { useSession } from "@/session/SessionProvider";
 
 import { SectionFailed } from "./TodayView";
+import { LockedPreview } from "@/features/LockedPreview";
 
 const TIMES: Record<string, string> = { bmo: "Before open", amc: "After close" };
 const ROW_LIMIT = 8;
@@ -30,7 +31,7 @@ export function EarningsCard({ tickers, watched }: { tickers: string[] | null; w
   if (!allowed) {
     return (
       <Card title="Earnings this week" id="earn">
-        <Locked title="Earnings this week is part of Pro" plan="pro">Who reports today is free on the Brief. Pro shows which names on your watchlist and in today&apos;s top setups report this week, before or after the bell.</Locked>
+        <Locked title="Earnings this week is part of Pro" plan="pro" preview={<LockedPreview kind="earnings" />}>Who reports today is free on the Brief. Pro shows which names on your watchlist and in today&apos;s top setups report this week, before or after the bell.</Locked>
       </Card>
     );
   }

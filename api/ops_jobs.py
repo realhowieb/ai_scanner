@@ -41,6 +41,7 @@ Env (all default on; set to 0 to stop one):
     HSF_WEEKLY_EARNINGS_ENABLED   weekly earnings email (services.weekly_earnings)
     HSF_BUSINESS_EMAIL_ENABLED    business email (services.business_report)
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
+    HSF_CHECKOUT_FOLLOWUP_ENABLED one note for an unfinished checkout (services.checkout_followup)
     HSF_FOUNDER_FEEDBACK_NUDGE    founder feedback note
     HSF_SOCIAL_DRAFTS_ENABLED     social drafts to Buffer
     HSF_SCHEDULED_SCANS_ENABLED   scheduled custom scans (services.scheduled_scans)
@@ -337,6 +338,10 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
         out: Dict[str, Any] = {"trial_ended": lifecycle_emails.run_trial_ended(now=now)}
         if _on("HSF_ONBOARDING_EMAILS_ENABLED"):
             out["onboarding"] = onboarding_emails.run(now=now)
+        if _on("HSF_CHECKOUT_FOLLOWUP_ENABLED"):
+            from services import checkout_followup
+
+            out["checkout_followup"] = checkout_followup.run(now=now)
         return out
 
     _run_once("daily_account_mail", daily_mail_due(now), daily)

@@ -83,10 +83,12 @@ class SectorFileTests(unittest.TestCase):
         from scripts.refresh_sectors import parse_screener, to_csv
 
         got = parse_screener({"data": {"rows": [
-            {"symbol": "BRK/B", "sector": "Finance"}, {"symbol": "AAPL ", "sector": "Technology"},
+            {"symbol": "BRK/B", "sector": "Finance", "industry": "Insurance", "marketCap": "1,000,000,000,000.00"},
+            {"symbol": "AAPL ", "sector": "Technology", "marketCap": "NA"},
             {"symbol": "XYZ", "sector": ""}]}})
-        self.assertEqual(got, {"AAPL": "Technology", "BRK-B": "Finance"})
-        self.assertEqual(to_csv(got), "ticker,sector\nAAPL,Technology\nBRK-B,Finance\n")
+        self.assertEqual(got, {"AAPL": ("Technology", "", ""), "BRK-B": ("Finance", "Insurance", "1000000000000")})
+        self.assertEqual(to_csv(got), "ticker,sector,industry,market_cap\nAAPL,Technology,,\n"
+                                      "BRK-B,Finance,Insurance,1000000000000\n")
 
 
 if __name__ == "__main__":

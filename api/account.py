@@ -60,19 +60,46 @@ def send_verification(email: str) -> bool:
 
 
 # ---- sign-up -------------------------------------------------------------------------------------
-def signup(email: str, password: str, username: str, accept_terms: bool) -> Dict[str, Any]:
-    """Create a Starter (free) account with the web form's rules. Returns {email, verification_sent}."""
+def _name_from_email(email: str) -> str:
+    """A display name from the email's first part ("jane.doe+x@..." -> "jane.doe"), letters,
+    digits, dot, dash and underscore only. The sign-up form no longer asks for one."""
+    local = email.split("@", 1)[0].split("+", 1)[0]
+    name = re.sub(r"[^A-Za-z0-9._-]", "", local).strip("._-")[:USERNAME_MAX - 5]
+    return name or "trader"
+
+
+def _free_name(base: str) -> str:
+    """`base`, or base-1234 when another account already shows that name."""
+    import secrets
+
+    from db import users
+
+    if users.find_username_by_display_name(base) is None:
+        return base
+    for _ in range(5):
+        name = f"{base}-{secrets.randbelow(9000) + 1000}"
+        if users.find_username_by_display_name(name) is None:
+            return name
+    return f"{base}-{secrets.token_hex(3)}"
+
+
+def signup(email: str, password: str, username: Optional[str], accept_terms: bool) -> Dict[str, Any]:
+    """Create a Starter (free) account with the web form's rules. Returns {email, verification_sent}.
+    `username` (display name) is optional: without one it comes from the email."""
     from db import users
 
     email = (email or "").strip().lower()
     username = (username or "").strip()
-    if not username:
-        raise AccountError("Please choose a username.")
     if "@" in username or " " in username or len(username) > USERNAME_MAX:
         raise AccountError("Username cannot contain spaces or '@'.")
     if not EMAIL_RE.match(email):
         raise AccountError("Please enter a valid email address.")
-    _check_password(password, email=email, username=username)
+    _check_password(password, email=email, username=username or None)
+    if not username:
+        try:
+            username = _free_name(_name_from_email(email))
+        except Exception as e:
+            raise DatabaseUnavailable("database unavailable") from e
     if not accept_terms:
         raise AccountError("Please confirm the usage agreement to continue.")
     try:

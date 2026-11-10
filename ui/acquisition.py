@@ -29,6 +29,7 @@ ALLOWED_EVENTS = {
     "landing_visit",
     "primary_cta_click",
     "signup_started",
+    "signup_failed",
     "signup_completed",
     "first_authenticated_session",
     "return_session",

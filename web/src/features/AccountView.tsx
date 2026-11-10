@@ -25,6 +25,7 @@ import { UsageAnalyticsPreference } from "@/components/UsageAnalytics";
 
 import { InviteFriendCard } from "./InviteFriend";
 import { FoundingSwitchNote } from "./FoundingBanner";
+import { AutoCheckout } from "./PlanIntent";
 
 /** What each entitlement means to a customer. Unknown flags are not shown. */
 export const FEATURE_LABELS: Record<string, string> = {
@@ -112,11 +113,12 @@ function PlanCard({ me }: { me: Me }) {
   const paid = (me.plan === "pro" || me.plan === "premium") && !trial;
   return (
     <Card title="Plan" id="plan" aside={<Pill tone={paid ? "gold" : undefined}>{me.plan_label}</Pill>}>
+      <AutoCheckout me={me} />
       {me.plan === "admin" ? (
         <p className="body-sm">Admin account. Every feature is on and billing doesn&apos;t apply.</p>
       ) : trial ? (
         <div className="stack-sm">
-          <p className="notice" role="status">You have free Pro from an invite until {etDate(trial)}. After that your account goes back to Starter unless you upgrade. Nothing is charged.</p>
+          <p className="notice" role="status">You have free Pro until {etDate(trial)}. After that your account goes back to Starter unless you upgrade. Nothing is charged.</p>
           <BillingIntervalToggle />
           <div className="row-actions">
             <UpgradeButton plan="pro" label="Keep Pro" />

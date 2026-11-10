@@ -210,6 +210,22 @@ def _extend(cur, sq: bool, user_id: str, days: int, cap_days: int, reason: str, 
     return _iso(until)
 
 
+def extend_grant(user_id: str, days: int, cap_days: int, reason: str) -> str:
+    """Add `days` of free Pro to the account (on top of any it still has, at most
+    `cap_days` from now). Returns the new end time (ISO)."""
+    conn, sq = _connect()
+    try:
+        cur = conn.cursor()
+        until = _extend(cur, sq, user_id.strip().lower(), int(days), int(cap_days), reason, _now())
+        conn.commit()
+        return until
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _close(conn, sq)
+
+
 def rewarded_count(referrer: str, *, since: Optional[str] = None, exclude: Optional[str] = None) -> int:
     """How many of this account's invites verified (optionally since an ISO time, and
     leaving out one referred account)."""
@@ -361,6 +377,24 @@ def emails_sent(kind: str, ref: str = "") -> Dict[str, str]:
         return {str(u): str(t) for u, t in cur.fetchall()}
     finally:
         _close(conn, sq)
+
+
+def log_since(kind: str, since: dt.datetime) -> list:
+    """[(user_id, ref, sent_at text)] for every row of one kind logged since `since`, oldest
+    first. The lifecycle log also records events that are not emails (checkout_started)."""
+    conn, sq = _lifecycle_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(_sql("SELECT user_id, ref, sent_at FROM hsf_lifecycle_emails WHERE kind = %s AND sent_at >= %s "
+                         "ORDER BY sent_at", sq), (kind, _iso(since)))
+        rows = cur.fetchall() or []
+    finally:
+        _close(conn, sq)
+    out = []
+    for row in rows:
+        vals = tuple(row.values()) if isinstance(row, dict) else tuple(row)
+        out.append((str(vals[0]), str(vals[1]), str(vals[2])))
+    return out
 
 
 def grants_ending(within: dt.timedelta) -> list:

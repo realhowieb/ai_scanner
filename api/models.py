@@ -365,6 +365,7 @@ class ScanSetup(Setup):
         "Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan "
         "(see LatestScan.previous_scan_at)"))
     sector: Optional[str] = Field(default=None, description="Sector from Nasdaq's stock screener; null when unknown")
+    market_cap: Optional[float] = Field(default=None, description="Market cap in dollars from Nasdaq's stock screener; null when unknown")
 
 
 class SectorCount(BaseModel):
@@ -492,8 +493,16 @@ class Alert(BaseModel):
     created_at: Optional[str] = None
 
 
+class CompanyFacts(BaseModel):
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    market_cap: Optional[float] = Field(default=None, description="Dollars, from Nasdaq's stock screener (refreshed weekly)")
+    size: Optional[str] = Field(default=None, description="Micro, Small, Mid, Large or Mega cap")
+
+
 class StockDetail(BaseModel):
     indicator_evidence: Optional[IndicatorEvidence] = None
+    company: Optional[CompanyFacts] = Field(default=None, description="Sector, industry and market cap; null when unknown")
     ticker: str
     rvol: Optional[float] = Field(default=None, description="Relative volume in the displayed market scan")
     scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
@@ -1144,6 +1153,19 @@ class DayTrader(BaseModel):
     rows: List[DayTraderRow] = []
 
 
+class PreviewExample(BaseModel):
+    ticker: str
+    detail: str = Field(description='Short line, e.g. "+6.2% · 3.4x volume"')
+
+
+class FeaturePreview(BaseModel):
+    kind: Literal["day_trader", "gappers", "earnings"]
+    count: int = Field(description="How many names the full feature shows right now")
+    state: Optional[str] = Field(default=None, description="Market session for live previews (premarket, open, closed...)")
+    example: Optional[PreviewExample] = Field(default=None, description="The single top name; null when there is none")
+    as_of: str
+
+
 class DayTraderSparklines(BaseModel):
     checked: List[str]
     series: Dict[str, List[float]] = Field(default={}, description="Latest-session 1-minute closes, oldest first")
@@ -1458,6 +1480,7 @@ class PlanRow(BaseModel):
 class Plans(BaseModel):
     tiers: List[PlanTier]
     rows: List[PlanRow] = Field(description="The comparison table, derived from the real entitlement map")
+    trial_days: int = Field(default=0, description="Days of free Pro a new account gets when it confirms its email (0 = none)")
 
 
 class UnsubscribeState(BaseModel):

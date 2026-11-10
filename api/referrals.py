@@ -12,7 +12,8 @@ is best effort and never breaks sign-up, verification or sign-in.
 
 Env: HSF_REFERRALS_ENABLED=0 turns the whole feature off (links, credit, trials),
 HSF_REFERRAL_REWARD_DAYS (default 30; 0 = links still credit, no trial),
-HSF_REFERRAL_CAP_DAYS (default 180).
+HSF_REFERRAL_CAP_DAYS (default 180), HSF_NEW_TRIAL_DAYS (default 7; free Pro for every
+new account at its first email confirmation, see start_new_trial; 0 = off).
 """
 from __future__ import annotations
 
@@ -166,6 +167,49 @@ def reward_on_verify(email: str) -> bool:
     _forget(referrer)
     log.info(json.dumps({"event": "referral_rewarded", "days": reward_days()}))
     return True
+
+
+NEW_TRIAL = "new_trial"
+
+
+def new_trial_days() -> int:
+    """Days of free Pro a new account gets when it confirms its email (HSF_NEW_TRIAL_DAYS,
+    default 7; 0 turns the trial off). Uses the same free-Pro grants as invites, so it
+    also needs HSF_REFERRALS_ENABLED (on by default)."""
+    if not enabled():
+        return 0
+    try:
+        return max(0, min(30, int(os.environ.get("HSF_NEW_TRIAL_DAYS", "7"))))
+    except ValueError:
+        return 7
+
+
+def start_new_trial(email: str) -> Optional[dt.datetime]:
+    """Start the new-account free Pro trial at the first email confirmation: once per
+    account, Starter accounts only (not admins, paid plans or founders). No card, and
+    nothing is charged when it ends. Returns the trial's end, or None when none started."""
+    days = new_trial_days()
+    email = (email or "").strip().lower()
+    if days <= 0 or "@" not in email:
+        return None
+    try:
+        from api.plan_access import founder_access
+        from api.store import get_account
+        from db import referrals as store
+
+        account = get_account(email) or {}
+        tier = str(account.get("tier") or "basic").strip().lower()
+        if not account or account.get("is_admin") or tier not in ("", "basic") or founder_access(email)[0]:
+            return None
+        if not store.claim_email(email, NEW_TRIAL):
+            return None  # already had it
+        store.extend_grant(email, days, max(cap_days(), days), "trial:new")
+    except Exception as e:
+        log.warning(json.dumps({"event": "new_trial_failed", "error": type(e).__name__}))
+        return None
+    _forget(email)
+    log.info(json.dumps({"event": "new_trial_started", "days": days}))
+    return grant_until(email)
 
 
 def summary(user: str) -> Dict[str, Any]:
