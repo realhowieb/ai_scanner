@@ -18367,6 +18367,7 @@
       "items": {
        "enum": [
         "setup",
+        "sector",
         "spark",
         "last",
         "change",
@@ -18376,7 +18377,7 @@
        ],
        "type": "string"
       },
-      "maxItems": 7,
+      "maxItems": 8,
       "title": "Columns",
       "type": "array"
      },
@@ -18384,6 +18385,24 @@
       "default": false,
       "title": "Compact",
       "type": "boolean"
+     },
+     "hidden": {
+      "items": {
+       "enum": [
+        "setup",
+        "sector",
+        "spark",
+        "last",
+        "change",
+        "gap",
+        "rvol",
+        "prob"
+       ],
+       "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Hidden",
+      "type": "array"
      }
     },
     "title": "TablePreferences",

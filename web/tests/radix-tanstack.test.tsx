@@ -8,7 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { Dialog } from "@/components/Dialog";
 import { Hint } from "@/components/Hint";
 import { SetupTable } from "@/features/SetupTable";
-import { columnOrder } from "@/features/TablePreferences";
+import { columnOrder, shownColumns } from "@/features/TablePreferences";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { me, setup } from "./fixtures";
@@ -127,7 +127,8 @@ describe("Scanner table (TanStack)", () => {
     fireEvent.click(screen.getByText("Table display"));
     fireEvent.click(screen.getByRole("button", { name: "Move Last price earlier" }));
     fireEvent.click(screen.getByText("Save display"));
-    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "last", "rvol", "change"]));
+    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "sector", "last", "rvol", "change"]));
+    expect(patches[0]?.table?.hidden).toEqual(["spark", "gap", "prob"]);
     await waitFor(() => expect(headers().slice(4, 7)).toEqual(["Last", "RVOL", "Chg %"]));
   });
 
@@ -140,6 +141,13 @@ describe("Scanner table (TanStack)", () => {
   });
 
   it("orders movable columns from the saved list", () => {
-    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["gap", "spark", "last", "change", "rvol", "prob"]);
+    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["sector", "gap", "spark", "last", "change", "rvol", "prob"]);
+    expect(columnOrder(["setup", "gap", "sector"])).toEqual(["gap", "sector", "spark", "last", "change", "rvol", "prob"]);
+  });
+
+  it("shows Sector for displays saved before it existed, unless turned off", () => {
+    expect(shownColumns({ columns: ["setup", "last"] })).toEqual(["sector", "setup", "last"]);
+    expect(shownColumns({ columns: ["setup", "last"], hidden: ["sector"] })).toEqual(["setup", "last"]);
+    expect(shownColumns(null)).toContain("sector");
   });
 });
