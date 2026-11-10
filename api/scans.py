@@ -225,6 +225,9 @@ def earnings_tickers(window: str, now: Optional[dt.datetime] = None) -> List[str
     return out
 
 
+EARNINGS_UNRANKED_PREMIUM = 500   # unranked reporters Premium sees on the Earnings tab
+
+
 def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "today",
                   time: Optional[str] = None, include_unranked: bool = False,
                   watched: Optional[set] = None, custom: Optional[Dict[str, Any]] = None,
@@ -299,12 +302,17 @@ def earnings_scan(entitlements: Dict[str, bool], tier: str, *, window: str = "to
         return (row["earnings_date"], not row["ranked"], -(row.get("score") or 0), row["ticker"])
 
     rows = sorted(ranked[:cap], key=order)
+    extra: List[Dict[str, Any]] = []
     if include_unranked:
-        extra = sorted(unranked, key=order)[:cap]
+        # Premium's auto-score pass scores the week's reporters, so it sees more of them.
+        extra_cap = max(cap, EARNINGS_UNRANKED_PREMIUM) if entitlements.get("can_earnings_autoscore") else cap
+        extra = sorted(unranked, key=order)[:extra_cap]
         _fill_quotes([r for r in extra if r.get("last") is None])
         rows = sorted(rows + extra, key=order)
     out = {**base, "total": len(ranked), "unranked_total": len(unranked), "limited": len(ranked) > cap,
            "setups": rows}
+    if include_unranked:
+        out["unranked_shown"] = len(extra)
     if custom and scored:
         out.update(custom_scan_id=custom.get("id"), custom_scan_at=_iso(custom.get("finished_at")))
     if include_unranked and auto is not None:

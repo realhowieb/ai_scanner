@@ -304,6 +304,11 @@ export function EarningsResults({ f, pro, autoScore = false, res, onClear }: {
         {f.all && data.custom_scan_at ? ` Rows marked Your scan were scored by your earnings scan at ${timeOf(data.custom_scan_at)}.` : ""}
         {f.all && data.auto_scored_at ? ` Rows marked Auto were scored automatically at ${timeOf(data.auto_scored_at)} and refresh with each scheduled scan.` : ""} Dates and times come from the earnings calendar and can move.
       </p>
+      {f.all && data.unranked_shown != null && data.unranked_shown < data.unranked_total && (
+        <p className="cap" data-testid="earn-shown">
+          Showing {(data.setups.length).toLocaleString()} of {(data.setups.length - data.unranked_shown + data.unranked_total).toLocaleString()} reporters {f.when === "week" ? "in the next 7 days" : window}, soonest first, then highest HSF Score.
+        </p>
+      )}
       <ScoreReporters f={f} count={unscored} />
       {f.all && !autoScore && data.unranked_total > 0 && (
         <p className="cap">Premium scores every reporter automatically, so each row shows an HSF Score as the page loads. <Link href="/pricing">See Premium</Link></p>
