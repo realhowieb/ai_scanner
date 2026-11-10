@@ -116,6 +116,21 @@ def _capture_research_cohorts(research_sink, *, universe, scan_started_at, scan_
         _capture(e)
 
 
+# Appended to a refresh scan's run name so later backfills can tell it apart.
+REFRESH_RUN_TAG = "refresh"
+
+
+def _records_research() -> bool:
+    """False on the extra hourly "refresh" scans (CRON_RECORD_RESEARCH=0).
+
+    Those runs keep the Scanner list, alerts and auto-scores fresh between the
+    research slots, but record nothing for ML/research: no canonical
+    observations, no NEAR_MISS/CONTROL cohorts, no opportunity freeze. The ML
+    data keeps exactly the six-slot cadence it was built on (Run 61 buckets,
+    the duplicate-rate readiness check, the collection audit)."""
+    return os.getenv("CRON_RECORD_RESEARCH", "1").strip() != "0"
+
+
 def _append_perf_history(record: dict, *, keep: int = 60) -> None:
     """Append a per-run performance record to a rolling JSONL history for
     repeatability comparison (Run 45). Best-effort; never raises."""
@@ -442,7 +457,7 @@ def run_and_save(
         # Run 47 research capture (opt-in, bounded, hard-capped): request the
         # NEAR_MISS slice + a control snapshot. Production results are unchanged.
         research_sink: dict | None = None
-        if os.getenv("HSF_RESEARCH_CAPTURE", "1").strip() != "0":
+        if _records_research() and os.getenv("HSF_RESEARCH_CAPTURE", "1").strip() != "0":
             try:
                 from analytics.research_cohorts import near_miss_n
                 research_sink = {"near_miss_n": near_miss_n()}
@@ -476,6 +491,8 @@ def run_and_save(
         row_count = len(results)
 
         run_name = f"{universe} | {row_count} results | {duration:.1f}s"
+        if not _records_research():
+            run_name += f" | {REFRESH_RUN_TAG}"
         print(f"Scan completed: {run_name}")
 
         # Coverage & data-health report (Run 37). Best-effort; never affects the
@@ -565,7 +582,9 @@ def run_and_save(
         # future research. Never changes results/ranking; fully non-fatal — any
         # failure is logged and the scan continues unchanged. Kill switch:
         # HSF_OBSERVATION_CAPTURE=0. Dry-run: HSF_OBSERVATION_CAPTURE_DRYRUN=1.
-        if os.getenv("HSF_OBSERVATION_CAPTURE", "1").strip() != "0":
+        if not _records_research():
+            print(f"[observation_capture] skipped for {universe}: refresh scan (CRON_RECORD_RESEARCH=0)")
+        elif os.getenv("HSF_OBSERVATION_CAPTURE", "1").strip() != "0":
             try:
                 from analytics.observation_capture import (
                     capture_scan_observations,
@@ -1125,12 +1144,17 @@ def main():
     # Freeze the latest snapshot's HSF opportunities for calibration, so
     # signal-time records are collected by the deliberate cron pipeline rather
     # than only when a user opens the Market Brief. Idempotent per snapshot.
+    # Refresh scans skip it: an off-slot freeze would add track-record rows
+    # outside the research cadence.
     try:
         from analytics.opportunity_freeze import freeze_latest_opportunities
 
-        frozen = freeze_latest_opportunities()
-        if frozen:
-            print(f"[opportunity_freeze] froze {frozen} HSF opportunity(ies)")
+        if not _records_research():
+            print("[opportunity_freeze] skipped: refresh scan (CRON_RECORD_RESEARCH=0)")
+        else:
+            frozen = freeze_latest_opportunities()
+            if frozen:
+                print(f"[opportunity_freeze] froze {frozen} HSF opportunity(ies)")
     except Exception as e:
         print(f"[cron] opportunity freeze failed: {e}")
         _capture(e)
