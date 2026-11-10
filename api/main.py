@@ -45,6 +45,13 @@ if not access_log.handlers:  # uvicorn only configures its own loggers; one JSON
     access_log.addHandler(_h)
     access_log.setLevel(logging.INFO)
     access_log.propagate = False
+memory_log = logging.getLogger("hsf.memory")
+if not memory_log.handlers:  # memory_growth / memory_maintenance / memory_restart lines (api/memory.py)
+    _mh = logging.StreamHandler()
+    _mh.setFormatter(logging.Formatter("%(message)s"))
+    memory_log.addHandler(_mh)
+    memory_log.setLevel(logging.INFO)
+    memory_log.propagate = False
 _SAFE_RID = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 
 

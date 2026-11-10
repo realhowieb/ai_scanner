@@ -45,7 +45,29 @@ def _brief_scan_df():
     if df is not None:
         df = df.copy(deep=False)
         df.attrs['hsf_scan_saved_at'] = runs[0].get('created_at')
+        df.attrs['hsf_scan_run_id'] = runs[0].get('id')
     return df
+
+
+# PreBreakout picks depend only on the scan, but scoring them loads the ML models and
+# daily price history: ~180 MB of working memory and ~10 s, which hsf-api used to redo
+# on every 5-minute Brief rebuild (the allocator keeps that peak, so memory climbed all
+# day). They are now scored once per scan run and reused until a new scan lands.
+_PICKS_MEMO: Dict[str, Any] = {"key": None, "picks": []}
+
+
+def _cached_prebreakout_picks(df, score) -> List[Dict[str, Any]]:
+    import copy
+
+    attrs = getattr(df, "attrs", {}) or {}
+    run_id = attrs.get("hsf_scan_run_id")
+    key = (run_id, str(attrs.get("hsf_scan_saved_at")), len(df)) if run_id is not None else None
+    if key is not None and _PICKS_MEMO["key"] == key:
+        return copy.deepcopy(_PICKS_MEMO["picks"])
+    picks = score(df) or []
+    if key is not None and picks:  # an empty answer may be a model/provider hiccup: retry next build
+        _PICKS_MEMO.update(key=key, picks=copy.deepcopy(picks))
+    return picks
 
 
 def _compute_brief() -> Optional[Dict[str, Any]]:
@@ -80,7 +102,7 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         golden, top_setups = _todays_setups(df)
     except Exception:
         golden, top_setups = [], []
-    picks = _prebreakout_picks(df) or []
+    picks = _cached_prebreakout_picks(df, _prebreakout_picks)
     try:
         pe = _earnings_days_map([p["symbol"] for p in picks])
         for p in picks:
