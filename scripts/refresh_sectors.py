@@ -16,9 +16,7 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import sys
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,9 +52,11 @@ def parse_screener(payload: dict) -> dict[str, str]:
 
 
 def fetch_sectors() -> dict[str, str]:
-    req = urllib.request.Request(SCREENER_URL, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - trusted host
-        return parse_screener(json.loads(resp.read().decode("utf-8")))
+    import requests
+
+    resp = requests.get(SCREENER_URL, headers=HEADERS, timeout=60)
+    resp.raise_for_status()
+    return parse_screener(resp.json())
 
 
 def to_csv(sectors: dict[str, str]) -> str:
