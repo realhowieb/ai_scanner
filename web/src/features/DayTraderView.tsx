@@ -32,6 +32,19 @@ const SOURCES = [
   { id: "megacaps", label: "Mega caps" },
 ] as const;
 type Source = (typeof SOURCES)[number]["id"];
+/** The Symbols menu value: a source id, or "wl:<id>" for one of the user's watchlists. */
+type Pick = Source | `wl:${number}`;
+type ListSummary = { id: number; name: string; is_default: boolean };
+/** Menu entries: each watchlist by name (default first), then the other sources. With no
+ * watchlists loaded, the single "My default watchlist" entry stays. */
+export function sourceOptions(lists: ListSummary[] | null | undefined): { id: Pick; label: string }[] {
+  const rest = SOURCES.filter((s) => s.id !== "watchlist");
+  if (!lists?.length) return [...SOURCES];
+  const sorted = [...lists].sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
+  return [...sorted.map((w) => ({ id: `wl:${w.id}` as Pick, label: w.is_default ? `${w.name} (default)` : w.name })), ...rest];
+}
+const toQuery = (p: Pick): { source: Source; watchlist_id?: number } =>
+  p.startsWith("wl:") ? { source: "watchlist", watchlist_id: Number(p.slice(3)) } : { source: p as Source };
 const STATE: Record<string, string> = { premarket: "Pre-market", open: "Market open", afterhours: "After hours", closed: "Market closed" };
 const metric = (v: unknown, fallback: string | number = 0) => (typeof v === "number" || typeof v === "string" ? v : fallback);
 export const DT_REFRESH_MS = 15_000;
@@ -340,7 +353,10 @@ function RankMove({ n }: { n: number | undefined }) {
 }
 
 function Live() {
-  const [source, setSource] = useState<Source>("movers");
+  const [pick, setPick] = useState<Pick>("movers");
+  const source = toQuery(pick).source;
+  const lists = useApi("watchlists", (signal) => unwrap(api.GET("/v1/watchlists", { signal })));
+  const options = useMemo(() => sourceOptions(Array.isArray(lists.data) ? lists.data : null), [lists.data]);
   const [tick, setTick] = useState(0);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true });
@@ -350,9 +366,10 @@ function Live() {
   const visible = useVisible();
   // `at` is when this device received the answer. Timing uses it rather than the server's
   // as_of, so a phone whose clock runs ahead of the server doesn't refresh nonstop.
-  const dt = useApi(`dt:${source}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: { source } }, signal }))
-    .then((data) => ({ data, at: Date.now() })), tick);
+  const dt = useApi(`dt:${pick}`, (signal) => unwrap(api.GET("/v1/day-trader", { params: { query: toQuery(pick) }, signal }))
+    .then((data) => ({ data, at: Date.now(), pick })), tick);
   const d = dt.data?.data ?? null;
+  const dPick = dt.data?.pick;
   const gotAt = dt.data?.at ?? 0;
   const failed = !!dt.error && !!d;
   const trading = !!d && d.state !== "closed";
@@ -368,10 +385,11 @@ function Live() {
   }, [live, dt.loading, dt.refreshing, gotAt, failed]);
   const now = useNow(live);
   // The previous refresh, kept alongside the current one to show what moved.
-  const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null }>({ cur: null, prev: null });
-  if (d !== hist.cur) setHist({ cur: d, prev: hist.cur });
-  const moves = useMemo(() => diffRefresh(hist.prev, hist.cur), [hist]);
-  const switching = dt.loading && !!d && d.source !== source;
+  // Two watchlists share source "watchlist", so a switch between them is told apart by the pick.
+  const [hist, setHist] = useState<{ cur: Data | null; prev: Data | null; pick?: Pick; prevPick?: Pick }>({ cur: null, prev: null });
+  if (d !== hist.cur) setHist({ cur: d, prev: hist.cur, pick: dPick, prevPick: hist.pick });
+  const moves = useMemo(() => (hist.pick === hist.prevPick ? diffRefresh(hist.prev, hist.cur) : {}), [hist]);
+  const switching = dt.loading && !!d && dPick !== pick;
   const offHours = !!d && (d.state === "afterhours" || d.state === "closed");
   const all = useMemo(() => d?.rows ?? [], [d]);
   const rows = useMemo(() => {
@@ -408,8 +426,8 @@ function Live() {
       <DayTraderHeading state={d?.state} />
       <section className="filters" aria-label="Source">
         <label className="inline-field">Symbols
-          <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
-            {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          <select value={pick} onChange={(e) => setPick(e.target.value as Pick)}>
+            {options.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
         {rows.length > 0 && <a href="#stair-steppers" className="cap">Jump to Stair-Steppers</a>}
@@ -438,9 +456,9 @@ function Live() {
       {dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
         : !d ? <Skeleton rows={8} label="Loading live quotes" />
         : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
-          ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick My default watchlist to see last night&apos;s prices.</Empty></Card>
+          ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick one of your watchlists to see last night&apos;s prices.</Empty></Card>
         : all.length === 0 ? <Card><Empty title={d.symbols.length ? "No live quotes for these symbols right now." : "No symbols in this source."}>
-            {source === "watchlist" ? "Add tickers to your default watchlist, or pick another source." : "Try another source."}</Empty></Card>
+            {source === "watchlist" ? "Add tickers to this watchlist on the Watchlists page, or pick another source." : "Try another source."}</Empty></Card>
         : rows.length === 0 ? <Card><Empty title="No rows match these filters."><button type="button" className="btn btn-sm" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button></Empty></Card>
         : narrow ? (
           <section ref={listRef} className={`dt-cards${switching ? " dim" : ""}`} aria-label="Day Trader symbols">
