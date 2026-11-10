@@ -127,7 +127,8 @@ def register(app: FastAPI) -> None:
                                               "always its top HSF-ranked setups"),
                      min_price: Optional[float] = Query(None, ge=0, le=1_000_000, description="Last price at least this"),
                      max_price: Optional[float] = Query(None, ge=0, le=1_000_000, description="Last price at most this"),
-                     min_rvol: Optional[float] = Query(None, ge=0, le=1000, description="Relative volume at least this (x)")
+                     min_rvol: Optional[float] = Query(None, ge=0, le=1000, description="Relative volume at least this (x)"),
+                     sector: Optional[str] = Query(None, max_length=64, description="Only setups in this sector (see sectors)")
                      ) -> Dict[str, Any]:
         """The latest market scan's HSF setups, ranked as in the Scanner, up to the plan's row cap."""
         from api.scans import latest_scan
@@ -137,7 +138,7 @@ def register(app: FastAPI) -> None:
             raise HTTPException(403, "PreBreakout is a Premium feature.")
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort,
-                           min_price=min_price, max_price=max_price, min_rvol=min_rvol)
+                           min_price=min_price, max_price=max_price, min_rvol=min_rvol, sector=sector)
 
     @app.get("/v1/scans/latest/earnings", response_model=models.EarningsScan,
              responses={**_AUTH, 403: {"description": "Pro feature"}}, summary="Earnings scanner")

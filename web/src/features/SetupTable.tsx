@@ -17,7 +17,8 @@ import { num, pct, price, setupLabel } from "@/lib/format";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks, useNewsFlags } from "./Sparks";
 
-type Row = Schemas["ScanSetup"];
+/** `scan_last`: the scan's price when Last comes from a live trade (withLiveQuotes). */
+type Row = Schemas["ScanSetup"] & { scan_last?: number | null };
 /** Server sort ids (GET /v1/scans/latest `sort`). Every server sort is high-to-low. */
 export type ServerSort = "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
 /** Column id → the server sort it maps to. Other columns cannot be sorted. */
@@ -42,7 +43,8 @@ type NewsFlag = Schemas["NewsFlag"];
 /** `ranks`: each ticker's rank in the whole latest scan (null = not ranked), for rows that
  * aren't a slice of the ranked list (the Scanner's Watchlist tab). */
 type Ranks = Record<string, number | null>;
-type Ctx = { scanId?: string; numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks; auto?: Set<string> };
+type Ctx = { scanId?: string; numbered: boolean; offset: number; sparks: boolean; series: Record<string, number[]>; news: Record<string, NewsFlag>; choose: (ticker: string) => ReactNode; ranks?: Ranks; auto?: Set<string>;
+  compared?: boolean; onView?: (row: Row) => void };
 const TableCtx = createContext<Ctx>({ numbered: true, offset: 0, sparks: false, series: {}, news: {}, choose: () => null });
 const NOT_RANKED = "Not ranked in the latest scan";
 /** Unranked and not auto-scored: no score to show. */
@@ -61,6 +63,48 @@ function NewsMark({ ticker, flag }: { ticker: string; flag: NewsFlag | undefined
 }
 const useCtx = () => useContext(TableCtx);
 
+/** Rank moves smaller than this aren't marked, so the table doesn't flicker with ±1s. */
+export const RANK_MOVE_MIN = 3;
+/** Up at least this much (%) since the scan flagged it: marked "Ran". */
+export const RAN_PCT = 4;
+
+/** "New" when the name wasn't ranked in the previous scan; ▲/▼ places when its rank moved.
+ * Nothing when there is no previous scan to compare (`compared` false). */
+export function RankMove({ row, compared }: { row: Pick<Row, "rank" | "previous_rank">; compared?: boolean }) {
+  if (!compared || row.rank == null) return null;
+  if (row.previous_rank == null) return <span className="pill pill-up rank-move" title="Not ranked in the previous scan">New</span>;
+  const d = row.previous_rank - row.rank;
+  if (Math.abs(d) < RANK_MOVE_MIN) return null;
+  const words = `${d > 0 ? "Up" : "Down"} ${Math.abs(d)} places since the previous scan (was #${row.previous_rank})`;
+  return <span className={`rank-move ${d > 0 ? "up" : "down"}`} title={words} aria-label={words}>{d > 0 ? "▲" : "▼"}{Math.abs(d)}</span>;
+}
+
+/** Live price vs the scan's price, in %. Null without a live trade. */
+export function sinceScan(row: Pick<Row, "last" | "scan_last">): number | null {
+  if (row.scan_last == null || row.last == null || !(row.scan_last > 0)) return null;
+  return (row.last / row.scan_last - 1) * 100;
+}
+
+function SinceScan({ row }: { row: Row }) {
+  const move = sinceScan(row);
+  if (move == null || Math.abs(move) < 0.05) return null;
+  return <span className="since-scan">
+    <span className={`cap mono ${upDown(move)}`} title={`Live price vs ${price(row.scan_last)} at the scan`}>{pct(move, 1)} since scan</span>
+    {move >= RAN_PCT && <span className="pill pill-warn" title={`Up ${move.toFixed(1)}% since the scan flagged it. Much of the move may already be done.`}>Ran</span>}
+  </span>;
+}
+function LastCell({ row }: { row: { original: Row } }) {
+  return <span className="last-cell">{price(row.original.last)}<SinceScan row={row.original} /></span>;
+}
+function SectorCell({ row }: { row: { original: Row } }) { return row.original.sector ? <span className="cap">{row.original.sector}</span> : <span className="cap">—</span>; }
+function ActionsCell({ row }: { row: { original: Row } }) {
+  const c = useCtx(); const t = row.original.ticker;
+  return <span className="row-tools">
+    {c.onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${t}`} onClick={() => c.onView?.(row.original)}>View</button>}
+    <SaveToWatchlistButton ticker={t} compact />
+  </span>;
+}
+
 function RankHead() { const c = useCtx(); return c.ranks ? <span title="Rank in the latest scan">Rank</span> : c.numbered ? "#" : <span className="sr-only">Row</span>; }
 function RankCell({ row }: { row: { index: number; original: Row } }) {
   const c = useCtx();
@@ -78,7 +122,7 @@ function ScoreCell({ row }: { row: { original: Row } }) {
 }
 function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
-  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named scanId={c.scanId} />{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
+  return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named scanId={c.scanId} />{!c.ranks && <RankMove row={r} compared={c.compared} />}{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
 }
 function SparkCell({ row }: { row: { original: Row } }) { const c = useCtx(); return <DailySpark points={c.series[row.original.ticker]} ticker={row.original.ticker} />; }
 
@@ -86,15 +130,16 @@ const COLUMNS = col.columns([
   col.display({ id: "rank", header: RankHead, cell: RankCell }),
   col.display({ id: "ticker", header: "Ticker", cell: TickerCell }),
   col.display({ id: "setup", header: "Setup", cell: SetupCell }),
+  col.display({ id: "sector", header: "Sector", cell: SectorCell }),
   col.display({ id: "score", header: "HSF Score", cell: ScoreCell }),
   col.display({ id: "spark", header: "20 sessions", cell: SparkCell }),
-  col.display({ id: "last", header: "Last", cell: (c) => price(c.row.original.last) }),
+  col.display({ id: "last", header: "Last", cell: LastCell }),
   col.display({ id: "change", header: "Chg %", cell: (c) => pct(c.row.original.chg_pct) }),
   col.display({ id: "gap", header: "Gap %", cell: (c) => pct(c.row.original.gap_pct) }),
   col.display({ id: "rsi", header: "RSI (14)", cell: (c) => num(c.row.original.rsi_14) }),
   col.display({ id: "rvol", header: "RVOL", cell: (c) => <RvolMeter rvol={c.row.original.rvol} /> }),
   col.display({ id: "prob", header: "PreBreakout", cell: (c) => <PreBreakoutMeter prob={c.row.original.prob} rank={c.row.original.prob_rank} /> }),
-  col.display({ id: "save", header: () => <span className="sr-only">Save</span>, cell: (c) => <SaveToWatchlistButton ticker={c.row.original.ticker} compact /> }),
+  col.display({ id: "save", header: () => <span className="sr-only">Actions</span>, cell: ActionsCell }),
 ]);
 const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change: "num", gap: "num" };
 
@@ -103,13 +148,17 @@ const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change
 /** The PreBreakout column shows only on Premium; other plans get one note under the rows instead of "Premium" per row. */
 /** `sparks` adds each ticker's 20-session sparkline: for current scans only, not saved history. */
 /** `sort` + `onSort` make the sortable headers buttons that ask the server for a new order. */
-export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, showRsi = false, scanId, sort, onSort, prefs: given, ranks, auto }: {
+export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks = false, displayControls = true, showRsi = false, scanId, sort, onSort, prefs: given, ranks, auto, compared, onView }: {
   scanId?: string;
   rows: Row[]; offset?: number; premium: boolean; numbered?: boolean; sparks?: boolean; displayControls?: boolean; showRsi?: boolean;
   /** Show each row's rank in the whole scan instead of its position; null marks a row that isn't ranked. */
   ranks?: Ranks;
   /** Tickers whose row comes from the Premium auto-score pass (shown with an Auto tag). */
   auto?: Set<string>;
+  /** There is a previous scan to compare ranks with: rows show New / ▲▼ moves. */
+  compared?: boolean;
+  /** Opens the quick view for a row (a View button per row). */
+  onView?: (row: Row) => void;
   sort?: ServerSort; onSort?: (sort: ServerSort) => void;
   /** The page's own research preferences, so the table doesn't ask for them again once results arrive. */
   prefs?: ReturnType<typeof useWorkspace>;
@@ -126,12 +175,14 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const series = useDailySparks(sparks && visible("spark") ? rows.map((r) => r.ticker) : []);
   const news = useNewsFlags(sparks ? rows.map((r) => r.ticker) : []);
 
-  const ctx = { scanId, numbered, offset, sparks, series, news, choose, ranks, auto };
-  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)])), rsi: showRsi };
+  const ctx = { scanId, numbered, offset, sparks, series, news, choose, ranks, auto, compared, onView };
+  // The Sector column shows once the rows carry sectors (current scans only).
+  const showSector = sparks && !ranks && rows.some((r) => r.sector);
+  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)])), rsi: showRsi, sector: showSector };
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
     features, columns: COLUMNS, data: rows,
-    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "score", ...columnOrder(shown), "rsi", "save"], sorting },
+    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "sector", "score", ...columnOrder(shown), "rsi", "save"], sorting },
     manualSorting: true, enableSortingRemoval: false, enableMultiSort: false, sortDescFirst: true,
     enableSorting: Boolean(onSort),
     onSortingChange: (next) => {
@@ -199,15 +250,18 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               {sparks && choose(r.ticker)}
               <TickerLink ticker={r.ticker} named scanId={scanId} />
               {visible("setup") && !isUnranked(ranks, r.ticker, auto) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
+              {!ranks && <RankMove row={r} compared={compared} />}
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
               <span className="grow" />
+              {onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${r.ticker}`} onClick={() => onView(r)}>View</button>}
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">
+              {showSector && r.sector && <div><dt>Sector</dt><dd>{r.sector}</dd></div>}
               {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
               <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker, auto) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <>{<ScoreBadge score={r.score} />}{auto?.has(r.ticker) && <> <AutoTag /></>}</>}</dd></div>
-              <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}</dd></div>
+              <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}<SinceScan row={r} /></dd></div>
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${upDown(r.chg_pct)}`}>{pct(r.chg_pct)}</dd></div>
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>

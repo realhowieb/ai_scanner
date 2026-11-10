@@ -1,6 +1,6 @@
 name: Refresh Universe
 
-# Keep sp500.txt / nasdaq.txt / other_listed.txt current from authoritative
+# Keep sp500.txt / nasdaq.txt / other_listed.txt / sectors.csv current from authoritative
 # sources (SPDR SPY holdings + Nasdaq's listed and other-listed directories). Weekly is plenty — index membership and
 # new listings change slowly, and the live tradability filter already drops
 # delistings at scan time. Both scripts fail safe: if a fetch is bad, the file
@@ -51,23 +51,26 @@ jobs:
       - name: Refresh NYSE / other exchanges (other listed directory)
         run: python -m scripts.refresh_other_listed || echo "other-listed refresh skipped (fail-safe)"
 
+      - name: Refresh sectors (Nasdaq stock screener)
+        run: python -m scripts.refresh_sectors || echo "sectors refresh skipped (fail-safe)"
+
       - name: Commit changes if any
         run: |
           # status (not diff) so a first-time other_listed.txt counts as a change
-          if [ -z "$(git status --porcelain -- sp500.txt nasdaq.txt other_listed.txt)" ]; then
+          if [ -z "$(git status --porcelain -- sp500.txt nasdaq.txt other_listed.txt sectors.csv)" ]; then
             echo "No universe changes."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          for f in sp500.txt nasdaq.txt other_listed.txt; do [ -e "$f" ] && git add -- "$f"; done
+          for f in sp500.txt nasdaq.txt other_listed.txt sectors.csv; do [ -e "$f" ] && git add -- "$f"; done
           {
             echo "### Universe changes"
             echo '```'
-            git --no-pager diff --cached --stat -- sp500.txt nasdaq.txt other_listed.txt
+            git --no-pager diff --cached --stat -- sp500.txt nasdaq.txt other_listed.txt sectors.csv
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          git commit -m "Auto-refresh universe files (sp500 / nasdaq / other listed)"
+          git commit -m "Auto-refresh universe files (sp500 / nasdaq / other listed / sectors)"
           for attempt in 1 2 3; do
             git pull --rebase origin dev && git push origin HEAD:dev && exit 0
             sleep $((attempt * 5))

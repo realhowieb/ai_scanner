@@ -40,14 +40,14 @@ const SIGNAL_NAMES: Record<string, string> = {
 const etDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
 /** The sessions where the scans saw a signal start, for the price chart. */
-function signalEvents(s: Stock): ChartEvent[] {
+export function signalEvents(s: Stock): ChartEvent[] {
   return s.lifecycle.flatMap((e) => (e.time && e.signals_added.length
     ? [{ date: etDay(new Date(e.time)), label: e.signals_added.map((k) => SIGNAL_NAMES[k] ?? k).join(", ") }]
     : []));
 }
 
 /** earnings_days counts from today (ET); the chart wants the date. */
-function earningsDate(days: number | null | undefined, nowMs = Date.now()): string | null {
+export function earningsDate(days: number | null | undefined, nowMs = Date.now()): string | null {
   if (days == null || days < 0) return null;
   const d = new Date(`${etDay(new Date(nowMs))}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -67,7 +67,7 @@ function List({ items, empty }: { items: string[]; empty: string }) {
   return items.length ? <ul className="bullets">{items.map((r) => <li key={r}>{r}</li>)}</ul> : <p className="cap">{empty}</p>;
 }
 
-function movementText(s: Stock): string {
+export function movementText(s: Stock): string {
   if (s.movement === "RISING" && s.score_change != null) return `Rising +${s.score_change} since the previous scan`;
   if (s.movement === "FALLING" && s.score_change != null) return `Falling ${s.score_change} since the previous scan`;
   if (s.movement) return MOVEMENT[s.movement] ?? s.movement;

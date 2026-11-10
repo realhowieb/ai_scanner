@@ -9266,6 +9266,18 @@
       "title": "Max Results",
       "type": "integer"
      },
+     "previous_scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "ISO time of the scan that previous_rank compares with; null when there is none (no row is new then)",
+      "title": "Previous Scan At"
+     },
      "scan_at": {
       "anyOf": [
        {
@@ -9289,6 +9301,15 @@
       ],
       "description": "Setups in the scan before any filter (signal, score floor)",
       "title": "Scan Total"
+     },
+     "sectors": {
+      "default": [],
+      "description": "Sectors among the plan's rows that pass the other filters, most first; the Sector filter's choices",
+      "items": {
+       "$ref": "#/components/schemas/SectorCount"
+      },
+      "title": "Sectors",
+      "type": "array"
      },
      "setups": {
       "default": [],
@@ -16519,6 +16540,18 @@
       ],
       "title": "N Signals"
      },
+     "previous_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)",
+      "title": "Previous Rank"
+     },
      "primary_setup": {
       "anyOf": [
        {
@@ -16553,6 +16586,18 @@
       ],
       "description": "Premium. Where the raw PreBreakout model score sits among this scan's setups, as 'top N%' (1 = strongest). Tells apart names that share the calibrated floor in prob.",
       "title": "Prob Rank"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position in the whole latest scan's HSF ranking (1 = best)",
+      "title": "Rank"
      },
      "rebound_candidate": {
       "anyOf": [
@@ -16590,6 +16635,18 @@
      "score": {
       "title": "Score",
       "type": "integer"
+     },
+     "sector": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Sector from Nasdaq's stock screener; null when unknown",
+      "title": "Sector"
      },
      "signals": {
       "default": [],
@@ -17082,6 +17139,24 @@
      "error"
     ],
     "title": "SectionError",
+    "type": "object"
+   },
+   "SectorCount": {
+    "properties": {
+     "count": {
+      "title": "Count",
+      "type": "integer"
+     },
+     "sector": {
+      "title": "Sector",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sector",
+     "count"
+    ],
+    "title": "SectorCount",
     "type": "object"
    },
    "SessionCard": {
@@ -20506,6 +20581,18 @@
       ],
       "title": "N Signals"
      },
+     "previous_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)",
+      "title": "Previous Rank"
+     },
      "primary_setup": {
       "anyOf": [
        {
@@ -20582,6 +20669,18 @@
      "score": {
       "title": "Score",
       "type": "integer"
+     },
+     "sector": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Sector from Nasdaq's stock screener; null when unknown",
+      "title": "Sector"
      },
      "signals": {
       "default": [],
@@ -32046,6 +32145,25 @@
        ],
        "description": "Relative volume at least this (x)",
        "title": "Min Rvol"
+      }
+     },
+     {
+      "description": "Only setups in this sector (see sectors)",
+      "in": "query",
+      "name": "sector",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 64,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Only setups in this sector (see sectors)",
+       "title": "Sector"
       }
      }
     ],
