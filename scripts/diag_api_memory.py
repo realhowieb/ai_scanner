@@ -39,7 +39,12 @@ def rss_mb() -> float:
         return -1.0
 
 
+TRACE = os.environ.get("HSF_DIAG_NO_TRACE") != "1"
+
+
 def traced_mb() -> float:
+    if not TRACE:
+        return 0.0
     return round(tracemalloc.get_traced_memory()[0] / 1048576, 1)
 
 
@@ -61,6 +66,8 @@ def cache_table() -> list:
 
 def step(name: str, fn) -> None:
     gc.collect()
+    if TRACE:
+        tracemalloc.reset_peak()
     before_t, before_r = traced_mb(), rss_mb()
     started = time.monotonic()
     err = ""
@@ -68,18 +75,20 @@ def step(name: str, fn) -> None:
         fn()
     except Exception as e:  # keep going; report the type only
         err = f"  ERROR {type(e).__name__}"
+    peak = round(tracemalloc.get_traced_memory()[1] / 1048576, 1) if TRACE else 0.0
     gc.collect()
     after_t, after_r = traced_mb(), rss_mb()
-    print(f"{name:<44} kept {after_t - before_t:+8.1f} MB  (python total {after_t:7.1f})  "
+    print(f"{name:<44} kept {after_t - before_t:+8.1f} MB  peak +{peak - before_t:7.1f}  (python total {after_t:7.1f})  "
           f"rss {after_r:7.1f}  {time.monotonic() - started:6.1f}s{err}", flush=True)
 
 
 def main() -> None:
     _ensure_api_deps()
     os.environ.setdefault("RENDER", "")  # no background threads
-    tracemalloc.start(1)
+    if TRACE:
+        tracemalloc.start(1)
     print("=" * 110)
-    print("hsf-api cache memory replay (MB kept after each step, after gc)")
+    print("hsf-api cache memory replay (MB kept after each step, after gc)" + ("" if TRACE else " -- RSS only, no tracing"))
     print("=" * 110)
     step("import api.main", lambda: __import__("api.main"))
 
@@ -94,6 +103,14 @@ def main() -> None:
     step("market_runs() (60 runs with snapshots)", load_runs)
     step("Market Brief (_brief_core)", market._brief_core)
     step("Day Trader movers", lambda: market.day_trader("movers"))
+    for i in (2, 3):
+        today._cache.clear_key("brief")
+        step(f"Market Brief rebuild #{i}", market._brief_core)
+    for i in (2, 3):
+        for k in [k for k in list(today._cache._items) if isinstance(k, tuple) and k[0] == "dt_rows"]:
+            today._cache.clear_key(k)
+        today._cache.clear_key(("dt_source", "movers"))
+        step(f"Day Trader movers rebuild #{i}", lambda: market.day_trader("movers"))
     step("warm_stock_pages", scans.warm_stock_pages)
     step("track_record", history.track_record)
     for n in (1, 4, 8):
@@ -114,9 +131,9 @@ def main() -> None:
         if n:
             print(f"cache {name:<18} {n:4d}/{cap:<4d} {kinds}")
     print("-" * 110)
-    snap = tracemalloc.take_snapshot()
+    snap = tracemalloc.take_snapshot() if TRACE else None
     print("Top 15 allocation sites still held:")
-    for s in snap.statistics("filename")[:15]:
+    for s in (snap.statistics("filename")[:15] if snap else []):
         fn = s.traceback[0].filename
         fn = fn.split("site-packages/")[-1] if "site-packages/" in fn else os.path.relpath(fn, ROOT)
         print(f"  {s.size / 1048576:8.1f} MB  {s.count:9d} blocks  {fn}")
@@ -134,3 +151,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    if TRACE:  # tracing inflates RSS; replay once more untraced for true RSS figures
+        sys.stdout.flush()
+        subprocess.run([sys.executable, __file__], env={**os.environ, "HSF_DIAG_NO_TRACE": "1"})
