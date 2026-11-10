@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { columnOrderingFeature, columnVisibilityFeature, createColumnHelper, rowSortingFeature, tableFeatures, useTable } from "@tanstack/react-table";
 import type { SortingState } from "@tanstack/react-table";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { DEFAULT_COLUMNS, TablePreferences, columnOrder } from "./TablePreferences";
+import { DEFAULT_COLUMNS, TablePreferences, columnOrder, shownColumns } from "./TablePreferences";
 
 import type { Schemas } from "@/api/client";
 import { Hint } from "@/components/Hint";
@@ -167,7 +167,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const prefs = given ?? own;
   const [selected, setSelected] = useState<string[]>([]);
   const table = prefs.data?.table;
-  const shown = sparks ? (table?.columns ?? [...DEFAULT_COLUMNS]) : [...DEFAULT_COLUMNS];
+  const shown = sparks ? shownColumns(table) : [...DEFAULT_COLUMNS];
   const visible = (c: string) => shown.some((x) => x === c);
   const toggle = (ticker: string) => setSelected((prev) => prev.includes(ticker) ? prev.filter((t) => t !== ticker) : prev.length < 4 ? [...prev, ticker] : prev);
   const choose = (ticker: string) => <input type="checkbox" aria-label={`Compare ${ticker}`} checked={selected.includes(ticker)}
@@ -178,11 +178,11 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const ctx = { scanId, numbered, offset, sparks, series, news, choose, ranks, auto, compared, onView };
   // The Sector column shows once the rows carry sectors (current scans only).
   const showSector = sparks && !ranks && rows.some((r) => r.sector);
-  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium)])), rsi: showRsi, sector: showSector };
+  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium) && (c !== "sector" || showSector)])), rsi: showRsi };
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
     features, columns: COLUMNS, data: rows,
-    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "sector", "score", ...columnOrder(shown), "rsi", "save"], sorting },
+    state: { columnVisibility, columnOrder: ["rank", "ticker", "setup", "score", ...columnOrder(shown), "rsi", "save"], sorting },
     manualSorting: true, enableSortingRemoval: false, enableMultiSort: false, sortDescFirst: true,
     enableSorting: Boolean(onSort),
     onSortingChange: (next) => {
@@ -258,7 +258,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <SaveToWatchlistButton ticker={r.ticker} compact />
             </div>
             <dl className="sc-facts">
-              {showSector && r.sector && <div><dt>Sector</dt><dd>{r.sector}</dd></div>}
+              {showSector && visible("sector") && r.sector && <div><dt>Sector</dt><dd>{r.sector}</dd></div>}
               {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
               <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker, auto) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <>{<ScoreBadge score={r.score} />}{auto?.has(r.ticker) && <> <AutoTag /></>}</>}</dd></div>
               <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}<SinceScan row={r} /></dd></div>

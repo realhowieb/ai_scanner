@@ -10844,12 +10844,14 @@ export interface components {
         /** TablePreferences */
         TablePreferences: {
             /** Columns */
-            columns?: ("setup" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
+            columns?: ("setup" | "sector" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
             /**
              * Compact
              * @default false
              */
             compact: boolean;
+            /** Hidden */
+            hidden?: ("setup" | "sector" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
         };
         /**
          * Tape
