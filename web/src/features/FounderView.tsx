@@ -52,6 +52,32 @@ function Acknowledge({ offer, checked, onChange }: { offer: FoundingOffer; check
   );
 }
 
+/** Back from Stripe without paying: the seat stays held for a few minutes. Let the buyer
+ * give it back now (a checkout that was paid after all is kept, and the page reloads). */
+function ReleaseSeat({ onPaid }: { onPaid: () => void }) {
+  const act = useAction();
+  const [result, setResult] = useState<"released" | "none" | null>(null);
+  async function release() {
+    const out = await act.run(() => founding.cancel());
+    if (!out) return;
+    if (out.paid) { onPaid(); return; }
+    setResult(out.released ? "released" : "none");
+  }
+  if (result === "released") return <p className="cap" role="status">Seat released. You can start again any time while seats are left.</p>;
+  if (result === "none") return <p className="cap" role="status">There&apos;s no open checkout to close. Nothing is held for you.</p>;
+  return (
+    <div className="stack-xs" role="status">
+      <p className="cap">Checkout closed. Your seat is held for a few more minutes if you want to try again.</p>
+      <div className="row-actions">
+        <button type="button" className="btn btn-sm" disabled={act.busy} onClick={() => void release()}>
+          {act.busy ? "Releasing…" : "I'm not buying now: release my seat"}
+        </button>
+      </div>
+      <ErrorLine error={act.error} />
+    </div>
+  );
+}
+
 export function FounderView() {
   const params = useSearchParams();
   const state = useApi("founding-offer", (signal) => founding.offer(signal));
@@ -96,7 +122,7 @@ export function FounderView() {
       </header>
       {offer.preview && <p className="banner" role="note">Admin preview: the Founding 100 is still switched off for members.{offer.missing_details.length ? ` Still to set: ${offer.missing_details.join(", ")}.` : ""}</p>}
       {back === "success" && !live && <p className="banner" role="status">Payment received. Your membership appears here as soon as Stripe confirms it.</p>}
-      {back === "cancelled" && <p className="cap" role="status">Checkout closed. Your seat is held for a few more minutes if you want to try again.</p>}
+      {back === "cancelled" && <ReleaseSeat onPaid={reload} />}
 
       {m && (
         <Card title="Your membership" aside={m.badge ? <Pill tone="gold">{m.badge}</Pill> : undefined}>
