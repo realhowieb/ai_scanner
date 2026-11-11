@@ -410,6 +410,13 @@ class ScanAndStockApiTests(DataApiBase):
             self.assertEqual((rows["ZZZQ"]["score"], rows["ZZZQ"]["rvol"], rows["MINE"]["score"]), (61, 1.8, 44))
             self.assertIn("prebreakout", rows["ZZZQ"]["signals"])    # Premium keeps model evidence
             self.assertEqual(out["auto_scored_at"], "2026-10-27T14:35:00+00:00")
+            self.assertEqual((out["unranked_total"], out["unranked_shown"]), (3, 3))
+            # Premium sees EARNINGS_UNRANKED_PREMIUM unranked reporters, past the plan's row cap.
+            with mock.patch("api.scans.max_results_for", return_value=1), \
+                    mock.patch("api.scans.EARNINGS_UNRANKED_PREMIUM", 2):
+                cut = self.client.get(url, headers=prem).json()
+                self.assertEqual((cut["unranked_total"], cut["unranked_shown"]), (3, 2))
+                self.assertEqual(self.client.get(url, headers=self.h).json()["unranked_shown"], 1)
             self.client.get(url, headers=prem)
             self.assertEqual((st.call_count, ld.call_count), (1, 1))  # cached between page loads
             # Pro keeps the per-row "Score it": no auto scores, no read of the shared pass.

@@ -6772,6 +6772,18 @@
       "title": "Total",
       "type": "integer"
      },
+     "unranked_shown": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "With include_unranked: how many of those are in setups (the plan cap, or EARNINGS_UNRANKED_PREMIUM on Premium)",
+      "title": "Unranked Shown"
+     },
      "unranked_total": {
       "description": "Names that report in the window but did not rank in the scan",
       "title": "Unranked Total",
