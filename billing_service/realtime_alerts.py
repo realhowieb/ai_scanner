@@ -227,7 +227,7 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
     # the spelling on the user's alert. Validation errors are isolated with a
     # bounded split, never retried for auth/rate-limit/server failures.
     aliases = {str(t).strip().upper().replace("-", "."): str(t).strip().upper()
-               for t in tickers if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", str(t).strip())}
+               for t in tickers if isinstance(t, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", str(t).strip())}
     budget = [24]
     stop = [False]
 

@@ -41,6 +41,7 @@ def save_scores(records, method):
     try:
         ensure_schema(conn)
         with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext('scan_score_cache:write'))")
             cur.execute('''INSERT INTO scan_score_cache (run_id,method,stamp,scores)
                 SELECT (x->>'run_id')::bigint, %s, x->>'stamp', x->'scores'
                 FROM jsonb_array_elements(%s::jsonb) x
