@@ -298,7 +298,8 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
     expect(card).toHaveTextContent("67% of 3");                      // beat SPY with its own denominator
     expect(card).toHaveTextContent("Insufficient sample coverage");
     expect(card).toHaveTextContent("1 matured signal has no SPY comparison yet");
-    for (const c of calls.filter((x) => x.path.startsWith("/v1/outcomes/"))) expect(c.search).toBe("");   // no hidden filters
+    // No hidden filters on the overview (the explorer and through-time cards send their own choices).
+    for (const c of calls.filter((x) => /^\/v1\/outcomes\/(summary|scores|horizons|setups)$/.test(x.path))) expect(c.search).toBe("");
   });
 
   it("shows every score bucket (weak ones included), every horizon and every setup", async () => {
