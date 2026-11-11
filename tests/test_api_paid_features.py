@@ -1,4 +1,5 @@
 """Paid-feature parity APIs (P1-67..P1-72): server-side plan gates and shapes."""
+import datetime as dt
 import json
 import os
 import unittest
@@ -281,7 +282,18 @@ class DayTraderTests(PaidApiTestCase):
         self.assertEqual(self.get("pro@example.com", "/v1/day-trader?source=bogus").status_code, 422)
 
     def test_movers_source(self):
-        with mock.patch("ui.day_trader._top_movers_symbols", return_value=["AAPL"]) as movers:
+        # Regular session: every movers list is cut from one shared market pass.
+        with mock.patch("market_data.premarket_session_date", return_value=None), \
+                mock.patch("ui.day_trader._movers_scored", return_value=[(5.0, "AAPL")]) as market_pass:
+            b = self.get("pro@example.com", "/v1/day-trader?source=movers").json()
+            self.get("prem@example.com", "/v1/day-trader?source=movers")
+        self.assertEqual(b["symbols"], ["AAPL"])
+        self.assertEqual(market_pass.call_count, 1)
+
+    def test_movers_source_premarket(self):
+        # Before the open each list ranks its own pre-market gappers.
+        with mock.patch("market_data.premarket_session_date", return_value=dt.date(2026, 11, 11)), \
+                mock.patch("ui.day_trader._top_movers_symbols", return_value=["AAPL"]) as movers:
             b = self.get("pro@example.com", "/v1/day-trader?source=movers").json()
             self.get("prem@example.com", "/v1/day-trader?source=movers")
         self.assertEqual(b["symbols"], ["AAPL"])
