@@ -1,7 +1,6 @@
 """Tests for the email-verification upgrade gate (fails closed on lookup outages)."""
 from __future__ import annotations
 
-import importlib.util
 import unittest
 from unittest.mock import MagicMock, patch
 

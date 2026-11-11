@@ -4,7 +4,6 @@ The card (ui.account_card) owns name, plan, plan summary, upgrade CTA,
 "Compare all plans" and "Log out". Scanner, every sub-page sidebar and the
 phone menu render it; changing pages must never change what it shows.
 """
-import importlib.util
 import re
 import unittest
 from pathlib import Path

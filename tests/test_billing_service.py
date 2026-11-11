@@ -12,7 +12,6 @@ import json
 import sys
 import types
 import unittest
-from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 _FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
@@ -47,7 +46,6 @@ def _make_psycopg2_mock(*, db_reachable: bool = False) -> types.ModuleType:
 
 def _load_billing_module(env_overrides: dict[str, str] | None = None, *, db_reachable: bool = False):
     """Import billing_service.main with all external deps mocked."""
-    import fastapi  # keep HTTPException identity stable outside sys.modules isolation
     for mod in list(sys.modules):
         if mod.startswith("billing_service"):
             del sys.modules[mod]

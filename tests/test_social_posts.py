@@ -1,6 +1,5 @@
 """Weekly social posts sent to Buffer as drafts (services/social_posts.py, db/social_posts.py)."""
 import datetime as dt
-import json
 import unittest
 from unittest import mock
 

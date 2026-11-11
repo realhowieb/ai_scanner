@@ -1,7 +1,6 @@
 """Returning from the Stripe portal shows the current plan instead of waiting for
 an upgrade (P1-27 finding 2026-09-29: a portal downgrade to Free showed
 "Activating your plan upgrade…" and then "Upgrade is still processing")."""
-import importlib.util
 import unittest
 from pathlib import Path
 

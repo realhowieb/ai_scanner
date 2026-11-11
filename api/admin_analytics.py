@@ -17,7 +17,7 @@ import datetime as dt
 from array import array
 from collections import Counter, defaultdict
 from statistics import mean, median
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 from analytics import admin_research as ar
 from api.today import TTLCache

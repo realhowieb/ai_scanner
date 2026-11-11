@@ -4,11 +4,9 @@ Run 85D gated historical context on Market Brief (can_track_record). The same
 "70–79 range: X% positive outcome · n" lines also showed to Free accounts in the
 Scanner's opportunity cards and Stock Intelligence's Historical research panel.
 """
-import importlib.util
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 HAS_ST = True

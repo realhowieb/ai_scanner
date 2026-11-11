@@ -4,7 +4,6 @@
 # Centralized database connection helper
 
 import os
-from typing import Optional
 
 from utils.swallowed import swallowed
 

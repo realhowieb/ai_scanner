@@ -1,9 +1,9 @@
 # db/runs.py
 from __future__ import annotations
 
-import json
+import json  # noqa: F401
 import os
-import sqlite3
+import sqlite3  # noqa: F401
 from typing import Any, Dict, List, Optional
 
 from utils.swallowed import swallowed

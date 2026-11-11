@@ -31,7 +31,6 @@ from analytics.alert_quality import (  # canonical reuse
     UNAVAILABLE,
     _to_dt,
     get_quality_horizons,
-    is_valid_quality_snapshot,
     select_first_valid_observation,
 )
 from ui.opportunities import HSF_SCORE_VERSION, MIN_SCORE_DELTA, versions_incompatible  # canonical reuse

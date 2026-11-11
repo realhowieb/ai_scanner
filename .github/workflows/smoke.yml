@@ -121,7 +121,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-          ruff check . --select E9,F,I --ignore F401,F811
+          ruff check .
 
       - name: Import smoke checks
         run: |
@@ -131,6 +131,35 @@ jobs:
 
       - name: Run unit smoke tests
         run: python -m pytest tests/ -v --tb=short
+
+  api-tests:
+    # The whole suite with the API's own dependencies installed. The smoke job above
+    # installs only the dev tools, so every test that needs FastAPI skips there.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            api/requirements.txt
+            requirements-dev.txt
+
+      - name: Install API and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r api/requirements.txt -r requirements-dev.txt
+
+      - name: Run every test with the API dependencies present
+        run: python -m pytest tests/ -q --tb=short
 
   ml-v4-models:
     # ML v4 providers (XGBoost, LightGBM, CatBoost) + the ML v3 walk-forward they

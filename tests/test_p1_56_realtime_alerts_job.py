@@ -52,7 +52,6 @@ class WorkflowTests(unittest.TestCase):
     SRC = Path(".github/workflows/realtime-alerts.yml").read_text()
 
     def test_dispatch_only_with_lock_and_short_timeout(self):
-        import re
 
         self.assertRegex(self.SRC, r"(?m)^  workflow_dispatch:$")
         self.assertNotRegex(self.SRC, r"(?m)^\s+schedule:")  # comments may mention it

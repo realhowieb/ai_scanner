@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from services.paper_orders import (
-    OrderConflict,
+    OrderConflict,  # noqa: F401
     PaperRejected,
     PaperUnavailable,
     reconcile_pending,

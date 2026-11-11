@@ -12,7 +12,7 @@ the actual 15-min above/below outcome instead of a heuristic. Never raises.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def _features(sig: Dict[str, Any], market: Dict[str, Any], spot: float) -> Dict[str, Any]:

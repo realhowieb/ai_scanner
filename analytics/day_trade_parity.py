@@ -14,7 +14,7 @@ observation from its recorded ``diagnostic_inputs``.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from analytics import day_trade_intel as di
 

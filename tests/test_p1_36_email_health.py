@@ -4,7 +4,6 @@ Incident 2026-09-28: the morning digest and alert emails sent nothing all mornin
 and nobody knew until the owner noticed a missing email.
 """
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

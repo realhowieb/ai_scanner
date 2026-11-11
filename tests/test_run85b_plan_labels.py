@@ -5,7 +5,6 @@ Live testing: one account showed "Plan: Basic" on Stock Intelligence and
 `basic`; customers see it as **Free**. All displays now go through
 ui.plan_labels.plan_label; entitlement code keeps comparing internal keys.
 """
-import importlib.util
 import re
 import unittest
 from pathlib import Path

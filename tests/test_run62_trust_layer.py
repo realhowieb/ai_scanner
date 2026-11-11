@@ -213,7 +213,6 @@ class LogoutMessageTests(unittest.TestCase):
     finds a deleted session. It must say "signed out", not "expired"."""
 
     def test_delete_session_marks_signed_out(self):
-        import importlib.util
         from unittest import mock
 
         if False:
@@ -234,7 +233,6 @@ class LogoutMessageTests(unittest.TestCase):
         self.assertIn("You've signed out.", auth)
 
     def test_new_sign_in_clears_the_flag(self):
-        import importlib.util
         from unittest import mock
 
         if False:

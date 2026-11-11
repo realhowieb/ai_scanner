@@ -25,7 +25,7 @@ except Exception:
 
 # Load tier configuration from config.py
 from config import TIERS_CONFIG
-from domain.plans import TIER_ORDER, has_min_tier
+from domain.plans import has_min_tier
 
 
 # ------------------------------

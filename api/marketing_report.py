@@ -16,7 +16,7 @@ compared with another. Pure functions over the loader's rows; admins only, read-
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 from api.admin_analytics import PERIODS, SOURCE_LABELS, AnalyticsError, AnalyticsUnavailable
 

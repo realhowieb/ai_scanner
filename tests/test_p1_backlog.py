@@ -1,10 +1,8 @@
 """P1 backlog — lenses, cards, new-since-visit, recap, Today, My Stocks, nav,
 Ticker Intelligence v2. Presentation only; no DB, no Streamlit runtime."""
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import pandas as pd
 
@@ -12,8 +10,6 @@ try:  # the Streamlit app was retired; its modules are gone
     from ui import discover, last_visit, market_scans, recap
 except ImportError:
     discover = last_visit = market_scans = recap = None
-from ui.product_copy import find_prohibited_claims
-from ui.results_intelligence import consolidate_scanner_results
 
 ROOT = Path(__file__).resolve().parents[1]
 UTC = dt.timezone.utc

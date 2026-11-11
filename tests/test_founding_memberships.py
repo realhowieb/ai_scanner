@@ -4,7 +4,6 @@ db.founding runs its real SQL on an in-memory SQLite database here; the real-Pos
 concurrency tests are tests/test_founding_postgres.py. No Stripe, no network.
 """
 import datetime as dt
-import os
 import sqlite3
 import unittest
 from unittest import mock

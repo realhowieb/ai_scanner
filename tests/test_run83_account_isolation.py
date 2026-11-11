@@ -7,7 +7,6 @@ Market Brief. These tests drive the app's own logout clearing
 sign-in (enforce_account_boundary), and the real readers on Market Brief, Today
 and Stock Intelligence.
 """
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

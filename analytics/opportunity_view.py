@@ -19,7 +19,6 @@ Pure and deterministic: identical inputs → identical OpportunityView.
 """
 from __future__ import annotations
 
-import datetime as _dt
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 SCHEMA_VERSION = "hsf-opportunity-view-1.0"

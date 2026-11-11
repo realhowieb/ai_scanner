@@ -40,7 +40,7 @@ Validate at deploy time with `config_validation.validate_config()` (returns
 ```bash
 .venv/bin/python -m pytest -q
 ```
-Lint: `python3.9 -m ruff check . --select E9,F,I`. CI mirrors this in
+Lint: `python3.9 -m ruff check .` (rules in pyproject.toml). CI mirrors this in
 `.github/workflows/smoke.yml`.
 
 ## Background jobs (cron pipeline)

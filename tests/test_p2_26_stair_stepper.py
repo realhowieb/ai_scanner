@@ -1,11 +1,9 @@
 """P2-26 — stair-stepper (1-minute Linear Regression R²) check on Day Trader."""
-import importlib.util
 import math
 import random
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest import mock
 
 from analytics.stair_step import (
     is_stair_stepper,

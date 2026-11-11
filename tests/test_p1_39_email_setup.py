@@ -1,5 +1,4 @@
 """P1-39 — Admin email setup per environment, never exposing secrets."""
-import importlib.util
 import json
 import unittest
 from unittest import mock
