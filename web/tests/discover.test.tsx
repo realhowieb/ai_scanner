@@ -85,6 +85,27 @@ describe("Market Brief", () => {
     expect(within(proToday).queryByText(/Free on every plan/)).not.toBeInTheDocument();
   });
 
+  it("Reporting today shows watchlist and scan picks first, 20 at a time, and expands", async () => {
+    const many = Array.from({ length: 30 }, (_, i) => `R${String(i).padStart(2, "0")}`);
+    route({
+      "/v1/brief": () => jsonResponse(brief({ earnings_today: [...many, "ZWL", "ZGAP"], gappers: [{ ticker: "ZGAP", gap_pct: 5, last: 10 }] })),
+      "/v1/earnings": () => jsonResponse([]),
+      "/v1/watchlists": () => jsonResponse([{ id: 7, name: "Main", is_default: true, symbol_count: 1 }]),
+      "/v1/watchlists/7": () => jsonResponse({ id: 7, name: "Main", is_default: true, symbol_count: 1, items: [{ ticker: "ZWL" }] }),
+    });
+    wrap(<BriefView />, "pro");
+    const today = await screen.findByRole("region", { name: "Reporting today" });
+    expect(within(today).getByText("32 companies")).toBeInTheDocument();
+    const tickers = () => within(today).getAllByRole("link").map((a) => a.getAttribute("href") ?? "").filter((h) => h.startsWith("/stocks/")).map((h) => h.slice(8));
+    await waitFor(() => expect(tickers().slice(0, 3)).toEqual(["ZWL", "ZGAP", "R00"]));
+    expect(tickers()).toHaveLength(20);
+    expect(within(today).getByRole("link", { name: "Open in Scanner" })).toHaveAttribute("href", "/scanner?signal=earnings");
+    await userEvent.click(within(today).getByRole("button", { name: "Show all 32" }));
+    expect(tickers()).toHaveLength(32);
+    await userEvent.click(within(today).getByRole("button", { name: "Show fewer" }));
+    expect(tickers()).toHaveLength(20);
+  });
+
   it("Pro gets the earnings calendar; not-ready and failed briefs are explained", async () => {
     route({ "/v1/brief": () => jsonResponse(brief()), "/v1/earnings": () => jsonResponse([{ ticker: "ERN", earnings_date: "2026-10-09", days_until: 1, time: "amc" }]) });
     const { unmount } = wrap(<BriefView />, "pro");
