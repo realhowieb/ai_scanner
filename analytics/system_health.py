@@ -119,7 +119,8 @@ def _runs(runs: Optional[Sequence[Mapping[str, Any]]]) -> List[Dict[str, Any]]:
         u = _parse(r.get("updated_at") or r.get("updatedAt"))
         out.append({"created": c, "updated": u, "conclusion": r.get("conclusion"),
                     "status": r.get("status") or ("completed" if r.get("conclusion") else None),
-                    "event": r.get("event"), "no_runner": bool(r.get("no_runner"))})
+                    "event": r.get("event"), "no_runner": bool(r.get("no_runner")),
+                    "title": r.get("display_title") or ""})
     return sorted(out, key=lambda r: r["created"])
 
 
@@ -297,6 +298,10 @@ def eval_research_capture(summary: Optional[Mapping[str, Any]], scan_runs: Optio
     zero = []
     for r in runs:
         if r["created"] < window_start or not mc.is_market_open(r["created"] + _dt.timedelta(minutes=2)):
+            continue
+        # Hourly refresh scans skip research capture on purpose. Runs are named
+        # "... | refresh"; older runs without the name are matched by time.
+        if "| refresh" in r["title"] or mc.is_refresh_scan_time(r["created"]):
             continue
         end = (r["updated"] or r["created"]) + _dt.timedelta(minutes=5)
         if not any(r["created"] <= t <= end for t in per_scan):
