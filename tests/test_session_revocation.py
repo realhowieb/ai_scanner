@@ -1,5 +1,4 @@
 """P1-54: a password reset or a deactivated account ends existing sessions."""
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

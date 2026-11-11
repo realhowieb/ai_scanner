@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 # One JavaScript stack line: Chrome "at fn (url:line:col)" / "at url:line:col",
 # Firefox and Safari "fn@url:line:col".
 _FRAME = re.compile(r"^\s*(?:at\s+)?(?:(?P<fn>[^\s(@]+)\s+\(|(?P<fn2>[^\s@]*)@)?"
@@ -72,5 +74,5 @@ def capture_client_error(report: Dict[str, Any], stack: Optional[str] = None) ->
                 }, scope=scope)
             else:
                 sentry_sdk.capture_message(f"Web: {report.get('message')}", level="error")
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.monitoring.capture_client_error", _ignored)

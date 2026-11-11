@@ -4,11 +4,9 @@ Free accounts see an upgrade note instead of the live monitor; Pro, Premium and
 Admin get the monitor. Sessions whose entitlements predate the flag fall back to
 the resolved tier, so a redeploy can't lock Pro users out.
 """
-import importlib.util
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 HAS_ST = True

@@ -1,7 +1,6 @@
 """P2-45 — Today's "After the close" card: after-hours movers from the latest
 postmarket scan, Pro+, between the close and the next open."""
 import datetime as dt
-import importlib.util
 import unittest
 from unittest import mock
 

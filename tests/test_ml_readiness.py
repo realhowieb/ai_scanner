@@ -347,16 +347,15 @@ class MlReadinessApiTests(ApiTestCase):
         p("db.research_datasets.fetch_scan_index", side_effect=lambda t, s, e, **k: list(self.scans)).start()
 
     def test_permissions(self):
-        self.assertEqual(self.client.get("/v1/ml/readiness").status_code, 401)
+        self.assertEqual(self.client.get("/v1/admin/ml-readiness").status_code, 401)
         pro = self.auth(self.login("pro@example.com").json()["access_token"])
-        r = self.client.get("/v1/ml/readiness", headers=pro)
+        r = self.client.get("/v1/admin/ml-readiness", headers=pro)
         self.assertEqual(r.status_code, 403)
 
     def test_schema(self):
-        admin = self.auth(self.login("boss@example.com").json()["access_token"])
-        r = self.client.get("/v1/ml/readiness", headers=admin)
-        self.assertEqual(r.status_code, 200, r.text)
-        body = r.json()
+        from api import ml_readiness
+
+        body = ml_readiness.readiness()
         self.assertIn(body["status"], (mr.NOT_READY, mr.COLLECTING, mr.NEAR_READY, mr.READY))
         self.assertIn(body["recommendation"], ("ML_V4_NOT_READY", "ML_V4_NEAR_READY", "ML_V4_READY"))
         self.assertEqual(body["observations"]["total"], len(self.rows))
@@ -364,21 +363,20 @@ class MlReadinessApiTests(ApiTestCase):
         self.assertEqual(len(body["gates"]), len(mr.GATES))
         self.assertTrue(all({"gate", "status", "threshold", "why"} <= set(g) for g in body["gates"]))
 
-    def test_database_outage_is_503(self):
+    def test_admin_panel_shows_the_same_status(self):
+        admin = self.auth(self.login("boss@example.com").json()["access_token"])
+        r = self.client.get("/v1/admin/ml-readiness", headers=admin)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(len(r.json()["gates"]), len(mr.GATES))
+
+    def test_database_outage_is_reported(self):
+        from api import ml_readiness
+        from api.store import DatabaseUnavailable
         from db.research_datasets import ResearchDataUnavailable
 
-        admin = self.auth(self.login("boss@example.com").json()["access_token"])
         with mock.patch("db.research_datasets.fetch_readiness_rows", side_effect=ResearchDataUnavailable("x")):
-            r = self.client.get("/v1/ml/readiness", headers=admin)
-        self.assertEqual(r.status_code, 503)
-
-    def test_route_is_internal_and_read_only(self):
-        from api import main
-
-        spec = main.create_app(self.settings).openapi()
-        item = spec["paths"]["/v1/ml/readiness"]
-        self.assertEqual(set(item), {"get"})
-        self.assertTrue(item["get"]["x-internal"])
+            with self.assertRaises(DatabaseUnavailable):
+                ml_readiness.build()
 
 
 class SnapshotSlotTests(unittest.TestCase):

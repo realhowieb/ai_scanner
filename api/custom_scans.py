@@ -25,6 +25,8 @@ import math
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 UNIVERSES = ("sp500", "nasdaq", "combo", "us_market", "watchlist", "ticker", "earnings")
 EARNINGS_LABELS = {"today": "today", "tomorrow": "tomorrow", "week": "next 7 days"}     # scan labels
 EARNINGS_WHEN = {"today": "today", "tomorrow": "tomorrow", "week": "in the next 7 days"}  # sentences
@@ -278,8 +280,8 @@ def _save_run(df: Any, label: str, username: str, duration: float) -> None:
         save_run(f"{label} | {rows} results | {duration:.1f}s",
                  df.to_json(orient="records") if df is not None else "[]",
                  label=label, username=username, row_count=rows, duration_sec=duration, is_snapshot=False)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.custom_scans._save_run", _ignored)
 
 
 def plan_or_raise(req: Dict[str, Any], account_ent: Dict[str, Any], now_session: Optional[str] = None) -> Dict[str, Any]:

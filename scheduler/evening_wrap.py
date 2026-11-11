@@ -7,7 +7,7 @@ and throttled once per day. Deterministic, best-effort, never raises.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone  # noqa: F401
 from typing import Any, Dict, List
 
 try:

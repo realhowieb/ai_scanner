@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from analytics.track_method import METHOD
 from db.engine import get_neon_conn, schema_once
+from utils.swallowed import swallowed
 
 # Separate stored results from the old method that re-scored historical scans.
 # Public callers keep using "prebreakout"; legacy rows remain for audit only.
@@ -142,8 +143,8 @@ def load_daily_excess(ranking: str = "breakout", horizon_days: int = 5, days: in
         try:
             if day is not None and day.weekday() >= 5:
                 continue
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.track_record.load_daily_excess", _ignored)
         out.append((day, float(val) if val is not None else None))
     return out
 

@@ -4,7 +4,7 @@ the policies. See api/founding.py."""
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from pydantic import BaseModel, Field

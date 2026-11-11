@@ -33,9 +33,8 @@ import math
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
-import numpy as np
 import pandas as pd
 
 try:

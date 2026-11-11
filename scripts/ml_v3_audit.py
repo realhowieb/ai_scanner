@@ -162,7 +162,6 @@ def main() -> int:
     from analytics import ml_v3_pipeline as P
     from analytics import ml_v3_reports as R
     from analytics import research_dataset as rd
-    from analytics import research_schema as rs
     from api.research import load_window
 
     today = dt.datetime.now(dt.timezone.utc).date()

@@ -22,6 +22,7 @@ from api.deps import (
     forget_account,
 )
 from api.scans import json_safe
+from utils.swallowed import swallowed
 
 
 class SignupBody(BaseModel):
@@ -200,8 +201,8 @@ def register(app: FastAPI) -> None:
         pair = _token_pair(username, _settings(request), body.client)
         try:
             record_login_attempt(username, success=True, failure_reason=None)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.routes.account.register.email_link_confirm", _ignored)
         return pair
 
     @app.post("/v1/me/sign-out-everywhere", status_code=204, responses=_AUTH)

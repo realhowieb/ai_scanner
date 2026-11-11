@@ -5,6 +5,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
+from utils.swallowed import swallowed
+
 try:
     from utils.st_compat import st
 except ModuleNotFoundError:
@@ -59,8 +61,8 @@ def _demo_password(name: str) -> str | None:
         value = st.secrets.get(name)
         if value:
             return str(value)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.users._demo_password", _ignored)
     return None
 
 
@@ -108,10 +110,10 @@ def seed_neon_users_from_local() -> None:
 
         cur.close()
         conn.close()
-    except Exception:
+    except Exception as _ignored:
         # Best-effort seeding; log to UI but do not crash
         # st.caption(f"⚠️ Neon user seeding failed: {e}")
-        pass
+        swallowed("db.users.seed_neon_users_from_local", _ignored)
 
 
 # Helper: update a user's password in Neon (best-effort, silent fail)
@@ -169,10 +171,10 @@ def update_neon_user_full_name(username: str, full_name: str) -> None:
         except Exception:
             try:
                 st.cache_data.clear()
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as _ignored:
+                swallowed("db.users.update_neon_user_full_name", _ignored)
+    except Exception as _ignored:
+        swallowed("db.users.update_neon_user_full_name", _ignored)
 
 
 def create_user_account(
@@ -240,8 +242,8 @@ def create_user_account(
     except Exception:
         try:
             st.cache_data.clear()
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.users.create_user_account", _ignored)
 
     # Fetch the record back (best-effort)
     cur.execute(
@@ -562,8 +564,8 @@ def grant_admin(username: str) -> bool:
         conn.close()
         try:
             load_users.clear()  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.users.grant_admin", _ignored)
         return updated
     except Exception:
         return False
@@ -590,8 +592,8 @@ def revoke_admin(username: str) -> bool:
         conn.close()
         try:
             load_users.clear()  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.users.revoke_admin", _ignored)
         return updated
     except Exception:
         return False
@@ -626,8 +628,8 @@ def record_login_attempt(
         conn.commit()
         cur.close()
         conn.close()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.users.record_login_attempt", _ignored)
 
 
 def is_login_rate_limited(username: str) -> bool:

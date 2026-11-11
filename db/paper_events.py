@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from db.engine import get_neon_conn, schema_once
+from utils.swallowed import swallowed
 
 
 @schema_once
@@ -99,8 +100,8 @@ def sync_orders(user_id: str, orders: List[Dict[str, Any]]) -> int:
     try:
         conn.commit()
         cur.close()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.paper_events.sync_orders", _ignored)
     return written
 
 

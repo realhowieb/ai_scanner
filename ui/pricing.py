@@ -12,7 +12,7 @@ import html
 from typing import Dict, List, Optional, Tuple
 
 from domain.plans import ALERT_LIMIT_BY_TIER, FEATURE_MIN_TIER, TIER_ORDER
-from domain.upgrades import UPGRADE_MESSAGES, required_tier, upgrade_message
+from domain.upgrades import UPGRADE_MESSAGES, required_tier, upgrade_message  # noqa: F401
 
 TIERS = ("basic", "pro", "premium")
 from ui.plan_labels import PLAN_LABELS  # noqa: E402  (Run 85B: one source of plan names)

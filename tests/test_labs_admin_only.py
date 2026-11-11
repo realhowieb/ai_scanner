@@ -1,5 +1,4 @@
 """P2-25 (owner decision 2026-09-29): Labs / Kalshi BTC is admin-only."""
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

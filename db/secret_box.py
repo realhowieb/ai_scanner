@@ -12,6 +12,8 @@ import hashlib
 import os
 from typing import Optional
 
+from utils.swallowed import swallowed
+
 _DOMAIN = "alpaca_paper_v1:"  # key separation from other uses of the app secret
 
 
@@ -28,8 +30,8 @@ def _secret_source() -> Optional[str]:
             val = str(st.secrets.get(name, "") or "").strip()  # type: ignore[attr-defined]
             if val:
                 return val
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.secret_box._secret_source", _ignored)
     return None
 
 

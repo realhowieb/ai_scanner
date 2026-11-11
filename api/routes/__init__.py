@@ -24,7 +24,6 @@ def register_all(app: FastAPI) -> None:
         onboarding,
         outcomes,
         public,
-        research,
         scans,
         trading,
         workspace,
@@ -42,8 +41,6 @@ def register_all(app: FastAPI) -> None:
     ai.register(app)
     trading.register(app)
     public.register(app)
-    research.register(app)
-    research.register_ml(app)
     admin.register(app)
     ml_models.register(app)
     onboarding.register(app)

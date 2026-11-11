@@ -18,6 +18,7 @@ import datetime as dt
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from db.engine import get_neon_conn, schema_once
+from utils.swallowed import swallowed
 
 RETENTION_DAYS = 180
 _conn_factory: Optional[Callable[[], Any]] = None
@@ -192,6 +193,6 @@ def predictions(model_ids: Sequence[int], *, since: dt.datetime, with_served: bo
         try:
             return _read(base + ", s.ai_confidence FROM ml_shadow_predictions p "
                          "LEFT JOIN signal_outcomes s ON s.id = p.observation_id" + where, params)
-        except Exception:  # signal_outcomes missing (tests, fresh DB): fall back without it
-            pass
+        except Exception as _ignored:  # signal_outcomes missing (tests, fresh DB): fall back without it
+            swallowed("db.ml_shadow_predictions.predictions", _ignored)
     return _read(base + ", NULL AS ai_confidence FROM ml_shadow_predictions p" + where, params)

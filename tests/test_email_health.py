@@ -4,7 +4,6 @@ Incident 2026-09-28: the morning digest and alert emails sent nothing all mornin
 and nobody knew until the owner noticed a missing email.
 """
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -96,7 +95,7 @@ class RecordingTests(unittest.TestCase):
             md.record_email_job("digest", {"sent": 1})
 
     def test_digest_and_wrap_record_their_run(self):
-        from tests.test_p1_41_email_prefs import _digest_run
+        from tests.test_email_prefs import _digest_run
 
         for job in ("digest", "evening"):
             with mock.patch("db.email_job_runs.record_email_run") as rec:

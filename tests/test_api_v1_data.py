@@ -151,6 +151,8 @@ class DataApiBase(ApiTestCase):
                      "list_events_filtered"):
             mock.patch(f"db.alerts.{name}", side_effect=getattr(self.al, name)).start()
         mock.patch("db.alert_rules.list_events", return_value=[]).start()  # alert rules: see test_api_watchlist_intelligence
+        # No live price provider: stock pages use only the bars the test supplies (see test_stock_daily_bars).
+        mock.patch("api.scans._provider_bars", return_value=[]).start()
         self.h = self.auth(self.login().json()["access_token"])
         self.accounts["free@example.com"] = {**self.accounts["pro@example.com"], "username": "free@example.com",
                                              "tier": "basic"}

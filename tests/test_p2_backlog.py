@@ -1,11 +1,7 @@
 """P2 backlog — design pass, tour, saved screens, share links, home screen."""
-import importlib.util
-import re
 import unittest
 from pathlib import Path
 from unittest import mock
-
-import pandas as pd
 
 try:  # the Streamlit app was retired; its modules are gone
     from ui import browser_prefs, discover, tour

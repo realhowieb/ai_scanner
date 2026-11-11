@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from utils.swallowed import swallowed
+
 RANKED_MIN = 40  # same floor the web uses for "ranked" (web/src/components/ui.tsx RANKED_MIN)
 
 
@@ -44,8 +46,8 @@ def public_stock(ticker: str) -> Dict[str, Any]:
 
             q = (latest_quotes([t]).get("quotes") or {}).get(t) or {}
             price, change = q.get("last"), q.get("chg_pct")
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.share.public_stock", _ignored)
     return {
         "ticker": t,
         "name": (known or {}).get("name"),

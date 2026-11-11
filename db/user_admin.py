@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
+from utils.swallowed import swallowed
+
 from .engine import get_neon_conn
 from .schema import ensure_neon_users_schema
 
@@ -47,8 +49,8 @@ def _audit(actor: Any, action: str, target: Any, detail: Dict[str, Any] | None =
         from .admin_audit import record_admin_event
 
         record_admin_event(actor, action, target, detail)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.user_admin._audit", _ignored)
 
 
 def _clear_user_cache() -> None:
@@ -56,8 +58,8 @@ def _clear_user_cache() -> None:
         from .users import load_users
 
         load_users.clear()  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.user_admin._clear_user_cache", _ignored)
 
 
 def create_user(email: Any, full_name: Any, password: str, tier: str = "basic",

@@ -14,6 +14,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 # Report silent per-user failures to Sentry when configured (no-op otherwise).
 try:
     from ui.monitoring import capture as _capture
@@ -73,8 +75,8 @@ def mark_sent(key: str) -> None:
         from db.earnings import mark_earnings_refreshed_today
 
         mark_earnings_refreshed_today(key)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.morning_digest.mark_sent", _ignored)
 
 
 def _latest_snapshot_df():
@@ -225,8 +227,8 @@ def _market_gappers(df, limit: int = 5) -> List[Dict[str, Any]]:
             if rows:
                 rows.sort(key=lambda r: abs(r["gap_pct"]), reverse=True)
                 return rows[:limit]
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.morning_digest._market_gappers", _ignored)
     return _gappers_from_snapshot(df, limit)
 
 
@@ -727,14 +729,14 @@ def record_email_job(job: str, stats: Dict[str, Any]) -> None:
         from ui.email_setup import describe_from_config
 
         stats = {**stats, "smtp": describe_from_config()}
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.morning_digest.record_email_job", _ignored)
     try:
         from db.email_job_runs import record_email_run
 
         record_email_run(job, stats)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.morning_digest.record_email_job", _ignored)
     failed = int((stats.get("skipped") or {}).get("send_failed") or stats.get("email_failed") or 0)
     if failed:
         _capture(RuntimeError(f"{job} email: {failed} send(s) failed this run"))
@@ -837,8 +839,8 @@ def _email_tier_key(email: str, record: Optional[Dict[str, Any]], users: Dict[st
 
         if is_admin_from_db(email):
             return "admin"
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.morning_digest._email_tier_key", _ignored)
     return key
 
 
@@ -945,8 +947,8 @@ def run_morning_digest(force: bool = False) -> None:
             if not is_email_verified(email):
                 _skip("unverified")
                 continue
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("scheduler.morning_digest.run_morning_digest", _ignored)
         if not email_opted_in(email, "digest"):
             _skip("unsubscribed")
             continue

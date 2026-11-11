@@ -366,21 +366,9 @@ def register(app: FastAPI) -> None:
                       account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         return user_data.add_tickers(_user(account), watchlist_id, body.tickers)
 
-    @app.post("/v1/watchlists/{watchlist_id}/symbols", response_model=models.TickersResult, responses=_OWNED,
-              summary="Add symbols (same as /tickers)")
-    def watchlist_add_symbols(watchlist_id: int, body: TickersBody,
-                              account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        return user_data.add_tickers(_user(account), watchlist_id, body.tickers)
-
     @app.delete("/v1/watchlists/{watchlist_id}/tickers/{ticker}", status_code=204, responses=_OWNED)
     def watchlist_remove(watchlist_id: int, ticker: str = TICKER,
                          account: Dict[str, Any] = Depends(current_account)) -> None:
-        user_data.remove_ticker(_user(account), watchlist_id, ticker.upper())
-
-    @app.delete("/v1/watchlists/{watchlist_id}/symbols/{ticker}", status_code=204, responses=_OWNED,
-                summary="Remove a symbol (same as /tickers/{ticker})")
-    def watchlist_remove_symbol(watchlist_id: int, ticker: str = TICKER,
-                                account: Dict[str, Any] = Depends(current_account)) -> None:
         user_data.remove_ticker(_user(account), watchlist_id, ticker.upper())
 
     @app.patch("/v1/watchlists/{watchlist_id}/tickers/{ticker}", status_code=204, responses=_OWNED)
@@ -518,8 +506,3 @@ def register(app: FastAPI) -> None:
         from api import alert_rules
 
         alert_rules.delete_rule(_user(account), rule_id)
-
-    @app.get("/v1/me/capabilities", response_model=models.Capabilities, responses=_AUTH,
-             summary="Your plan's watchlist and alert limits")
-    def my_capabilities(account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
-        return _capabilities(entitlements_for(account))

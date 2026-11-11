@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import concurrent.futures as _fut
 import contextlib as _contextlib
-import datetime as _dt
+import datetime as _dt  # noqa: F401
 import os
 import threading as _threading
 import time as _time
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
-import numpy as _np
+import numpy as _np  # noqa: F401
 import pandas as _pd
 
 from .price_alpaca import (

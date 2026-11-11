@@ -1,5 +1,4 @@
 """P2-24 secrets template, P2-38 local setup script, P2-43 failover/restore doc."""
-import re
 import unittest
 from pathlib import Path
 

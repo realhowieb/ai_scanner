@@ -12,6 +12,7 @@ import math
 from typing import Any, Dict, List, Optional
 
 from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, run_freshness, scan_freshness
+from utils.swallowed import swallowed
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
@@ -759,8 +760,8 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
         feed = None
         try:
             feed = str(_get_alpaca_data_feed()).strip().lower() or None
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.scans.latest_quotes.load", _ignored)
         return {"quotes": out, "feed": feed}
 
     key = ("quotes", tuple(syms))

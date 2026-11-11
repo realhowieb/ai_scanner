@@ -8,6 +8,8 @@ import datetime as dt
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
+from utils.swallowed import swallowed
+
 MAX_EARNINGS_DAYS = 30
 
 
@@ -133,8 +135,8 @@ def _brief_freshness(snapshot_time: Any) -> Dict[str, Any]:
         for run in market_runs()[:5]:
             if saved is not None and timestamp(run.get("created_at")) == saved:
                 return run_freshness(run)
-    except Exception:  # unknown times stay unknown; never fail the Brief
-        pass
+    except Exception as _ignored:  # unknown times stay unknown; never fail the Brief
+        swallowed("api.market._brief_freshness", _ignored)
     return describe(snapshot_time)
 
 

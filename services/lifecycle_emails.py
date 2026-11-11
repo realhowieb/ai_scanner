@@ -26,6 +26,8 @@ import math
 import os
 from typing import Any, Dict, Optional
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.lifecycle_emails")
 
 WELCOME = "welcome"
@@ -62,8 +64,8 @@ def _day(t: dt.datetime) -> str:
         from zoneinfo import ZoneInfo
 
         t = t.astimezone(ZoneInfo("America/New_York"))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("services.lifecycle_emails._day", _ignored)
     return f"{t:%A, %B} {t.day}"
 
 

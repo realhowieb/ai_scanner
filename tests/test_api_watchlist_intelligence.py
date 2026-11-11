@@ -113,7 +113,7 @@ class IntelBase(DataApiBase):
 
     def watchlist(self, h, tickers, name="Mine"):
         wid = self.client.post("/v1/watchlists", json={"name": name}, headers=h).json()["id"]
-        r = self.client.post(f"/v1/watchlists/{wid}/symbols", json={"tickers": tickers}, headers=h)
+        r = self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": tickers}, headers=h)
         self.assertEqual(r.status_code, 200)
         return wid
 
@@ -200,16 +200,16 @@ class WatchlistIntelligenceTests(IntelBase):
 
     def test_symbols_routes_and_ownership(self):
         wid = self.watchlist(self.h, ["MXL", "mxl", "BAD!"])
-        r = self.client.post(f"/v1/watchlists/{wid}/symbols", json={"tickers": ["MXL", "STM", "!!"]}, headers=self.h)
+        r = self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": ["MXL", "STM", "!!"]}, headers=self.h)
         self.assertEqual(r.json(), {"added": ["STM"], "already_present": ["MXL"], "invalid": ["!!"]})
-        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/symbols/STM", headers=self.h).status_code, 204)
-        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/symbols/STM", headers=self.h).status_code, 404)
+        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/tickers/STM", headers=self.h).status_code, 204)
+        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/tickers/STM", headers=self.h).status_code, 404)
         for path in (f"/v1/watchlists/{wid}/intelligence", f"/v1/watchlists/{wid}/changes"):
             self.assertEqual(self.client.get(path, headers=self.other).status_code, 404, path)
             self.assertEqual(self.client.get(path).status_code, 401, path)
-        self.assertEqual(self.client.post(f"/v1/watchlists/{wid}/symbols", json={"tickers": ["A"]},
+        self.assertEqual(self.client.post(f"/v1/watchlists/{wid}/tickers", json={"tickers": ["A"]},
                                           headers=self.other).status_code, 404)
-        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/symbols/MXL", headers=self.other).status_code, 404)
+        self.assertEqual(self.client.delete(f"/v1/watchlists/{wid}/tickers/MXL", headers=self.other).status_code, 404)
         self.assertEqual(self.client.get("/v1/watchlists/999/intelligence", headers=self.h).status_code, 404)
 
     def test_changes_between_the_two_latest_scans(self):
@@ -271,7 +271,7 @@ class AlertRuleApiTests(IntelBase):
         theirs = self.watchlist(self.other, ["MXL"])
         r = self.create(self.h, rule_type="RVOL_ABOVE", watchlist_id=theirs, threshold=2)
         self.assertEqual(r.status_code, 404)                          # someone else's watchlist
-        for path in ("/v1/alerts/rules", "/v1/alerts/rules/types", "/v1/alerts/events", "/v1/me/capabilities"):
+        for path in ("/v1/alerts/rules", "/v1/alerts/rules/types", "/v1/alerts/events"):
             self.assertEqual(self.client.get(path).status_code, 401, path)
 
     def test_validation_entitlements_and_limits(self):
@@ -300,7 +300,7 @@ class AlertRuleApiTests(IntelBase):
                                      enabled=False).status_code, 201)       # saved switched off is fine
         self.assertEqual(self.create(self.free, rule_type="RVOL_ABOVE", ticker="MXL",
                                      threshold=2).status_code, 409)         # duplicate
-        caps = self.client.get("/v1/me/capabilities", headers=self.free).json()
+        caps = self.client.get("/v1/alerts/rules", headers=self.free).json()["capabilities"]
         self.assertEqual((caps["max_active_alerts"], caps["delivery_channels"], caps["max_symbols_per_watchlist"]),
                          (1, ["in_app"], None))
 

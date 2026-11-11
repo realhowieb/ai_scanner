@@ -1,10 +1,12 @@
 # db/runs.py
 from __future__ import annotations
 
-import json
+import json  # noqa: F401
 import os
-import sqlite3
+import sqlite3  # noqa: F401
 from typing import Any, Dict, List, Optional
+
+from utils.swallowed import swallowed
 
 from .engine import get_neon_conn, get_sqlite_conn
 from .schema import ensure_neon_runs_schema, ensure_sqlite_runs_schema
@@ -179,8 +181,8 @@ def save_daily_snapshot(
             conn.close()
             if updated:
                 return
-    except Exception:
-        pass  # fall through to a plain insert below
+    except Exception as _ignored:
+        swallowed("db.runs.save_daily_snapshot", _ignored)  # fall through to a plain insert below
 
     save_run(
         name=name,

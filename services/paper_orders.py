@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from data import alpaca_trading as broker
 from db import paper_orders as store
 from db.trades import reconcile_paper_fill
+from utils.swallowed import swallowed
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +90,8 @@ def _record(user, intent, result):
                 from api import trade_alerts
 
                 trade_alerts.add_for_trade(user, intent["ticker"], price)   # Premium: stop and target alerts
-            except Exception:
-                pass
+            except Exception as _ignored:
+                swallowed("services.paper_orders._record", _ignored)
         terminal = result.get("status") in {"filled", "canceled", "expired", "rejected"}
         if terminal and (synced or filled == 0):
             saved = store.save(user, cid, state="synced", result=result)

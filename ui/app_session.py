@@ -4,14 +4,14 @@ from __future__ import annotations
 from typing import Any
 
 from domain.plans import (
-    ALERT_LIMIT_BY_TIER,
-    FEATURE_MIN_TIER,
-    TIER_ORDER,
-    alert_limit_for_tier,
-    compute_entitlements,
+    ALERT_LIMIT_BY_TIER,  # noqa: F401
+    FEATURE_MIN_TIER,  # noqa: F401
+    TIER_ORDER,  # noqa: F401
+    alert_limit_for_tier,  # noqa: F401
+    compute_entitlements,  # noqa: F401
     norm_lower,
-    norm_str,
-    tier_key,
+    norm_str,  # noqa: F401
+    tier_key,  # noqa: F401
 )
 
 TODAY_LANDING_KEY = "hsf_today_landed_for"

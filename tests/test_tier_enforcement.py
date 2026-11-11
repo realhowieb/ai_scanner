@@ -15,7 +15,7 @@ _PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 # Tier comparison helpers
 # ---------------------------------------------------------------------------
 
-from auth.tiering import TIER_ORDER, Tier, get_user_tier, has_min_tier, require_min_tier
+from auth.tiering import Tier, get_user_tier, has_min_tier, require_min_tier
 from ui.app_session import FEATURE_MIN_TIER, compute_entitlements, is_admin_user
 
 

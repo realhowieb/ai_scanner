@@ -28,6 +28,8 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf_api.webpush")
 
 PROVIDER = "webpush"
@@ -228,14 +230,14 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
             receipt = None
             try:
                 receipt = alert_delivery.begin(str(user_id).strip().lower(), d["id"], message)
-            except Exception:
-                pass  # Ledger failure must not prevent the original alert.
+            except Exception as _ignored:
+                swallowed("api.webpush.notify_user", _ignored)  # Ledger failure must not prevent the original alert.
             if quiet:
                 if receipt:
                     try:
                         alert_delivery.finish(receipt, "quiet_hours")
-                    except Exception:
-                        pass
+                    except Exception as _ignored:
+                        swallowed("api.webpush.notify_user", _ignored)
                 continue
             try:
                 started = time.monotonic()
@@ -248,16 +250,16 @@ def notify_user(user_id: str, title: str, body: str, url: str = "/alerts") -> in
             if receipt:
                 try:
                     alert_delivery.finish(receipt, "accepted" if ok else "gone" if status in (404, 410) else "unconfirmed" if status is None else "failed")
-                except Exception:
-                    pass
+                except Exception as _ignored:
+                    swallowed("api.webpush.notify_user", _ignored)
             sent += 1 if ok else 0
             if status in (404, 410):
                 try:
                     from api import devices
 
                     devices.remove(str(user_id).strip().lower(), int(d["id"]))
-                except Exception:
-                    pass
+                except Exception as _ignored:
+                    swallowed("api.webpush.notify_user", _ignored)
     return sent
 
 
