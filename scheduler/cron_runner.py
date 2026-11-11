@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
+from utils.swallowed import swallowed
+
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_PATH = ROOT / "artifacts" / "scheduled_scan_summary.json"
 COVERAGE_DIR = ROOT / "artifacts" / "automation"
@@ -40,8 +42,8 @@ def _release_scan_lock() -> None:
     try:
         if _SCAN_LOCK.exists():
             _SCAN_LOCK.unlink()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.cron_runner._release_scan_lock", _ignored)
 
 
 def _research_run_context(*, universe, scan_id, scan_params, research_sink):
@@ -142,8 +144,8 @@ def _append_perf_history(record: dict, *, keep: int = 60) -> None:
             lines = path.read_text().splitlines()[-(keep - 1):]
         lines.append(json.dumps(record, default=str))
         path.write_text("\n".join(lines) + "\n")
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.cron_runner._append_perf_history", _ignored)
 
 
 def _write_coverage_artifact(universe: str, report: dict) -> None:
@@ -155,8 +157,8 @@ def _write_coverage_artifact(universe: str, report: dict) -> None:
         safe = "".join(c for c in str(universe).lower() if c.isalnum() or c in "-_") or "scan"
         (COVERAGE_DIR / f"coverage_{safe}.json").write_text(
             json.dumps(report, indent=2, default=str))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.cron_runner._write_coverage_artifact", _ignored)
 
 # Report best-effort task failures to Sentry when configured (no-op otherwise),
 # so silently-swallowed cron problems still get counted somewhere.
@@ -740,8 +742,8 @@ def run_and_save(
             from ui.monitoring import capture
 
             capture(e)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("scheduler.cron_runner.run_and_save", _ignored)
         return ScanRunSummary(universe=universe, ok=False, error=f"{type(e).__name__}: {e}")
 
 
@@ -1012,8 +1014,8 @@ def main():
         from ui.monitoring import init_sentry
 
         init_sentry("cron")
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.cron_runner.main", _ignored)
     _print_provider_status()
     started_at = dt.datetime.now(dt.timezone.utc)
 

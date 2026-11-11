@@ -5,7 +5,6 @@ ui.pricing, whose cells are derived from FEATURE_MIN_TIER / ALERT_LIMIT_BY_TIER.
 Signed-out visitors see the plans (no "isn't linked to an email" message and no
 signed-in navigation).
 """
-import importlib.util
 import unittest
 from pathlib import Path
 

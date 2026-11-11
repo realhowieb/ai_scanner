@@ -13,6 +13,8 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 # Report silent failures to Sentry when configured (no-op otherwise).
 try:
     from ui.monitoring import capture as _capture
@@ -129,8 +131,8 @@ def _jsonable_row(row) -> Dict[str, Any]:
         if hasattr(value, "item"):
             try:
                 value = value.item()
-            except Exception:
-                pass
+            except Exception as _ignored:
+                swallowed("scheduler.alert_runner._jsonable_row", _ignored)
         out[str(key)] = value
     return out
 
@@ -557,8 +559,8 @@ def run_alerts() -> None:
                     str(t).upper()
                     for t in (get_watchlist_tickers(wl.get("id"), user_id) or [])
                 )
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("scheduler.alert_runner.run_alerts._watch_for", _ignored)
         watch_cache[user_id] = tickers
         return tickers
 
@@ -677,5 +679,5 @@ def run_alerts() -> None:
         from scheduler.morning_digest import record_email_job
 
         record_email_job("alerts", {"fired": fired, "emailed": emailed, "email_failed": email_failed})
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.alert_runner.run_alerts", _ignored)

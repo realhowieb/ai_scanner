@@ -1,7 +1,6 @@
 """P2-74 — Today's "Before the open" card: pre-market movers from this morning's
 premarket scan, Pro+, until 10:30 ET ("This morning's pre-market movers" after the open)."""
 import datetime as dt
-import importlib.util
 import math
 import unittest
 from unittest import mock

@@ -109,7 +109,7 @@ push is not implemented yet.
 | Email channel | no | yes | yes | `can_email_alerts` |
 
 The evaluator re-applies them every pass (newest rules first), so a downgrade takes
-effect at the next scan. `GET /v1/me/capabilities` returns the structure.
+effect at the next scan. `GET /v1/alerts/rules` returns the structure under `capabilities`.
 
 **Kill switch.** `HSF_ALERT_RULES_ENABLED=0` on hsf-api stops evaluation (rules stay
 saved). The loop only runs where `REALTIME_ALERTS_ENABLED=1`.

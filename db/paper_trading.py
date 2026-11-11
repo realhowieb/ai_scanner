@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from db.engine import get_neon_conn, schema_once
 from db.secret_box import decrypt_secret, encrypt_secret, encryption_available
+from utils.swallowed import swallowed
 
 
 @schema_once
@@ -121,8 +122,8 @@ def delete_paper_account(user_id: str) -> None:
         cur.execute("DELETE FROM alpaca_paper_accounts WHERE user_id = %s", (user,))
         conn.commit()
         cur.close()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.paper_trading.delete_paper_account", _ignored)
 
 
 def account_meta(user_id: str) -> Optional[Dict[str, Any]]:

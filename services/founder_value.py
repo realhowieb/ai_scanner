@@ -6,6 +6,7 @@ import datetime as dt
 from typing import Any, Dict, Optional
 
 from domain import founding as rules
+from utils.swallowed import swallowed
 
 
 def monthly_cents(plan: str) -> int:
@@ -40,8 +41,8 @@ def for_membership(m: Dict[str, Any], user: Optional[str] = None,
             from db import alert_rules
 
             out["alerts_used"] = int(alert_rules.count_active(user))
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("services.founder_value.for_membership", _ignored)
     return out
 
 

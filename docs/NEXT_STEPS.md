@@ -53,5 +53,5 @@ next round.
 
 ## Repo conventions (reminders)
 - Branch: work on `dev`, ff-merge to `main`, push both.
-- Gate: `.venv/bin/python -m pytest -q` + `python3.9 -m ruff check . --select E9,F,I`.
+- Gate: `.venv/bin/python -m pytest -q` + `python3.9 -m ruff check .`.
 - Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.

@@ -14,6 +14,7 @@ import re
 from typing import Any, Dict, Optional
 
 from api.store import DatabaseUnavailable
+from utils.swallowed import swallowed
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")  # same as the web app's forms
 USERNAME_MAX = 40
@@ -175,8 +176,8 @@ def request_password_reset(email: str) -> None:
         token = create_reset_token(str(account["username"]).strip().lower(), ttl_minutes=RESET_TOKEN_TTL_MINUTES)
         if token:
             send_password_reset_email(str(account["username"]).strip().lower(), _link("reset_password", token))
-    except Exception:
-        pass  # never reveal a failure that depends on the account existing
+    except Exception as _ignored:
+        swallowed("api.account.request_password_reset", _ignored)  # never reveal a failure that depends on the account existing
 
 
 # ---- sign-in link (sign in without a password) ---------------------------------------------------
@@ -199,8 +200,8 @@ def request_sign_in_link(email: str) -> None:
         token = create_token(username)
         if token:
             send_sign_in_link_email(username, _link("login/link", token), TTL_MINUTES)
-    except Exception:
-        pass  # never reveal a failure that depends on the account existing
+    except Exception as _ignored:
+        swallowed("api.account.request_sign_in_link", _ignored)  # never reveal a failure that depends on the account existing
 
 
 def consume_sign_in_link(token: str) -> str:
@@ -230,8 +231,8 @@ def sign_out_everywhere(username: str) -> None:
         from ui.auth_sessions import revoke_user_sessions
 
         revoke_user_sessions(username)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.account.sign_out_everywhere", _ignored)
     revoke_all_refresh_tokens(username, "sign_out_all")
     remove_all(username)
 
@@ -249,8 +250,8 @@ def _set_password_and_sign_out(username: str, new_password: str, reason: str) ->
         from ui.auth_sessions import revoke_user_sessions
 
         revoke_user_sessions(username)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.account._set_password_and_sign_out", _ignored)
     revoke_all_refresh_tokens(username, reason)
     from api.devices import remove_all
 
@@ -371,8 +372,8 @@ def portal_url(username: str, flow: Optional[str]) -> Dict[str, str]:
         _success, ret = _build_return_urls(username)
         if ret:
             body["return_url"] = ret
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.account.portal_url", _ignored)
     try:
         resp = requests.post(f"{base}/create-portal-session", json=body, headers=auth, timeout=30)
     except Exception as e:

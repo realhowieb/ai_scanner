@@ -20,12 +20,13 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from services.paper_orders import (
-    OrderConflict,
+    OrderConflict,  # noqa: F401
     PaperRejected,
     PaperUnavailable,
     reconcile_pending,
     require_paper_endpoint,
 )
+from utils.swallowed import swallowed
 
 PAPER_HOST = "paper-api.alpaca.markets"
 MAX_ORDER_QTY = 100_000
@@ -325,8 +326,8 @@ def activity(username: str, limit: int = 25) -> Dict[str, Any]:
     if orders:
         try:
             sync_orders(username, orders)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.trading.activity", _ignored)
     pos = positions or []
     orders_out = list_events(username, limit)
     def n(v: Any) -> Optional[float]:

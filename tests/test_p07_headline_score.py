@@ -1,5 +1,4 @@
 """P0-7 — HSF Score is the one headline number in scanner results (presentation only)."""
-import importlib.util
 import unittest
 from pathlib import Path
 

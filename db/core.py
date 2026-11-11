@@ -4,7 +4,8 @@
 # Centralized database connection helper
 
 import os
-from typing import Optional
+
+from utils.swallowed import swallowed
 
 
 def _get_database_url() -> str:
@@ -35,8 +36,8 @@ def _get_database_url() -> str:
                 if candidate:
                     dsn = candidate
                     break
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.core._get_database_url", _ignored)
     if not dsn:
         raise RuntimeError(
             "Database URL is not set (checked NEON_DATABASE_URL, DATABASE_URL, and database_url)"

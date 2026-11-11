@@ -33,6 +33,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.scheduled_scans")
 
 UTC = dt.timezone.utc
@@ -287,7 +289,7 @@ def run_pass(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
             log.warning(json.dumps({"event": "scheduled_scan_failed", "error": type(e).__name__}))
             try:
                 store.release(s["id"], prev)
-            except Exception:
-                pass
+            except Exception as _ignored:
+                swallowed("services.scheduled_scans.run_pass", _ignored)
             skip("error")
     return counts

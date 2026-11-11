@@ -1,4 +1,4 @@
-"""ML v4 data readiness (admin only, read-only): GET /v1/ml/readiness.
+"""ML v4 data readiness (admin only, read-only), shown in Admin via GET /v1/admin/ml-readiness.
 
 Reads the whole opportunity dataset with slim projections (two bulk queries:
 opportunity rows without their feature payload, and the scan-record index the

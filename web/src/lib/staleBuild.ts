@@ -20,10 +20,31 @@ window.addEventListener("error",function(e){
 },true);
 window.addEventListener("unhandledrejection",function(e){
   var r=e.reason;
-  if(r&&(r.name==="ChunkLoadError"||/Loading (CSS )?chunk .* failed/i.test(String(r.message||""))))reload();
+  if(r&&(r.name==="ChunkLoadError"||/Loading (CSS )?chunk .* failed|Failed to load chunk/i.test(String(r.message||""))))reload();
 });
 window.addEventListener("load",function(){
   var links=document.querySelectorAll('link[rel="stylesheet"]');
   for(var i=0;i<links.length;i++){if(ours(links[i].href)&&!links[i].sheet){reload();return;}}
 });
 })();`;
+
+const STALE_CHUNK = /ChunkLoadError|Loading (CSS )?chunk .* failed|Failed to load chunk/i;
+
+/** True for the errors a page from the previous build throws when it asks for a file the new build no longer has. */
+export function isStaleChunkError(message: string): boolean {
+  return STALE_CHUNK.test(message);
+}
+
+/** Reload once to pick up the new build. Shares the inline script's guard, so there is no reload loop. */
+export function reloadForStaleBuild(reload: () => void = () => window.location.reload()): boolean {
+  try {
+    const KEY = "hsf-stale-reload";
+    const last = Number(sessionStorage.getItem(KEY) || 0);
+    if (Date.now() - last < 60000) return false;
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  reload();
+  return true;
+}

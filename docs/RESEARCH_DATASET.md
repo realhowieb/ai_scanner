@@ -1,5 +1,7 @@
 # HSF research dataset (point-in-time foundation)
 
+> 2026-11-11: the admin-only `/v1/research/*` HTTP routes were removed (nothing called them). The dataset code and `scripts/research_dataset.py` are unchanged; route mentions below are historical.
+
 An internal, read-only layer that answers two questions separately for any
 historical HSF observation:
 

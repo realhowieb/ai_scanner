@@ -94,7 +94,7 @@ def resolve_user_tier(
             tier_obj = None
             if Tier is not None:
                 try:
-                    if hasattr(Tier, "__members__") and "ADMIN" in getattr(Tier, "__members__"):
+                    if hasattr(Tier, "__members__") and "ADMIN" in Tier.__members__:
                         tier_obj = Tier["ADMIN"]
                     else:
                         tier_obj = Tier(forced)
@@ -190,7 +190,7 @@ def resolve_user_tier(
     tier_obj = None
     if Tier is not None:
         try:
-            if hasattr(Tier, "__members__") and forced_tier_key.upper() in getattr(Tier, "__members__"):
+            if hasattr(Tier, "__members__") and forced_tier_key.upper() in Tier.__members__:
                 tier_obj = Tier[forced_tier_key.upper()]
             else:
                 tier_obj = Tier(forced_tier_key)

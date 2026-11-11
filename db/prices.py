@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 from db.engine import get_neon_conn, schema_once
 from db.traffic import cache
+from utils.swallowed import swallowed
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -65,8 +66,8 @@ def _deserialize(payload: Any):
             return None
         try:
             df.index = pd.to_datetime(df.index)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.prices._deserialize", _ignored)
         return df
     except Exception:
         return None
@@ -159,5 +160,5 @@ def upsert_price_data_snapshot(
             )
             conn.commit()
             cur.close()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.prices.upsert_price_data_snapshot", _ignored)

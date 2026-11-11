@@ -1,7 +1,6 @@
 """Evening wrap / Brief 'Alerts that fired today': one short line per alert,
 overlaps removed (owner's Sep 30 wrap listed three long run-on alerts)."""
 import unittest
-from unittest import mock
 
 from scheduler.alert_email import summarize_fired
 

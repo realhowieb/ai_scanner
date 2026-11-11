@@ -5,6 +5,8 @@ blip never blocks a paying user. The global AI_ENABLED switch is the hard stop.
 """
 from __future__ import annotations
 
+from utils.swallowed import swallowed
+
 try:
     from db.engine import get_neon_conn, schema_once
 except Exception:
@@ -88,8 +90,8 @@ def record_ai_call(username: str, feature: str | None = None) -> None:
         conn.commit()
         cur.close()
         conn.close()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.ai_usage.record_ai_call", _ignored)
 
 
 def feature_usage_counts(days: int = 30) -> list[tuple[str, int]]:

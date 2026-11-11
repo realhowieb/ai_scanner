@@ -1812,7 +1812,7 @@ class AdminEmailHealth(BaseModel):
 
 
 class AdminHealth(BaseModel):
-    operations: Dict[str, Any] = Field(description="Same as GET /v1/admin/operations")
+    operations: Dict[str, Any] = Field(description="Operations summary: freshness, last runs")
     health_score: Optional[float] = None
     human_action: Optional[str] = None
     next_expected_scan: Optional[str] = None

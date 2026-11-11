@@ -202,7 +202,7 @@ def filter_tickers_by_price(
             else:
                 # Duck-typed DataFrame: try `val['Close'].iloc[-1]`
                 try:
-                    close_series = getattr(val, '__getitem__')('Close')  # val['Close']
+                    close_series = val.__getitem__('Close')  # val['Close']
                     # support both pandas Series/DataFrame column
                     if hasattr(close_series, 'iloc'):
                         last_val = close_series.iloc[-1]

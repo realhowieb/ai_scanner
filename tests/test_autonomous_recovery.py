@@ -439,7 +439,6 @@ class SiblingIncidentRegressionTests(unittest.TestCase):
         self.assertEqual(calls.count("RETRY_MATURATION"), 1)
 
     def test_shared_execution_recorded_per_incident_and_flagged_before_persist(self):
-        from analytics import autonomy_certification as ac
         w, t0 = self._world()
         persisted = []
         rc.run_cycle(w.health(t0), [], RECOVER, execute_fn=lambda a, s: {"ok": False, "error": "x"},

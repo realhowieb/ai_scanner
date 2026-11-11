@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from api.today import TTLCache
 from db.engine import schema_once
+from utils.swallowed import swallowed
 
 TOP_PER_DAY = 10
 RANKED_MIN = 40  # same floor as "ranked" everywhere else (api/share.py)
@@ -143,8 +144,8 @@ def build(key: str, now: dt.datetime) -> Dict[str, Any]:
         names = symbol_search.names([r["ticker"] for r in payload["ranked"]])
         for r in payload["ranked"]:
             r["name"] = names.get(r["ticker"])
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.public_recap.build", _ignored)
     payload["earnings"] = None
     today = now.astimezone(_et()).date()
     if today <= monday + dt.timedelta(days=7):  # the week after hasn't started trading yet (Mon counts)
@@ -154,8 +155,8 @@ def build(key: str, now: dt.datetime) -> Dict[str, Any]:
             base = ew.build_base(max(today, monday + dt.timedelta(days=5)))
             if any(d["rows"] for d in base["days"]):
                 payload["earnings"] = earnings_teaser(base)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.public_recap.build", _ignored)
     return payload
 
 
@@ -249,8 +250,8 @@ def recap(key: Optional[str] = None, *, now: Optional[dt.datetime] = None) -> Op
             return None
         try:
             _store(payload)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.public_recap.recap.load", _ignored)
         return payload
 
     return _cache.get(("recap", key), load, 600)

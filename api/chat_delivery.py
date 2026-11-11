@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 
 from api.store import _conn
 from db.engine import schema_once
+from utils.swallowed import swallowed
 
 log = logging.getLogger("hsf_api")
 
@@ -103,8 +104,8 @@ def _mark(user: str, kind: str, status: str) -> None:
     try:
         _run("UPDATE hsf_chat_destinations SET last_status = %s, last_at = NOW() WHERE user_id = %s AND kind = %s",
              (status, user, kind))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.chat_delivery._mark", _ignored)
 
 
 def summary(user: str) -> Dict[str, Any]:

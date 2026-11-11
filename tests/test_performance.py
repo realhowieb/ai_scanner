@@ -5,7 +5,6 @@ the second rerun must make no watchlist or tier reads, a watchlist write must
 be visible on the very next rerun, and the returning-user intelligence summary
 must not run on the Scanner at all.
 """
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

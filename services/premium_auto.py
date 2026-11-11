@@ -32,6 +32,8 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.premium_auto")
 
 UTC = dt.timezone.utc
@@ -225,8 +227,8 @@ def _write_notes(now: dt.datetime, obs: Dict[str, Any], new: List[str],
         from db import premium_auto
 
         premium_auto.prune("ticker_note", now - dt.timedelta(days=NOTE_KEEP_DAYS))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("services.premium_auto._write_notes", _ignored)
     return {"run_id": str(obs["run_id"]), "newly_ranked": len(new), "on_watchlists": len(picks),
             "written": written, "retry": failed}
 
@@ -327,8 +329,8 @@ def _per_account(job: str, key: str, accounts: Optional[List[str]], each: Callab
             why = "error"
             try:
                 store.release_email(email, job, key)
-            except Exception:
-                pass
+            except Exception as _ignored:
+                swallowed("services.premium_auto._per_account", _ignored)
         if why == "sent":
             counts["sent"] += 1
         else:

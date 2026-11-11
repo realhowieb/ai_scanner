@@ -22,7 +22,7 @@ import datetime as dt
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from api.today import _cached, _iso, _num, market_phase, market_runs, run_df, scan_freshness
 

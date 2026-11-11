@@ -6,7 +6,7 @@
 Full report (default):
   1. Reads the whole opportunity dataset with the slim readiness projections
      (db.research_datasets.fetch_readiness_rows / fetch_scan_index), the same
-     reads /v1/ml/readiness makes.
+     reads the Admin ML readiness panel makes.
   2. Asks Alpaca (read-only) for SPY daily closes, so observations can be
      labelled by market regime from prior closes, and for the daily bars of
      tickers whose label came back empty, so "provider had no bars" can be told

@@ -42,7 +42,6 @@ class MarketBriefTests(unittest.TestCase):
         self.assertIn("⚠️E2d", data["picks"][0]["symbol"])
 
     def test_none_without_snapshot(self):
-        import scheduler.morning_digest as md
         import ui.market_brief as mb
 
         with mock.patch.object(mb, "_brief_scan_df", return_value=None):

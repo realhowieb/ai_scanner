@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from api import account as acct
 from api import store, tokens, user_data
 from api.settings import Settings
+from utils.swallowed import swallowed
 
 log = logging.getLogger("hsf_api")
 
@@ -72,8 +73,8 @@ def _note_activity(username: str) -> None:
         from db.user_activity import touch
 
         touch(username)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.deps._note_activity", _ignored)
 
 
 # Compatibility cache for non-authorizing callers; current_account bypasses it.

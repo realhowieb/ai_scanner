@@ -16,6 +16,8 @@ import threading
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf_api.plan_access")
 
 CACHE_S = 60
@@ -146,8 +148,8 @@ def ai_daily_limit(user: str, base: int) -> int:
     try:
         if founder_access(user)[0] == rules.FOUNDER_ELITE:
             return int(base) * rules.ELITE_AI_MULTIPLIER
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.plan_access.ai_daily_limit", _ignored)
     return int(base)
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, TypeVar
 
 import pandas as pd
 
@@ -20,7 +20,6 @@ except ModuleNotFoundError:
     )
 
 from config import (
-    DB_CACHE_MAX_AGE_MINUTES,
     DB_CACHE_MIN_TICKERS,
     PRICE_FETCH_CHUNK_MAX,
     PRICE_FETCH_CHUNK_MIN,

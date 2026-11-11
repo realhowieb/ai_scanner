@@ -22,6 +22,8 @@ import logging
 import os
 from typing import List
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.ops_notify")
 
 OPS_USER = "__ops__"
@@ -103,5 +105,5 @@ def release(job: str, key: str) -> None:
         from db import referrals as store
 
         store.release_email(OPS_USER, job, key)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("services.ops_notify.release", _ignored)

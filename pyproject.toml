@@ -56,7 +56,6 @@ packages = [
     "utils"
 ]
 py-modules = [
-    "app",
     "config",
     "logger",
     "market_data",
@@ -80,5 +79,17 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E9", "F", "I"]
-ignore = ["F401", "F811"]
+# Syntax errors, undefined names, unused imports, import order, likely bugs (bugbear)
+# and pylint's error class. CI runs a bare `ruff check .` with this set.
+select = ["E9", "F", "I", "B", "PLE"]
+ignore = [
+    "B008",  # FastAPI's Depends()/Query() defaults
+    "B904",  # raise without `from` inside except
+    "B905",  # zip() without strict=
+    "B023",  # closures over loop variables that are called inside the same iteration
+    "B007",  # unused loop variables in tuple unpacking
+    "B017",  # assertRaises(Exception) in the Postgres constraint tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports

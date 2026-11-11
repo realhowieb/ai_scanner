@@ -5,7 +5,6 @@ import datetime as dt
 import importlib.util as _ilu
 import os
 import sqlite3
-import sys
 import types
 import unittest
 from unittest import mock

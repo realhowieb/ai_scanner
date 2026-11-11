@@ -3,7 +3,6 @@
 No database or Streamlit runtime: the loader is patched and `st` is faked.
 """
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock

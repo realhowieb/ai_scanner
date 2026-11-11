@@ -6,7 +6,6 @@ screens. Includes a headless run of the real Scanner (app.py main()) with a
 signed-in session, sample market data and no database or network.
 """
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -17,7 +16,6 @@ try:  # the Streamlit app was retired; its modules are gone
     from ui import results_empty, stock_handoff
 except ImportError:
     results_empty = stock_handoff = None
-from ui.results_intelligence import consolidate_scanner_results
 
 ROOT = Path(__file__).resolve().parents[1]
 UTC = dt.timezone.utc

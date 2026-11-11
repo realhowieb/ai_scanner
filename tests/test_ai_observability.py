@@ -100,7 +100,7 @@ def test_delivery_uses_fixed_region_timeout_and_no_redirects():
 def test_shared_single_and_chat_call_paths_are_observed_without_changing_limits(chat, monkeypatch):
     import config
     import ui.ai as helper
-    from tests.test_run85_ai_claims import _FakeAnthropic
+    from tests.test_ai_claims import _FakeAnthropic
 
     configured(monkeypatch)
     monkeypatch.setattr(config, "AI_ENABLED", True)

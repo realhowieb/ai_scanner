@@ -1,5 +1,4 @@
 """Runs 67/68 leftovers — filters in a popover, phone top menu, lazy panels."""
-import importlib.util
 import unittest
 from pathlib import Path
 

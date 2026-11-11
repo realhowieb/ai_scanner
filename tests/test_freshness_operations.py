@@ -123,25 +123,3 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(fetch.call_count, 4)
         self.assertEqual(len(result), 4)
         self.assertNotIn('private-sql', json.dumps(result))
-
-
-try:
-    from tests.test_api_v1 import DEPS, ApiTestCase
-except ImportError:
-    DEPS, ApiTestCase = False, unittest.TestCase
-
-
-@unittest.skipUnless(DEPS, 'needs API dependencies')
-class OperationsApiTests(ApiTestCase):
-    def test_authentication_and_admin_gate_precede_summary_load(self):
-        from api import today
-        today.clear_cache()
-        with mock.patch('api.operations.get_summary', return_value={'available': False}) as load:
-            self.assertEqual(self.client.get('/v1/admin/operations').status_code, 401)
-            token = self.login().json()['access_token']
-            self.assertEqual(self.client.get('/v1/admin/operations', headers={'Authorization': 'Bearer ' + token}).status_code, 403)
-            load.assert_not_called()
-            token = self.login('boss@example.com').json()['access_token']
-            response = self.client.get('/v1/admin/operations', headers={'Authorization': 'Bearer ' + token})
-            self.assertEqual(response.status_code, 200)
-            load.assert_called_once_with()

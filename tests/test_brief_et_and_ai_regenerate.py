@@ -1,10 +1,8 @@
 """Market Brief "As of" line uses New York time; AI summary shows Regenerate
 right after generating (owner phone screenshots, 2026-09-30)."""
 import datetime as dt
-import importlib.util
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 HAS_ST = True

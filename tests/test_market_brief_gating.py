@@ -10,8 +10,6 @@ list, Claude-written AI text, and Pro's historical research, plus a small-sample
 HSF Scores are computed identically for every plan; only display is gated.
 """
 import datetime as dt
-import importlib.util
-import re
 import unittest
 from pathlib import Path
 from types import SimpleNamespace

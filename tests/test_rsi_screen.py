@@ -28,9 +28,9 @@ class RsiScreenTests(unittest.TestCase):
         value, _, _ = rsi_screen(frame)
         assert rsi_screen(frame, min_rsi=value, max_rsi=value)[2]
         assert not rsi_screen(frame, max_rsi=value-.01)[2]
-        for frame in (frame.iloc[:10], frame.assign(Close=float("nan"))):
-            assert rsi_screen(frame) == (None, False, True)
-            assert not rsi_screen(frame, min_rsi=0, max_rsi=100)[2]
+        for short in (frame.iloc[:10], frame.assign(Close=float("nan"))):
+            assert rsi_screen(short) == (None, False, True)
+            assert not rsi_screen(short, min_rsi=0, max_rsi=100)[2]
 
 
     def test_rebound_requires_recovery_volume_and_up_close(self):

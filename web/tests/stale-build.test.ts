@@ -1,4 +1,4 @@
-import { STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
+import { isStaleChunkError, reloadForStaleBuild, STALE_BUILD_SCRIPT } from "@/lib/staleBuild";
 
 // Runs the inline script against a fake window so its listeners can be fired by hand.
 function boot(stored: string | null = null) {
@@ -57,5 +57,23 @@ describe("stale build reload", () => {
     fresh.fire("error", { target: { tagName: "LINK", href: "/_next/static/chunks/old.css" } });
     fresh.fire("error", { target: { tagName: "LINK", href: "/_next/static/chunks/old2.css" } });
     expect(fresh.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads on the newer 'Failed to load chunk' wording", () => {
+    const { fire, reload } = boot();
+    fire("unhandledrejection", { reason: { message: "Failed to load chunk /_next/static/chunks/abc.js from module 64893" } });
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("recognises stale chunk errors and reloads once a minute at most", () => {
+    expect(isStaleChunkError("Failed to load chunk /_next/static/chunks/abc.js from module 1")).toBe(true);
+    expect(isStaleChunkError("Loading chunk 12 failed.")).toBe(true);
+    expect(isStaleChunkError("Cannot read properties of undefined")).toBe(false);
+    sessionStorage.removeItem("hsf-stale-reload");
+    const reload = vi.fn();
+    expect(reloadForStaleBuild(reload)).toBe(true);
+    expect(reloadForStaleBuild(reload)).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(1);
+    sessionStorage.removeItem("hsf-stale-reload");
   });
 });

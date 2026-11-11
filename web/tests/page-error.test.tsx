@@ -35,4 +35,9 @@ describe("page error screen", () => {
     for (let i = 0; i < 10; i++) reportError(new Error(`e${i}`));
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
+
+  it("does not report errors thrown by scripts a browser add-on injected", () => {
+    reportError(new Error(`undefined is not an object (evaluating 'r["@context"].toLowerCase')`), "window");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

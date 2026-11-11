@@ -2,7 +2,6 @@
 400 the whole batch."""
 from __future__ import annotations
 
-import importlib.util
 import unittest
 from unittest import mock
 
