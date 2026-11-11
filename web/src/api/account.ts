@@ -57,6 +57,15 @@ export type OutcomeHorizons = Schemas["OutcomeHorizons"];
 export type OutcomeGroups = Schemas["OutcomeGroups"];
 export type OutcomeSymbol = Schemas["OutcomeSymbol"];
 export type OutcomeMetrics = Schemas["OutcomeMetrics"];
+export type OutcomeQuery = Schemas["OutcomeQuery"];
+export type OutcomeTimeseries = Schemas["OutcomeTimeseries"];
+export type OutcomeObservation = Schemas["OutcomeObservation"];
+
+/** Explorer filters; empty values are left out so the API sees only what was asked for. */
+export type OutcomeFilterInput = {
+  setup?: string; min_score?: number; max_score?: number; start_date?: string; end_date?: string; ticker?: string;
+  horizon: 1 | 3 | 5; page: number; page_size: number;
+};
 
 export const outcomes = {
   summary: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/summary", { signal })),
@@ -66,6 +75,15 @@ export const outcomes = {
   similar: (q: { setup?: string | null; min_score: number; max_score: number }, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/outcomes/horizons", { params: { query: { setup: q.setup || undefined, min_score: q.min_score, max_score: q.max_score } }, signal })),
   setups: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/setups", { signal })),
-  symbol: (ticker: string, signal?: AbortSignal) =>
-    unwrap(api.GET("/v1/outcomes/symbols/{ticker}", { params: { path: { ticker }, query: { page_size: 1 } }, signal })),
+  /** This ticker's aggregates plus its newest signals (records at every horizon). */
+  symbol: (ticker: string, pageSize = 10, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/outcomes/symbols/{ticker}", { params: { path: { ticker }, query: { page_size: pageSize } }, signal })),
+  query: (f: OutcomeFilterInput, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/outcomes/query", { params: { query: {
+      setup: f.setup || undefined, min_score: f.min_score, max_score: f.max_score,
+      start_date: f.start_date || undefined, end_date: f.end_date || undefined,
+      ticker: f.ticker || undefined, horizon: f.horizon, page: f.page, page_size: f.page_size,
+    } }, signal })),
+  timeseries: (period: "week" | "month", horizon: 1 | 3 | 5 = 5, signal?: AbortSignal) =>
+    unwrap(api.GET("/v1/outcomes/timeseries", { params: { query: { period, horizon } }, signal })),
 };

@@ -139,11 +139,47 @@ function ModelDetail({ id, onClose, onChanged }: { id: number; onClose: () => vo
             <ErrorLine error={error} />
           </form>
         )}
+        {m.status === "champion" && <Rollback model={m} onDone={(msg) => { setDone(msg); d.reload(); onChanged(); }} />}
         {done && <p className="notice" role="status">{done}</p>}
       </div>
     );
   }
   return <Dialog open title={m ? m.model_version : "Model"} onClose={onClose}>{body}</Dialog>;
+}
+
+/** Champion only: retire it and restore the previous champion for the same target and horizon. */
+function Rollback({ model, onDone }: { model: Model; onDone: (message: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const { busy, error, run } = useAction();
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const res = await run(() => unwrap(api.POST("/v1/admin/ml/rollback", {
+      body: { target_label: model.target_label, horizon_days: model.horizon_days, reason, approve: true },
+    })) as unknown as Promise<{ restored: number; retired: number | null; note?: string }>);
+    if (res !== undefined) {
+      setOpen(false); setReason("");
+      onDone(`Rolled back: model #${res.restored} is champion again${res.retired != null ? ` and #${res.retired} is retired` : ""}. ${res.note ?? ""}`.trim());
+    }
+  };
+  return (
+    <form className="stack-sm" onSubmit={submit}>
+      <h3 className="h3">Roll back</h3>
+      <p className="cap">Retires this champion and restores the previous champion for {model.target_label} at {model.horizon_days} days. Registry only: AI Confidence and alerts don&apos;t change.</p>
+      {!open ? (
+        <div><button type="button" className="btn btn-sm btn-danger" onClick={() => setOpen(true)}>Roll back to previous champion</button></div>
+      ) : (
+        <>
+          <label className="field"><span>Reason (kept in the history)</span><textarea required minLength={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+          <div className="inline-form">
+            <button type="submit" className="btn btn-danger" disabled={busy || reason.trim().length < 3}>{busy ? "Rolling back…" : "Confirm roll back (I approve)"}</button>
+            <button type="button" className="btn" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+          </div>
+        </>
+      )}
+      <ErrorLine error={error} />
+    </form>
+  );
 }
 
 function Registry() {
