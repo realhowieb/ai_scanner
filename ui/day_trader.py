@@ -14,7 +14,7 @@ Pure helpers (market_state, detect_moves) are streamlit-free and unit-tested.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 from zoneinfo import ZoneInfo
 
 from ui.safe_errors import show_error as _show_error
@@ -458,6 +458,49 @@ def _is_stale(trade_ts, max_days: int = _MOVERS_MAX_STALE_DAYS) -> bool:
         return False
 
 
+def _movers_scored(universe: List[str]) -> List[tuple]:
+    """(day-trade score, TICKER) for every liquid, live, moving name in ``universe``
+    during the regular session, best first. One snapshot pass; any subset's movers
+    can then be cut from it with _rank_movers, so the S&P 500, NASDAQ and NYSE lists
+    share the whole-market pass instead of each sweeping its own exchange."""
+    from market_data import build_day_trader_metrics
+
+    rows = build_day_trader_metrics(universe, with_rvol=False) or []
+    scored: List[tuple] = []
+    for r in rows:
+        t = r.get("ticker")
+        if not t:
+            continue
+        if _is_stale(r.get("trade_ts")):
+            continue  # delisted / halted — last trade too old to be a "mover"
+        try:
+            dvol = float(r.get("last") or 0) * float(r.get("volume") or 0)
+        except (TypeError, ValueError):
+            dvol = 0.0
+        if dvol < _MOVERS_MIN_DOLLAR_VOL:
+            continue
+        s = day_trade_score(r)
+        if s > 0:  # require real intraday activity
+            scored.append((s, str(t).upper()))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored
+
+
+def _rank_movers(scored: List[tuple], limit: int = 40, members: Optional[Iterable[str]] = None) -> List[str]:
+    """The top ``limit`` tickers of a _movers_scored list, optionally only those in ``members``."""
+    keep = {str(m).upper() for m in members} if members is not None else None
+    seen: set = set()
+    out: List[str] = []
+    for _s, t in scored:
+        if not t or t in seen or (keep is not None and t not in keep):
+            continue
+        seen.add(t)
+        out.append(t)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> List[str]:
     """Names ranked by intraday day-trade momentum (no 20-day), over ``universe``
     (defaults to every U.S. common stock: S&P 500 + NASDAQ + NYSE and the rest).
@@ -468,7 +511,7 @@ def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> L
     signals we lead with); a dollar-volume floor drops illiquid junk.
     """
     try:
-        from market_data import build_day_trader_metrics, build_premarket_gappers, premarket_session_date
+        from market_data import build_premarket_gappers, premarket_session_date
 
         universe = universe if universe is not None else _movers_universe()
         if not universe:
@@ -477,33 +520,7 @@ def _top_movers_symbols(limit: int = 40, universe: List[str] | None = None) -> L
             # Before the open the snapshot's daily bars are yesterday's session, so
             # rank today's pre-market gappers instead of re-ranking yesterday.
             return [r["ticker"] for r in build_premarket_gappers(universe, limit=limit)]
-        rows = build_day_trader_metrics(universe, with_rvol=False) or []
-        scored: List[tuple] = []
-        for r in rows:
-            t = r.get("ticker")
-            if not t:
-                continue
-            if _is_stale(r.get("trade_ts")):
-                continue  # delisted / halted — last trade too old to be a "mover"
-            try:
-                dvol = float(r.get("last") or 0) * float(r.get("volume") or 0)
-            except (TypeError, ValueError):
-                dvol = 0.0
-            if dvol < _MOVERS_MIN_DOLLAR_VOL:
-                continue
-            s = day_trade_score(r)
-            if s > 0:  # require real intraday activity
-                scored.append((s, str(t).upper()))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        seen: set = set()
-        out: List[str] = []
-        for _s, t in scored:
-            if t and t not in seen:
-                seen.add(t)
-                out.append(t)
-            if len(out) >= limit:
-                break
-        return out
+        return _rank_movers(_movers_scored(universe), limit)
     except Exception:
         return []
 

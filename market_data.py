@@ -81,6 +81,11 @@ def _alpaca_source(feed: str) -> str:
 # ------------------------------- Snapshots ---------------------------------
 
 
+# Snapshot chunks fetched at once. Four keeps a whole-market screen (~50 calls) well
+# inside Alpaca's per-minute request limit while cutting its wait to ~2 s.
+SNAPSHOT_WORKERS = 4
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def fetch_alpaca_snapshots(symbols: List[str], feed: Optional[str] = None) -> Dict[str, dict]:
     """
@@ -122,10 +127,9 @@ def fetch_alpaca_snapshots(symbols: List[str], feed: Optional[str] = None) -> Di
         orig_by_alpaca[a] = s
 
     # Chunk the symbol list (~100 per call keeps URLs and responses sane) so
-    # callers aren't capped by a single request's practical limit.
-    normalized: Dict[str, dict] = {}
-    for start in range(0, len(alpaca_syms), 100):
-        chunk = alpaca_syms[start : start + 100]
+    # callers aren't capped by a single request's practical limit. Chunks run a few
+    # at a time: one after another, a whole-market screen (~50 chunks) took ~8 s.
+    def fetch_chunk(chunk: List[str]) -> Dict[str, dict]:
         try:
             resp = requests.get(
                 url,
@@ -134,15 +138,26 @@ def fetch_alpaca_snapshots(symbols: List[str], feed: Optional[str] = None) -> Di
                 timeout=10,
             )
         except requests_exc.RequestException:  # type: ignore[union-attr]
-            continue
+            return {}
         if resp.status_code != 200:
-            continue
+            return {}
         try:
             data = resp.json()
         except ValueError:
-            continue
-        if not isinstance(data, dict):
-            continue
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    chunks = [alpaca_syms[start : start + 100] for start in range(0, len(alpaca_syms), 100)]
+    if len(chunks) == 1:
+        answers = [fetch_chunk(chunks[0])]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(SNAPSHOT_WORKERS, len(chunks)),
+                                thread_name_prefix="alpaca-snap") as pool:
+            answers = list(pool.map(fetch_chunk, chunks))
+    normalized: Dict[str, dict] = {}
+    for data in answers:
         for k, v in data.items():
             if isinstance(v, dict):
                 key = orig_by_alpaca.get(k.upper(), k.upper())  # map BRK.B -> BRK-B
@@ -715,6 +730,14 @@ def build_premarket_gappers(
     return out
 
 
+def _result_or_empty(future) -> Dict[str, Any]:
+    """A side-by-side enrichment's answer; a failed one counts as "no data", like before."""
+    try:
+        return future.result() or {}
+    except Exception:
+        return {}
+
+
 def build_day_trader_metrics(
     symbols: List[str],
     *,
@@ -743,17 +766,30 @@ def build_day_trader_metrics(
     if not snapshots:
         return []
 
-    avg_vol = fetch_avg_daily_volume(syms, feed=data_feed) if with_rvol else {}
-    # Daily-bar enrichments (EMA cross + ATR/Donchian/Bollinger) run on the
-    # DISPLAY path only. The universe-wide movers *screening* pass (with_rvol=
-    # False) scores from snapshots alone and never uses these — fetching daily
-    # bars for thousands of tickers there was pure waste and, when Alpaca is slow,
-    # a flood of timeouts.
-    ema_crosses = fetch_ema_crosses(syms) if with_rvol else {}
-    range_metrics = fetch_daily_range_metrics(syms) if with_rvol else {}
+    # Daily-bar enrichments (RVOL average, EMA cross, ATR/Donchian/Bollinger, pre-market
+    # volume) run on the DISPLAY path only. The universe-wide movers *screening* pass
+    # (with_rvol=False) scores from snapshots alone and never uses these — fetching daily
+    # bars for thousands of tickers there was pure waste and, when Alpaca is slow, a flood
+    # of timeouts. They are independent, so they run side by side (a cold watchlist
+    # waited ~7 s for them one after another).
     source = _alpaca_source(data_feed)
     pm_day = premarket_session_date(now)
-    pm_vols = (fetch_premarket_volume(syms, pm_day) or {}) if (pm_day and with_rvol) else {}
+    avg_vol: Dict[str, float] = {}
+    ema_crosses: Dict[str, str] = {}
+    range_metrics: Dict[str, Dict[str, Any]] = {}
+    pm_vols: Dict[str, Any] = {}
+    if with_rvol:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="dt-enrich") as pool:
+            f_avg = pool.submit(fetch_avg_daily_volume, syms, feed=data_feed)
+            f_ema = pool.submit(fetch_ema_crosses, syms)
+            f_range = pool.submit(fetch_daily_range_metrics, syms)
+            f_pm = pool.submit(fetch_premarket_volume, syms, pm_day) if pm_day else None
+            avg_vol = _result_or_empty(f_avg)
+            ema_crosses = _result_or_empty(f_ema)
+            range_metrics = _result_or_empty(f_range)
+            pm_vols = _result_or_empty(f_pm) if f_pm is not None else {}
 
     rows: List[Dict[str, Optional[float]]] = []
     for sym in syms:

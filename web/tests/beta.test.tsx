@@ -2,7 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GET as healthz } from "@/app/api/healthz/route";
-import { Skeleton, WAKING_UP } from "@/components/ui";
+import { BRAND_AFTER_MS, Skeleton, WAKING_UP } from "@/components/ui";
 import { NOT_INVITED, betaAllowlist, login } from "@/server/auth";
 import type { Upstream } from "@/server/bff";
 
@@ -73,11 +73,29 @@ describe("health check", () => {
 
 describe("cold starts", () => {
   afterEach(() => vi.useRealTimers());
-  it("loading states explain a slow wake-up after 8 s", () => {
+  it("loading states explain a slow load after 8 s", () => {
     vi.useFakeTimers();
     render(<Skeleton />);
     expect(screen.queryByText(WAKING_UP)).not.toBeInTheDocument();
     act(() => { vi.advanceTimersByTime(8000); });
     expect(screen.getByText(WAKING_UP)).toBeInTheDocument();
+  });
+  it("page-sized loads switch to the HSF loader after half a second", () => {
+    vi.useFakeTimers();
+    const { container } = render(<Skeleton rows={8} />);
+    expect(container.querySelector(".hsf-loader")).toBeNull();
+    expect(container.querySelectorAll(".sk-row").length).toBe(8);
+    act(() => { vi.advanceTimersByTime(BRAND_AFTER_MS); });
+    expect(container.querySelector(".hsf-loader")).not.toBeNull();
+    expect(container.querySelectorAll(".sk-row").length).toBe(0);
+    act(() => { vi.advanceTimersByTime(8000); });
+    expect(screen.getByText(WAKING_UP)).toBeInTheDocument();
+  });
+  it("small in-card loads keep the grey bars", () => {
+    vi.useFakeTimers();
+    const { container } = render(<Skeleton rows={3} />);
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(container.querySelector(".hsf-loader")).toBeNull();
+    expect(container.querySelectorAll(".sk-row").length).toBe(3);
   });
 });

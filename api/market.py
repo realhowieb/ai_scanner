@@ -203,17 +203,39 @@ def _dt_symbols(source: str, custom: Sequence[str], watch: Sequence[str]) -> Lis
         return dtm._parse_symbols(",".join(watch), dtm.MAX_SYMBOLS)
     if source == "megacaps":
         return dtm._parse_symbols(dtm.MEGA_CAPS)
+    universes = {"movers": None, "movers_sp500": dtm._sp500_universe,
+                 "movers_nasdaq": dtm._nasdaq_universe, "movers_nyse": dtm._other_listed_universe}
     loaders = {
-        "movers": lambda: dtm._top_movers_symbols(),
-        "movers_sp500": lambda: dtm._top_movers_symbols(universe=dtm._sp500_universe()),
-        "movers_nasdaq": lambda: dtm._top_movers_symbols(universe=dtm._nasdaq_universe()),
-        "movers_nyse": lambda: dtm._top_movers_symbols(universe=dtm._other_listed_universe()),
+        **{name: (lambda u=u: _movers_list(u)) for name, u in universes.items()},
         "premarket": lambda: dtm._session_scan_symbols("premarket"),
         "postmarket": lambda: dtm._session_scan_symbols("postmarket"),
         "scan_picks": lambda: dtm._scan_pick_symbols(),
     }
     return list(_cached(("dt_source", source), loaders[source], ttl_s=DT_MOVERS_TTL_S,
                         stale_s=DT_MOVERS_STALE_S) or [])
+
+
+def _movers_list(universe_fn) -> List[str]:
+    """One movers list. In the regular session every list is cut from one shared
+    whole-market pass (DT_MOVERS_TTL_S, stale-while-reloading like the lists), so the
+    S&P 500, NASDAQ and NYSE lists cost no extra Alpaca calls. Before the open each
+    list ranks its own pre-market gappers, as before."""
+    from api.today import _cached
+    from market_data import premarket_session_date
+    from ui import day_trader as dtm
+
+    if premarket_session_date() is not None:
+        return dtm._top_movers_symbols(universe=universe_fn() if universe_fn else None)
+    try:
+        scored = _cached("dt_movers_scored", lambda: dtm._movers_scored(dtm._movers_universe()),
+                         ttl_s=DT_MOVERS_TTL_S, stale_s=DT_MOVERS_STALE_S) or []
+    except Exception:
+        return []
+    if universe_fn is None:
+        return dtm._rank_movers(scored)
+    members = universe_fn()
+    # No universe file (e.g. other_listed.txt missing): fall back to the whole market, as before.
+    return dtm._rank_movers(scored, members=members) if members else dtm._rank_movers(scored)
 
 
 DT_EARNINGS_DAYS = 3        # tag names that report today through 3 days out
@@ -291,12 +313,16 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
             "rows": rows}
 
 
-# Keep the shared "Top movers" table warm while the market is open, so the first visitor
-# after a quiet spell isn't the one who waits for the full rebuild (~10 s). Each pass
-# stays inside DT_MOVERS_STALE_S, so visitors get the stale-while-reloading path at worst.
+# Keep every movers table warm while the market is open, so the first visitor after a
+# quiet spell (or a deploy) isn't the one who waits for the full rebuild (~10 s). The
+# four lists share one whole-market pass in the regular session. Each pass stays inside
+# DT_MOVERS_STALE_S, so visitors get the stale-while-reloading path at worst. The first
+# pass runs shortly after startup, since a deploy empties every cache.
 # HSF_DT_KEEP_WARM=0 (or HSF_WARM_DAY_TRADER=0) turns it off.
 DT_KEEP_WARM_S = 240
+DT_KEEP_WARM_FIRST_S = 20
 DT_KEEP_WARM_STATES = ("premarket", "open")
+DT_KEEP_WARM_SOURCES = ("movers", "movers_sp500", "movers_nasdaq", "movers_nyse")
 
 
 def _keep_warm_enabled() -> bool:
@@ -307,18 +333,26 @@ def _keep_warm_enabled() -> bool:
 
 
 def keep_day_trader_warm_once(now: Optional[dt.datetime] = None) -> bool:
-    """One keep-warm pass: rebuild the movers table when the market is in a warm state.
+    """One keep-warm pass: rebuild every movers table when the market is in a warm state.
     Uses the clock-free time check, so a closed-market pass makes no network call."""
+    import logging
+
     from ui import day_trader as dtm
 
     if not _keep_warm_enabled() or dtm.market_state(now) not in DT_KEEP_WARM_STATES:
         return False
-    day_trader("movers")
+    for source in DT_KEEP_WARM_SOURCES:
+        try:
+            day_trader(source)
+        except Exception as e:  # one list failing shouldn't leave the others cold
+            logging.getLogger("hsf_api.market").warning("day trader keep-warm %s failed: %s", source,
+                                                        type(e).__name__)
     return True
 
 
 def start_day_trader_keep_warm() -> None:
-    """Run keep_day_trader_warm_once every DT_KEEP_WARM_S on a daemon thread (Render only)."""
+    """Run keep_day_trader_warm_once soon after startup, then every DT_KEEP_WARM_S, on a
+    daemon thread (Render only)."""
     import logging
     import os
     import threading
@@ -329,8 +363,10 @@ def start_day_trader_keep_warm() -> None:
     log = logging.getLogger("hsf_api.market")
 
     def run() -> None:
+        delay = DT_KEEP_WARM_FIRST_S
         while True:
-            time.sleep(DT_KEEP_WARM_S)
+            time.sleep(delay)
+            delay = DT_KEEP_WARM_S
             try:
                 keep_day_trader_warm_once()
             except Exception as e:  # best effort; a visitor builds it instead

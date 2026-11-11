@@ -561,7 +561,7 @@ function Live() {
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. The API does not supply the session date or individual trade timestamps; they cannot be verified here. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
       {needTickers ? <Card><Empty title="Type the tickers you want to watch.">Separate them with commas or spaces, up to {MAX_CUSTOM}, then press Show. We&apos;ll remember them on this device.</Empty></Card>
         : dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />
-        : !d ? <Skeleton rows={8} label="Loading live quotes" />
+        : !d ? <Skeleton rows={8} label="Loading live quotes" slowText={source.startsWith("movers") ? "Building this movers list from live prices. This can take about 10 seconds." : "Loading live prices for these symbols. This can take a few more seconds."} />
         : all.length === 0 && d.state === "premarket" && source.startsWith("movers") && d.symbols.length === 0
           ? <Card><Empty title="No pre-market gappers yet today.">Top movers lists stocks trading before the open. Our market data usually shows pre-market trades from about 8:00 AM ET, so check back then, or pick one of your watchlists to see last night&apos;s prices.</Empty></Card>
         : all.length === 0 ? <Card><Empty title={d.symbols.length ? "No live quotes for these symbols right now." : "No symbols in this source."}>
