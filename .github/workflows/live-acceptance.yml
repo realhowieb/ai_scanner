@@ -95,7 +95,7 @@ jobs:
     needs: deploy
     if: ${{ !cancelled() && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: web
@@ -115,7 +115,17 @@ jobs:
       - name: Install
         run: |
           npm ci --no-audit --no-fund
-          npx playwright-core install --with-deps chromium
+          npx playwright-core install chromium
+          # System packages come from Ubuntu's mirrors, which sometimes go down on
+          # GitHub runners. The runner image already has what Chrome needs (only
+          # optional fonts are missing), so retry, then carry on with a warning.
+          # A dead mirror makes apt hang for ~10 minutes, so each try is capped at 3.
+          for i in 1 2 3; do
+            if timeout 180 npx playwright-core install-deps chromium; then exit 0; fi
+            echo "install-deps failed (try $i of 3)"
+            if [ "$i" -lt 3 ]; then sleep 20; fi
+          done
+          echo "::warning::Ubuntu package mirrors unreachable; running without Playwright's extra system packages."
 
       - name: Password files (never printed)
         if: env.HAS_ACCOUNT == 'true'
