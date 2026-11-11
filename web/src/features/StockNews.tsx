@@ -5,10 +5,21 @@ import { Card, Pill } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { ago, compact, etTime, price, shortDate } from "@/lib/format";
 
+/** Start alongside stock details; the page renders independently of these reads. */
+export function useStockExtras(ticker: string | null) {
+  const news = useApi(ticker ? `news:${ticker}` : null, (signal) =>
+    unwrap(api.GET("/v1/stocks/{ticker}/news", { params: { path: { ticker: ticker! }, query: { limit: 6 } }, signal })));
+  const filings = useApi(ticker ? `filings:${ticker}` : null, (signal) =>
+    unwrap(api.GET("/v1/stocks/{ticker}/filings", { params: { path: { ticker: ticker! } }, signal })));
+  return { news, filings };
+}
+export type StockExtras = ReturnType<typeof useStockExtras>;
+
 /** Recent headlines for the ticker (Alpaca News, Benzinga feed). Hidden when news is off. */
-export function StockNews({ ticker }: { ticker: string }) {
-  const res = useApi(`news:${ticker}`, (signal) =>
+export function StockNews({ ticker, state }: { ticker: string; state?: StockExtras["news"] }) {
+  const own = useApi(state ? null : `news:${ticker}`, (signal) =>
     unwrap(api.GET("/v1/stocks/{ticker}/news", { params: { path: { ticker }, query: { limit: 6 } }, signal })));
+  const res = state ?? own;
   const d = res.data;
   if (!d || !d.available) return null;
   return (
@@ -31,9 +42,10 @@ export function StockNews({ ticker }: { ticker: string }) {
 const money = (v: number | null | undefined) => (v == null ? "—" : `$${compact(v)}`);
 
 /** Insider buys and sales (Form 4) and company events (8-K) from SEC EDGAR, last 90 days. */
-export function StockFilings({ ticker }: { ticker: string }) {
-  const res = useApi(`filings:${ticker}`, (signal) =>
+export function StockFilings({ ticker, state }: { ticker: string; state?: StockExtras["filings"] }) {
+  const own = useApi(state ? null : `filings:${ticker}`, (signal) =>
     unwrap(api.GET("/v1/stocks/{ticker}/filings", { params: { path: { ticker } }, signal })));
+  const res = state ?? own;
   const d = res.data;
   if (!d || !d.available) return null;
   const s = d.insider_summary;

@@ -11,6 +11,7 @@ per day. Best-effort throughout — it never raises into the caller.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -126,12 +127,17 @@ def _symbol_column(df) -> Optional[str]:
     return None
 
 
-def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
+def _prebreakout_picks(df, limit: int = 3, *, rescore: bool = True) -> List[Dict[str, Any]]:
     """Top PreBreakout candidates [{symbol, prob}] from the snapshot (best first)."""
     try:
-        from ml_prebreakout import score_prebreakout
+        if rescore:
+            from ml_prebreakout import score_prebreakout
 
-        scored = score_prebreakout(df)
+            scored = score_prebreakout(df)
+        else:
+            # API Brief: reuse prediction-time values already saved by cron.
+            # No model imports, provider calls, or replacement of saved evidence.
+            scored = df.copy(deep=False) if df is not None else None
         if scored is None or len(scored) == 0 or "PreBreakoutProb%" not in scored.columns:
             return []
         sym_col = _symbol_column(scored)
@@ -148,7 +154,7 @@ def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         for _, r in top.iterrows():
             prob = float(r.get("PreBreakoutProb%") or 0.0)
-            if prob <= 0:
+            if not math.isfinite(prob) or prob <= 0:
                 continue
             pick = {"symbol": str(r.get(sym_col)).upper(), "prob": round(prob, 1)}
             from analytics.prediction_provenance import models_from_row

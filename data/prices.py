@@ -435,6 +435,7 @@ def _download_batch(
                 prepost=cfg.prepost,
                 auto_adjust=False,
                 actions=False,
+                raise_errors=True,  # expected missing/delisted symbols become skips, not provider ERROR logs
             )
             # Defensive: ensure each symbol gets its own independent DataFrame
             try:
@@ -473,6 +474,10 @@ def _download_batch(
                 # If anything goes wrong while de-adjusting, keep df as-is.
                 pass
         except _YFINANCE_ERRORS as e:
+            if type(e).__name__ not in {"YFPricesMissingError", "YFTzMissingError"}:
+                import logging
+
+                logging.getLogger(__name__).warning("Yahoo price lookup failed: %s", type(e).__name__)
             skipped.append((sym_u, f"error_download:{type(e).__name__}:{e}"))
             _remember_missing(sym_u, cfg, f"error_download:{type(e).__name__}")
             continue

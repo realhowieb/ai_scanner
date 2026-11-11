@@ -331,6 +331,7 @@ export function watchlistCsv(items: WatchlistDetail["items"], scores: Map<string
 
 function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => void; onDeleted: () => void }) {
   const detail = useApi(`wl:${id}`, (signal) => watchlists.get(id, signal));
+  const performance = useApi(`wl-perf:${id}`, (signal) => watchlists.performance(id, signal));
   const intel = useApi(`wl-intel:${id}`, (signal) => watchlists.intelligence(id, signal));
   const intelBy = useMemo(() => new Map((intel.data?.items ?? []).map((i) => [i.ticker, i])), [intel.data]);
   // Only an API that predates items[].latest (no scan_at key at all) needs the ranked rows.
@@ -345,7 +346,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const ren = useAction();
   const del = useAction();
   const rm = useAction();
-  const reload = () => { detail.reload(); intel.reload(); onChanged(); };
+  const reload = () => { detail.reload(); intel.reload(); performance.reload(); onChanged(); };
 
   const scores = useMemo(() => {
     // Premium also gets items[].auto: the scheduled scan's score for a ticker the scan didn't rank.
@@ -361,7 +362,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   // trades and the daily bars in place. Prices are the provider's latest trade (shared by the
   // API for about a minute); scores change only when a new scan has run.
   const refreshing = detail.refreshing || intel.refreshing || bars.refreshing || quotes.refreshing || (legacy && scan.refreshing);
-  const refresh = () => { detail.reload(); intel.reload(); bars.reload(); quotes.reload(); if (legacy) scan.reload(); };
+  const refresh = () => { detail.reload(); intel.reload(); performance.reload(); bars.reload(); quotes.reload(); if (legacy) scan.reload(); };
 
   if (detail.error && !detail.data) return <ErrorState error={detail.error} onRetry={detail.reload} what="this watchlist" />;
   if (!detail.data || detail.loading && detail.data.id !== id) return <Skeleton rows={5} label="Loading watchlist" />;
@@ -488,7 +489,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
       </Card>
 
       <WatchlistAINote id={w.id} name={w.name} empty={w.items.length === 0} />
-      <WatchlistPerformanceCard id={w.id} version={w.items.length} />
+      <WatchlistPerformanceCard id={w.id} state={performance} />
 
       <WatchlistRules wl={w.id} onChanged={intel.reload} />
 

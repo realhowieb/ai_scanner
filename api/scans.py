@@ -9,6 +9,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, run_freshness, scan_freshness
@@ -475,6 +477,7 @@ def warm_stock_pages() -> None:
     if runs:
         run_opportunities(int(runs[0]["id"]))
     _calibration_records()
+    warm_score_history()
 
 
 def _ticker_rows(df: Any, ticker: str) -> List[Dict[str, Any]]:
@@ -775,25 +778,85 @@ def latest_quotes(tickers: List[str]) -> Dict[str, Any]:
 
 
 SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans
-score_cache = TTLCache(max_entries=SCORE_HISTORY_RUNS * 2, name="score_history")
+score_cache = TTLCache(max_entries=2, name="score_history")
+
+
+
+@lru_cache(maxsize=1)
+def _score_projection_method():
+    """Reuse across unrelated deploys; invalidate when scorer/projection code changes."""
+    import hashlib
+
+    from ui.opportunities import HSF_SCORE_VERSION
+
+    root = Path(__file__).resolve().parents[1]
+    code = b"".join((root / name).read_bytes() for name in
+                    ("ui/results_intelligence.py", "ui/opportunities.py"))
+    return f"score-history-1:{HSF_SCORE_VERSION}:{hashlib.sha256(code).hexdigest()[:16]}"
+
+def _score_window(runs):
+    """One batch for missing payloads; cached by run version and scoring method.
+
+    Daily snapshots can be overwritten. A new created_at/row_count or score
+    method invalidates only that projection; never assume run ID is immutable.
+    """
+    method = _score_projection_method()
+
+    stamps = {int(r["id"]): f"{r['created_at']}|{r.get('row_count')}" for r in runs}
+    key = (method, tuple(stamps.items()))
+
+    def load():
+        from db.scan_score_cache import load_score_rows, load_scores, save_scores
+        from ui.results_intelligence import consolidate_scanner_results
+
+        try:
+            saved = load_scores(list(stamps), method)
+        except Exception as exc:
+            swallowed("api.scans.score_cache.read", exc)
+            saved = {}
+        result = {rid: saved[rid][1] for rid, stamp in stamps.items()
+                  if rid in saved and saved[rid][0] == stamp and isinstance(saved[rid][1], dict)}
+        missing = [rid for rid in stamps if rid not in result]
+        payloads = load_score_rows(missing) if missing else {}
+        records = []
+        for rid in missing:
+            source = payloads.get(rid)
+            if source is None or source.get("stamp") != stamps[rid]:
+                continue
+            raw = source.get("rows")
+            if raw is None:
+                continue  # database/provider failure is not a permanently empty scan
+            try:
+                rows = json.loads(raw) if isinstance(raw, str) else raw
+                if not isinstance(rows, list):
+                    continue
+                scores = {o["ticker"]: {"score": o.get("score"), "signals": list(o.get("signals") or [])}
+                          for o in consolidate_scanner_results(rows, top_n=None)}
+                result[rid] = scores
+                records.append({"run_id": rid, "stamp": stamps[rid], "scores": scores})
+            except Exception as exc:
+                swallowed("api.scans.score_cache.build", exc)
+        try:
+            save_scores(records, method)
+        except Exception as exc:
+            swallowed("api.scans.score_cache.write", exc)
+        return result
+
+    result = score_cache.get(key, load, ttl_s=float("inf"))
+    if len(result) != len(stamps):
+        score_cache.clear_key(key)  # retry missing projections; preserve readable points
+    return result
 
 
 def _run_ticker_scores(run_id: int) -> Dict[str, Dict[str, Any]]:
-    """Ticker -> HSF Score and signals in one saved market run, scored the Scanner's way.
-    Read straight from the run (not run_df's small cache, which holds the latest few runs)."""
-    def load() -> Dict[str, Dict[str, Any]]:
-        from db.runs import load_run_results
-        from ui.results_intelligence import consolidate_scanner_results
+    runs = [r for r in market_runs()[:SCORE_HISTORY_RUNS] if int(r['id']) == int(run_id)]
+    return _score_window(runs).get(int(run_id), {}) if runs else {}
 
-        raw = load_run_results(int(run_id))
-        if not raw:
-            return {}
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        rows = data if isinstance(data, list) else [data]
-        return {o["ticker"]: {"score": o.get("score"), "signals": [str(s) for s in o.get("signals") or []]}
-                for o in consolidate_scanner_results(rows, top_n=None)}
 
-    return score_cache.get(("scores", int(run_id)), load, ttl_s=RUN_TTL_S, stale_s=RUN_TTL_S)
+def warm_score_history():
+    runs = market_runs()[:SCORE_HISTORY_RUNS]
+    if runs:
+        _score_window(runs)
 
 
 def score_history(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
@@ -805,9 +868,15 @@ def score_history(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     runs = list(reversed(market_runs()[:SCORE_HISTORY_RUNS]))
     points: List[Dict[str, Any]] = []
     prev: Optional[set] = None
+    try:
+        window = _score_window(runs)
+    except Exception:
+        window = {}  # unreadable history remains a gap, never invented zero scores
     for run in runs:
         try:
-            hit = _run_ticker_scores(int(run["id"])).get(t)
+            if int(run["id"]) not in window:
+                continue
+            hit = window[int(run["id"])].get(t)
         except Exception:
             continue  # an unreadable run is a gap, not an error
         signals = [s for s in (hit or {}).get("signals", []) if early or s != "prebreakout"]

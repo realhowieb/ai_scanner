@@ -6,6 +6,9 @@
 // here. Loading, missing history and request failures remain visible.
 import { useState } from "react";
 
+import type { WatchlistPerformance } from "@/api/userData";
+import type { ApiState } from "@/hooks/useApi";
+
 import { watchlists } from "@/api/userData";
 import { Card, ErrorState, Skeleton, TickerLink } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
@@ -14,8 +17,9 @@ import { pct, price, shortDate } from "@/lib/format";
 const SHOWN = 8;
 const tone = (v: number | null | undefined) => ((v ?? 0) > 0 ? "up" : (v ?? 0) < 0 ? "down" : "cap");
 
-export function WatchlistPerformanceCard({ id, version = 0 }: { id: number; version?: number }) {
-  const perf = useApi(`wl-perf:${id}`, (signal) => watchlists.performance(id, signal), version);
+export function WatchlistPerformanceCard({ id, version = 0, state }: { id: number; version?: number; state?: ApiState<WatchlistPerformance> }) {
+  const own = useApi(state ? null : `wl-perf:${id}`, (signal) => watchlists.performance(id, signal), version);
+  const perf = state ?? own;
   const [all, setAll] = useState(false);
   const d = perf.data;
   if (!d || !Array.isArray(d.items) || !d.items.length) return (

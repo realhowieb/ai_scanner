@@ -352,10 +352,10 @@ def plan_limit(run: Run, s: Dict[str, Any]) -> None:
     made = []
     try:
         for i in range(info["limit"] - info["used"]):
-            r = run.req("POST", "/v1/alerts", headers=h, json={"type": "move", "ticker": f"ZQ{i:02d}", "threshold": NEVER_FIRES})
+            r = run.req("POST", "/v1/alerts", headers=h, json={"type": "move", "ticker": "SPY", "threshold": NEVER_FIRES + i})
             if r.status_code == 201:
                 made.append(r.json()["id"])
-        r = run.req("POST", "/v1/alerts", headers=h, json={"type": "move", "ticker": "ZQXX", "threshold": NEVER_FIRES})
+        r = run.req("POST", "/v1/alerts", headers=h, json={"type": "move", "ticker": "SPY", "threshold": NEVER_FIRES + info["limit"] + 1})
         used = run.req("GET", "/v1/alerts", headers=h).json()["used"]
         run.check(A, "alert plan limit", r.status_code == 403 and used == info["limit"],
                   f"limit={info['limit']} used={used} next=HTTP {r.status_code}")
