@@ -72,7 +72,7 @@ def workflow_runs(session, repo: str, workflow: str, *, event: Optional[str] = N
     r.raise_for_status()
     return [{"id": x.get("id"), "created_at": x.get("created_at"), "updated_at": x.get("updated_at"),
              "conclusion": x.get("conclusion"), "status": x.get("status"), "event": x.get("event"),
-             "head_branch": x.get("head_branch")}
+             "head_branch": x.get("head_branch"), "display_title": x.get("display_title")}
             for x in (r.json().get("workflow_runs") or [])]
 
 

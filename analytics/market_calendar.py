@@ -51,6 +51,18 @@ SCAN_SLOTS_ET: Tuple[Tuple[int, int], ...] = ((8, 35), (9, 35), (12, 35), (15, 3
 LEGACY_SCAN_SLOTS_UTC: Tuple[Tuple[int, int], ...] = ((12, 35), (13, 35), (16, 35), (19, 35), (20, 35), (21, 35))
 SCAN_SLOTS_ET_SINCE = _dt.date(2026, 11, 4)
 
+# Hourly refresh scans (cron-job.org HSF_Refresh_Scan, record_research=false,
+# since 2026-11-10) update the Scanner between the slots above and record no
+# research observations by design.
+REFRESH_SCAN_SLOTS_ET: Tuple[Tuple[int, int], ...] = ((10, 35), (11, 35), (13, 35), (14, 35))
+
+
+def is_refresh_scan_time(ts: _dt.datetime) -> bool:
+    """True when `ts` falls in a refresh scan window (slot -5 min to +20 min, New York time)."""
+    et = ts.astimezone(ET)
+    minute = et.hour * 60 + et.minute
+    return any(-5 <= minute - (h * 60 + m) <= 20 for h, m in REFRESH_SCAN_SLOTS_ET)
+
 
 def calendar_covered(d: _dt.date) -> bool:
     return d.year in COVERED_YEARS
