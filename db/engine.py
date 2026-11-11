@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from db.traffic import connect_options, count
+from utils.swallowed import swallowed
 
 try:
     from utils.st_compat import st
@@ -82,8 +83,8 @@ class _WarmConn:
                 conn.commit()
             else:
                 conn.rollback()
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.engine._WarmConn.__exit__", _ignored)
         return False
 
 
@@ -251,8 +252,8 @@ def get_neon_conn():
     if url is None:
         try:
             url = st.secrets["neon"]["database_url"]  # type: ignore[index]
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.engine.get_neon_conn", _ignored)
 
     # 3) Streamlit secrets flat keys
     if url is None:
@@ -283,16 +284,16 @@ def get_neon_conn():
         # Never echo the exception (could include the DSN / connection string).
         try:
             st.caption("⚠️ Database driver unavailable.")
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.engine.get_neon_conn", _ignored)
         return None
     except Exception:
         # Surface a gentle, SANITIZED hint — never the raw error (Run 30: the DSN
         # can appear in psycopg error text). Callers handle None.
         try:
             st.caption("⚠️ Database temporarily unavailable.")
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.engine.get_neon_conn", _ignored)
         return None
 
 def get_sqlite_conn():
@@ -309,8 +310,8 @@ def get_db_status() -> str:
         if conn is not None:
             conn.close()
             return "neon"
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.engine.get_db_status", _ignored)
 
     # Try SQLite
     try:

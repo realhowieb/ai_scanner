@@ -34,6 +34,7 @@ from api.etag import ETagMiddleware
 from api.memory import memory_status, rss_mb, tune_allocator
 from api.scans import json_safe
 from api.settings import Settings, load_settings
+from utils.swallowed import swallowed
 
 tune_allocator()  # cap malloc arenas before any worker thread starts (api/memory.py)
 
@@ -292,8 +293,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             fresh = scan_freshness(created, now)
         except store.DatabaseUnavailable:
             raise
-        except Exception:  # scan freshness is informational
-            pass
+        except Exception as _ignored:  # scan freshness is informational
+            swallowed("api.main.create_app.readiness", _ignored)
         body = {"ok": True, "database": "ok", "stale": fresh["stale"],
                 "build": (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:12] or None}
         if detailed:

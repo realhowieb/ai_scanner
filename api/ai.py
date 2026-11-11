@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 SHARED_TTL_S = 1800
 SHARED_USER = "*"           # db.premium_auto rows that are the same for everyone
 MAX_CHAT_TURNS = 8          # ui.ai_chat._MAX_HISTORY
@@ -98,8 +100,8 @@ def store(username: str, kind: str, ref: Any, text: Optional[str], **extra: Any)
         from db import premium_auto
 
         premium_auto.save(username, kind, str(ref), json.dumps({"text": text, **extra}, default=str))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.ai.store", _ignored)
 
 
 def scan_df(username: str, run_id: Optional[int]):

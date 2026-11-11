@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from api import devices, models, user_data
 from api.deps import _AUTH, _OWNED, _user, current_account
 from api.scans import json_safe
+from utils.swallowed import swallowed
 
 
 class DeviceBody(BaseModel):
@@ -188,8 +189,8 @@ def register(app: FastAPI) -> None:
 
             try:
                 await anyio.to_thread.run_sync(chat_delivery.handle_telegram_update, update)
-            except Exception:  # never make Telegram retry the same update forever
-                pass
+            except Exception as _ignored:  # never make Telegram retry the same update forever
+                swallowed("api.routes.devices.register.telegram_webhook", _ignored)
         return {"ok": True}
 
     @app.delete("/v1/me/devices/{device_id}", status_code=204, responses=_OWNED)

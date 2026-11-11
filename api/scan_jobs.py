@@ -36,6 +36,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from api.store import DatabaseUnavailable, _conn
 from db.engine import schema_once
+from utils.swallowed import swallowed
 
 log = logging.getLogger("hsf_api.scans")
 
@@ -163,8 +164,8 @@ def _heartbeat_loop() -> None:
         _beat.wait(HEARTBEAT_S)
         try:
             heartbeat_once()
-        except Exception:  # a database blip; the next beat retries well inside STALE_AFTER_S
-            pass
+        except Exception as _ignored:  # a database blip; the next beat retries well inside STALE_AFTER_S
+            swallowed("api.scan_jobs._heartbeat_loop", _ignored)
 
 
 def _start_heartbeat() -> None:
@@ -314,8 +315,8 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
                 from db.engine import release_thread_connection
 
                 release_thread_connection()
-            except Exception:
-                pass
+            except Exception as _ignored:
+                swallowed("api.scan_jobs.submit.run", _ignored)
 
     _hold(job_id)
     _start_heartbeat()

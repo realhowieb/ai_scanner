@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
 from db.engine import schema_once
+from utils.swallowed import swallowed
 
 # Plain US tickers after normalization (AAPL, BRKB). Skips foreign listings the
 # bulk calendars include (e.g. 7203.T -> 7203T, which starts with a digit).
@@ -96,15 +97,15 @@ def _get_conn(provided_conn=None):
         from db.core import get_conn  # type: ignore
 
         return get_conn()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings._get_conn", _ignored)
 
     try:
         from db.connection import get_conn  # type: ignore
 
         return get_conn()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings._get_conn", _ignored)
 
     raise RuntimeError(
         "No DB connection available. Pass conn=... or add db.core.get_conn()."
@@ -182,8 +183,8 @@ def _ensure_earnings_table_once(c) -> None:
                   AND n.norm NOT IN (SELECT norm FROM conflicts);
                 """
             )
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.earnings._ensure_earnings_table_once", _ignored)
         try:
             cur.execute(
                 """
@@ -192,13 +193,13 @@ def _ensure_earnings_table_once(c) -> None:
                 WHERE symbol <> UPPER(TRIM(symbol));
                 """
             )
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.earnings._ensure_earnings_table_once", _ignored)
     try:
         c.commit()
-    except Exception:
+    except Exception as _ignored:
         # Some connection managers autocommit
-        pass
+        swallowed("db.earnings._ensure_earnings_table_once", _ignored)
 
 
 # -------------------------
@@ -389,14 +390,14 @@ def populate_earnings_calendar(
             if progress_cb:
                 try:
                     progress_cb(i, total, sym)
-                except Exception:
-                    pass
+                except Exception as _ignored:
+                    swallowed("db.earnings.populate_earnings_calendar", _ignored)
 
             if commit_every and i % commit_every == 0:
                 try:
                     c.commit()
-                except Exception:
-                    pass
+                except Exception as _ignored:
+                    swallowed("db.earnings.populate_earnings_calendar", _ignored)
 
             # Only rate-limit when we actually called yfinance (bulk hits are free).
             if sleep_s and hit is None and use_yf_fallback:
@@ -404,8 +405,8 @@ def populate_earnings_calendar(
 
     try:
         c.commit()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings.populate_earnings_calendar", _ignored)
 
     found_count = sum(1 for info in out.values() if info.earnings_date is not None)
     if total > 0 and found_count == 0:
@@ -564,8 +565,8 @@ def _ensure_refresh_log_once(c) -> None:
         cur.execute(CREATE_EARNINGS_REFRESH_LOG_SQL)
     try:
         c.commit()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings._ensure_refresh_log_once", _ignored)
 
 
 def should_refresh_earnings_today(refresh_key: str, *, conn=None) -> bool:
@@ -611,8 +612,8 @@ def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
         cur.execute(UPSERT_EARNINGS_REFRESH_LOG_SQL, (key, utc_today))
     try:
         c.commit()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings.mark_earnings_refreshed_today", _ignored)
 
 
 # -------------------------
@@ -763,6 +764,6 @@ def topup_earnings_from_yahoo(symbols: Iterable[str], *, limit: int = 300, conn=
                 time.sleep(sleep_s)
     try:
         c.commit()
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("db.earnings.topup_earnings_from_yahoo", _ignored)
     return found, len(todo)

@@ -54,6 +54,8 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf_api.alert_rules")
 
 # ---- catalog ----------------------------------------------------------------------------------------
@@ -910,8 +912,8 @@ def worker_pass() -> None:
             from db.engine import release_thread_connection
 
             release_thread_connection()
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("api.alert_rules.worker_pass", _ignored)
 
 
 # ---- API service layer ------------------------------------------------------------------------------

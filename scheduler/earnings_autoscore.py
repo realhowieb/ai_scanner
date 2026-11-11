@@ -15,6 +15,8 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 WINDOW_DAYS = 7
 MAX_SYMBOLS = 400   # a heavy earnings week; nearest days are kept first
 
@@ -97,8 +99,8 @@ def run_earnings_autoscore(session: str = "regular", *, now: Optional[dt.datetim
             import sentry_sdk
 
             sentry_sdk.capture_exception(e)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("scheduler.earnings_autoscore.run_earnings_autoscore", _ignored)
         return None
 
 

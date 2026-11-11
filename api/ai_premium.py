@@ -21,6 +21,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from api.ai import MAX_CHAT_TURNS, MAX_TURN_CHARS, _ask, _fmt, _raise_for
+from utils.swallowed import swallowed
 
 log = logging.getLogger("hsf.api")
 
@@ -497,8 +498,8 @@ def alert_why(event: Dict[str, Any], view: Dict[str, Any]) -> Optional[str]:
         from db.ai_usage import record_ai_call
 
         record_ai_call(str(event.get("user_id") or ""), "alert_why")
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.ai_premium.alert_why", _ignored)
     return line[:280]
 
 

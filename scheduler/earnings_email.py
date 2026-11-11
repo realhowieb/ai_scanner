@@ -13,6 +13,8 @@ import datetime as dt
 import html as _html
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 SCORE_MAX_SYMBOLS = 400   # a heavy earnings day is ~150 names; keep the cron bounded
 GROUP_LIMIT = {"bmo": 6, "amc": 6, None: 3}
 MIN_PRICE = 5.0           # sub-$5 names stay in the "+N more" count, not the email's tables
@@ -80,8 +82,8 @@ def _fill_quotes(rows: List[Dict[str, Any]]) -> None:
         from api.scans import _fill_quotes as fill
 
         fill(missing)
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("scheduler.earnings_email._fill_quotes", _ignored)
 
 
 def build_rows(

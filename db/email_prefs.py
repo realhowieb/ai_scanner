@@ -23,6 +23,8 @@ from __future__ import annotations
 import secrets
 from typing import Any, Dict, Optional
 
+from utils.swallowed import swallowed
+
 from .engine import get_neon_conn, schema_once
 
 KINDS = ("digest", "evening", "alerts", "weekly", "tips", "earnings")
@@ -96,8 +98,8 @@ def wants_email(user: Any, kind: str) -> bool:
             from api.workspace import is_quiet
             if is_quiet(str(user)):
                 return False
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("db.email_prefs.wants_email", _ignored)
     return bool(get_prefs(user).get(kind, True))
 
 

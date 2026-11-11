@@ -11,6 +11,7 @@ import weakref
 from typing import Any, Callable, Dict, List, Optional
 
 from analytics import market_calendar as mc
+from utils.swallowed import swallowed
 
 CACHE_TTL_S = 60
 CACHE_MAX_ENTRIES = 32  # run lists + a handful of runs; old runs drop out
@@ -123,8 +124,8 @@ class TTLCache:
                         return
                 with observe_memory(f"cache_refresh:{self.name}"):
                     self._put(key, loader(), ttl_s, stale_s)
-        except Exception:  # keep serving the stale value; the next request past stale_s loads in the foreground
-            pass
+        except Exception as _ignored:  # keep serving the stale value; the next request past stale_s loads in the foreground
+            swallowed("api.today.TTLCache._refresh", _ignored)
         finally:
             with self._lock:
                 slot[1] -= 1
@@ -333,8 +334,8 @@ def market_status(now: dt.datetime) -> Dict[str, Any]:
         latest = runs[0]["created_at"] if runs else None
         out.update(latest_scan_at=_iso(latest), **scan_freshness(latest, now))
         out["freshness"] = run_freshness(runs[0], now=now) if runs else describe(None, now=now)
-    except Exception:  # unknown freshness reads as null, never as stale
-        pass
+    except Exception as _ignored:  # unknown freshness reads as null, never as stale
+        swallowed("api.today.market_status", _ignored)
     return out
 
 
@@ -514,8 +515,8 @@ def snapshot(now: dt.datetime) -> Dict[str, Any]:
                            "volume_feed": volume_feed()}
     try:
         out.update(_system_status(now))
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.today.snapshot", _ignored)
     runs = market_runs()
     if runs:
         rc = runs[0].get("row_count")
@@ -583,8 +584,8 @@ def watchlist_today(user: str) -> Dict[str, Any]:
         summ = _cached(("wl_summary", user), lambda: dict((build_watchlist_intelligence(user) or {}).get("summary") or {}))
         if int(summ.get("tracked") or 0):
             out["summary"] = {k: int(summ.get(k) or 0) for k in ("tracked", "needs_attention", "strengthening", "fading")}
-    except Exception:  # the counts are optional; the list still answers
-        pass
+    except Exception as _ignored:  # the counts are optional; the list still answers
+        swallowed("api.today.watchlist_today", _ignored)
     runs = market_runs()
     if not runs:
         out["missing"] = tickers

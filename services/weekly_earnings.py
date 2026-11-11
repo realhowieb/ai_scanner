@@ -25,6 +25,8 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.weekly_earnings")
 
 KIND = "weekly_earnings"
@@ -220,6 +222,6 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     try:
         record_email_job("weekly_earnings", {"sent": counts["sent"], "skipped": counts["skipped"],
                                              "email_failed": counts["failed"]})
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("services.weekly_earnings.run", _ignored)
     return counts

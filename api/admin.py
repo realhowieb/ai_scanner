@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 ROOT = Path(__file__).resolve().parents[1]
 PLANS = ("basic", "pro", "premium")
 PROBE_TTL_S = 120  # FMP/Finnhub free tiers are rate-limited; reuse a probe for 2 minutes
@@ -181,8 +183,8 @@ def change_email(actor: str, username: str, new_email: str, keep_verified: bool)
     try:
         record_admin_event(actor, "change_email", out["new_email"],
                            {"email": [old, out["new_email"]], "rows_moved": moved, "kept_verified": bool(keep_verified)})
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.admin.change_email", _ignored)
     note = _stripe_email(out.get("stripe_customer_id"), out["new_email"])
     verified = "" if keep_verified else " The new address needs verifying: resend verification or mark it verified."
     return {"ok": True, "message": f"Moved {old} to {out['new_email']} ({moved} rows). They're signed out everywhere "
@@ -512,6 +514,6 @@ def start_earnings_refresh(actor: str) -> Dict[str, Any]:
         from db.admin_audit import record_admin_event
 
         record_admin_event(actor, "refresh_earnings", "earnings_calendar", {"symbols": len(symbols)})
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("api.admin.start_earnings_refresh", _ignored)
     return snapshot

@@ -29,6 +29,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.weekly_recap")
 
 KIND = "weekly_recap"
@@ -345,8 +347,8 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
             if not is_email_verified(email):
                 skip("unverified")
                 continue
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("services.weekly_recap.run", _ignored)
         if not wants_email(email, "weekly"):
             skip("unsubscribed")
             continue
@@ -415,6 +417,6 @@ def run(now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     try:
         record_email_job("weekly_recap", {"sent": counts["sent"], "skipped": counts["skipped"],
                                           "email_failed": counts["failed"]})
-    except Exception:
-        pass
+    except Exception as _ignored:
+        swallowed("services.weekly_recap.run", _ignored)
     return counts

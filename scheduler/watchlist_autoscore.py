@@ -13,6 +13,8 @@ import os
 import time
 from typing import List, Optional, Set
 
+from utils.swallowed import swallowed
+
 MAX_SYMBOLS = 400   # most-watched first when there are more
 
 
@@ -65,6 +67,6 @@ def run_watchlist_autoscore(session: str = "regular") -> Optional[int]:
             import sentry_sdk
 
             sentry_sdk.capture_exception(e)
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("scheduler.watchlist_autoscore.run_watchlist_autoscore", _ignored)
         return None

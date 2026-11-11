@@ -21,6 +21,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.swallowed import swallowed
+
 log = logging.getLogger("hsf.founding_push")
 
 KIND = "founding_push"
@@ -174,8 +176,8 @@ def recipients(campaign: str) -> Dict[str, Any]:
             if not is_email_verified(email):
                 skip("unverified")
                 continue
-        except Exception:
-            pass
+        except Exception as _ignored:
+            swallowed("services.founding_push.recipients", _ignored)
         if not wants_email(email, "tips"):
             skip("unsubscribed")
             continue

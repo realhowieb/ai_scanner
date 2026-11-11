@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Callable, Iterable
 
+from utils.swallowed import swallowed
+
 
 def _chunked(seq: list[str], size: int) -> Iterable[list[str]]:
     for i in range(0, len(seq), size):
@@ -133,8 +135,8 @@ def reeval_inactive_symbols(
                         sub = df[sym] if hasattr(df, "__getitem__") else None
                         if sub is not None and len(sub) >= min_rows_required:
                             ok_symbols.add(sym)
-                    except Exception:
-                        pass
+                    except Exception as _ignored:
+                        swallowed("db.universe.reeval_inactive_symbols", _ignored)
         except Exception:
             ok_symbols = set()
 
