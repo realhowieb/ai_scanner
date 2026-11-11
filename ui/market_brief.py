@@ -102,7 +102,7 @@ def _compute_brief() -> Optional[Dict[str, Any]]:
         golden, top_setups = _todays_setups(df)
     except Exception:
         golden, top_setups = [], []
-    picks = _cached_prebreakout_picks(df, _prebreakout_picks)
+    picks = _cached_prebreakout_picks(df, lambda frame: _prebreakout_picks(frame, rescore=False))
     try:
         pe = _earnings_days_map([p["symbol"] for p in picks])
         for p in picks:

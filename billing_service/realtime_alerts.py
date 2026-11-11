@@ -222,18 +222,52 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
 
     import httpx
 
-    try:
-        resp = httpx.get(
-            f"{base}/v2/stocks/snapshots",
-            params={"symbols": ",".join(sorted(set(tickers)))},
-            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret},
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        _log(f"quote fetch failed: {type(e).__name__}: {e}")
-        return {}
+    # A provider-rejected ticker must not discard prices for everybody else.
+    # Syntax filtering is conservative; provider-valid class shares map back to
+    # the spelling on the user's alert. Validation errors are isolated with a
+    # bounded split, never retried for auth/rate-limit/server failures.
+    aliases = {str(t).strip().upper().replace("-", "."): str(t).strip().upper()
+               for t in tickers if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", str(t).strip())}
+    budget = [24]
+
+    def fetch(symbols):
+        if not symbols or budget[0] <= 0:
+            return {}
+        budget[0] -= 1
+        try:
+            resp = httpx.get(
+                f"{base}/v2/stocks/snapshots",
+                params={"symbols": ",".join(symbols)},
+                headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}, timeout=10.0,
+            )
+            if getattr(resp, "status_code", None) in (400, 422):
+                if len(symbols) == 1:
+                    return {}  # invalid/no-quote is expected, not an application error
+                # Usually the response names the bad symbol, saving a split.
+                try:
+                    message = str(resp.json().get("message", ""))[:500]
+                except (ValueError, AttributeError):
+                    message = ""
+                rejected = re.findall(r"invalid symbol[s]?[:\s]+['\"]?([A-Z][A-Z0-9.]*)", message, re.I)
+                bad = {t.upper() for t in rejected} & set(symbols)
+                if bad:
+                    return fetch([t for t in symbols if t not in bad])
+                middle = len(symbols) // 2
+                return {**fetch(symbols[:middle]), **fetch(symbols[middle:])}
+            resp.raise_for_status()
+            answer = resp.json()
+            return answer if isinstance(answer, dict) else {}
+        except Exception as e:
+            # Do not log the URL (it includes every requested symbol). Real
+            # auth, quota, transport and provider failures remain visible.
+            _log(f"quote fetch failed: {type(e).__name__}")
+            return {}
+
+    data = {}
+    symbols = sorted(aliases)
+    for start in range(0, len(symbols), 100):
+        budget[0] = 24
+        data.update(fetch(symbols[start:start + 100]))
     def _f(val):
         try:
             return float(val) if val is not None else None
@@ -252,7 +286,7 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
             last = _f(trade.get("p")) or _f(minute.get("c")) or _f(daily.get("c"))
             if last is None:
                 continue
-            out[str(sym).upper()] = {
+            out[aliases.get(str(sym).upper(), str(sym).upper())] = {
                 "last": last,
                 "prev_close": _f(prev.get("c")),
                 "volume": _f(daily.get("v")) or _f(minute.get("v")),

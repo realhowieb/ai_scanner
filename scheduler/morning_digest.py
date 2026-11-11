@@ -126,12 +126,17 @@ def _symbol_column(df) -> Optional[str]:
     return None
 
 
-def _prebreakout_picks(df, limit: int = 3) -> List[Dict[str, Any]]:
+def _prebreakout_picks(df, limit: int = 3, *, rescore: bool = True) -> List[Dict[str, Any]]:
     """Top PreBreakout candidates [{symbol, prob}] from the snapshot (best first)."""
     try:
-        from ml_prebreakout import score_prebreakout
+        if rescore:
+            from ml_prebreakout import score_prebreakout
 
-        scored = score_prebreakout(df)
+            scored = score_prebreakout(df)
+        else:
+            # API Brief: reuse prediction-time values already saved by cron.
+            # No model imports, provider calls, or replacement of saved evidence.
+            scored = df.copy(deep=False) if df is not None else None
         if scored is None or len(scored) == 0 or "PreBreakoutProb%" not in scored.columns:
             return []
         sym_col = _symbol_column(scored)

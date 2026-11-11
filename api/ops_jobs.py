@@ -364,6 +364,13 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
             log.warning(json.dumps({"event": "scheduled_scans_error", "error": type(e).__name__}))
     if _on("HSF_PREMIUM_AUTO_ENABLED"):
         _premium_auto(now)
+    if _on("HSF_WARM_STOCK"):
+        try:
+            from api.scans import warm_score_history
+
+            warm_score_history()  # no payload read when the public run versions are unchanged
+        except Exception as e:
+            log.warning("score history warm-up failed: %s", type(e).__name__)
     try:
         from api.memory import maintain_memory, maybe_restart_for_memory
 

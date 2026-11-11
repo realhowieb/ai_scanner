@@ -322,7 +322,7 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
 DT_KEEP_WARM_S = 240
 DT_KEEP_WARM_FIRST_S = 20
 DT_KEEP_WARM_STATES = ("premarket", "open")
-DT_KEEP_WARM_SOURCES = ("movers", "movers_sp500", "movers_nasdaq", "movers_nyse")
+DT_KEEP_WARM_SOURCES = ("movers", "movers_sp500", "movers_nasdaq", "movers_nyse", "scan_picks", "megacaps")
 
 
 def _keep_warm_enabled() -> bool:

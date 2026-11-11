@@ -117,7 +117,7 @@ class SparklineAndScoreHistoryTest(unittest.TestCase):
                    2: {},
                    3: {"CCC": {"score": 77, "signals": ["gapper", "golden_cross", "prebreakout"]}}}
         with mock.patch("api.scans.market_runs", return_value=runs), \
-                mock.patch("api.scans._run_ticker_scores", side_effect=lambda rid: per_run[rid]):
+                mock.patch("api.scans._score_window", return_value=per_run):
             pro = api.scans.score_history("ccc", {"can_early_breakout": False})
             prem = api.scans.score_history("CCC", {"can_early_breakout": True})
         self.assertEqual([p["score"] for p in pro["points"]], [50, None, 77])
