@@ -2,7 +2,7 @@
 
 import Link from "@/components/Link";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { useBillingInterval } from "@/components/BillingInterval";
 import { TickerLogo } from "@/components/TickerLogo";
@@ -86,9 +86,12 @@ export function Freshness({ at, label = "Scan", staleCheck = true, stale }: { at
   );
 }
 
-/** After this long, say why: the API's host sleeps when idle and takes up to a minute to wake. */
+/** After this long, say why the wait is longer than usual. The API doesn't sleep (it runs on an
+ * always-on plan); a long wait means it is building fresh market data, such as a movers list. */
 export const SLOW_AFTER_MS = 8000;
-export const WAKING_UP = "Still loading. The HSF service may be waking up, which can take up to a minute.";
+export const WAKING_UP = "Still loading. Fresh market data can take a few more seconds.";
+/** Page-sized loads show the HSF loader once they pass this, so quick loads never flash it. */
+export const BRAND_AFTER_MS = 500;
 
 export function useSlow(active: boolean, afterMs = SLOW_AFTER_MS): boolean {
   const [slow, setSlow] = useState(false);
@@ -100,13 +103,47 @@ export function useSlow(active: boolean, afterMs = SLOW_AFTER_MS): boolean {
   return active && slow;
 }
 
-export function Skeleton({ rows = 4, label = "Loading" }: { rows?: number; label?: string }) {
+const LOADER_DEPTH = 10;
+
+/** The 3D HSF wordmark tilting over a rising price line, for page-sized loads. */
+export function HsfLoader({ message }: { message?: ReactNode }) {
+  return (
+    <div className="hsf-loader">
+      <div className="hsf-loader-art" aria-hidden="true">
+        <div className="hsf-mark">
+          <span className="hsf-mark-sizer">HSF</span>
+          {Array.from({ length: LOADER_DEPTH }, (_, i) => LOADER_DEPTH - i).map((d) => (
+            <span key={d} className="hsf-mark-layer" style={{ "--d": d } as CSSProperties}>HSF</span>
+          ))}
+          <span className="hsf-mark-face">HSF</span>
+        </div>
+        <svg className="hsf-spark" viewBox="0 0 180 34">
+          <path d="M2 28 L22 24 L38 27 L56 18 L72 21 L92 12 L110 16 L128 8 L146 11 L176 3" />
+          <circle cx="176" cy="3" r="3.5" />
+        </svg>
+      </div>
+      {message && <p className="cap">{message}</p>}
+    </div>
+  );
+}
+
+/** Loading placeholder. Page-sized ones (6+ rows, or brand) switch to the HSF loader after
+ * BRAND_AFTER_MS; small in-card ones stay as grey bars. */
+export function Skeleton({ rows = 4, label = "Loading", brand, slowText = WAKING_UP }: {
+  rows?: number; label?: string; brand?: boolean; slowText?: ReactNode;
+}) {
+  const branded = brand ?? rows >= 6;
+  const showBrand = useSlow(branded, BRAND_AFTER_MS);
   const slow = useSlow(true);
   return (
-    <div className="skeleton" role="status" aria-live="polite">
+    <div className={`skeleton${showBrand ? " skeleton-brand" : ""}`} role="status" aria-live="polite">
       <span className="sr-only">{label}…</span>
-      {slow && <p className="cap">{WAKING_UP}</p>}
-      {Array.from({ length: rows }, (_, i) => <div key={i} className="sk-row" />)}
+      {showBrand
+        ? <HsfLoader message={slow ? slowText : null} />
+        : <>
+            {slow && <p className="cap">{slowText}</p>}
+            {Array.from({ length: rows }, (_, i) => <div key={i} className="sk-row" />)}
+          </>}
     </div>
   );
 }

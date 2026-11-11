@@ -71,6 +71,38 @@ class SnapshotClassShareTests(unittest.TestCase):
         self.assertEqual(sent["feed"], "sip")
         self.assertIn("AMD", out)
 
+    def test_chunks_run_side_by_side_and_merge(self):
+        import threading
+        import time
+
+        import market_data as m
+
+        lock = threading.Lock()
+        live = {"now": 0, "peak": 0}
+
+        def fake_get(url, headers=None, params=None, timeout=None):
+            syms = params["symbols"].split(",")
+            with lock:
+                live["now"] += 1
+                live["peak"] = max(live["peak"], live["now"])
+            time.sleep(0.05)
+            with lock:
+                live["now"] -= 1
+            if "S100" in syms:  # one failed chunk only loses its own symbols
+                return _Resp(500, {})
+            return _Resp(200, {s: {"latestTrade": {"p": 1.0}} for s in syms})
+
+        symbols = [f"S{i}" for i in range(250)]
+        with mock.patch.object(m, "_get_alpaca_headers", return_value={"k": "v"}), \
+             mock.patch.object(m, "_get_alpaca_base_urls", return_value={"data_url": "https://x"}), \
+             mock.patch.object(m, "_get_alpaca_data_feed", return_value="iex"), \
+             mock.patch.object(m, "requests", mock.MagicMock(get=fake_get)):
+            out = m.fetch_alpaca_snapshots(symbols)
+
+        self.assertGreater(live["peak"], 1)
+        self.assertLessEqual(live["peak"], m.SNAPSHOT_WORKERS)
+        self.assertEqual(set(out), {f"S{i}" for i in [*range(100), *range(200, 250)]})
+
 
 if __name__ == "__main__":
     unittest.main()

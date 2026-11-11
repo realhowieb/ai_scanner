@@ -241,7 +241,7 @@ export function BriefView() {
       <DataFreshness info={b?.freshness} />
       {brief.error && b && <ErrorLine error={brief.error} />}
       {brief.error && !b ? <ErrorState error={brief.error} onRetry={brief.reload} what="the Market Brief" />
-        : !b ? <div className="brief-center"><Card title="Market Pulse" id="pulse"><Skeleton rows={6} label="Loading Market Pulse" /></Card><Card title="HSF Opportunity Radar" id="opps"><Skeleton rows={6} label="Loading Opportunity Radar" /></Card></div>
+        : !b ? <div className="brief-center"><Card title="Market Pulse" id="pulse"><Skeleton rows={6} label="Loading Market Pulse" /></Card><Card title="HSF Opportunity Radar" id="opps"><Skeleton rows={6} label="Loading Opportunity Radar" brand={false} /></Card></div>
         : !b.available ? <Card><Empty title="Today's brief isn't ready yet.">It appears after the day&apos;s first scan snapshot.</Empty></Card>
         : <BriefBody b={b} />}
       <p className="cap">Snapshot data from HSF scans, not live quotes.</p>
