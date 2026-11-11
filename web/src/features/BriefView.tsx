@@ -4,7 +4,11 @@
 // movement since the previous snapshot, movers, golden crosses), the earnings calendar
 // (Pro) and an AI narrative (Premium, on request). Everything comes from /v1/brief,
 // /v1/earnings and /v1/ai/brief-narrative; sections the API leaves empty say so.
+import Link from "@/components/Link";
 import { Fragment, useState } from "react";
+
+import { watchlists } from "@/api/userData";
+import { useScannerWatchlists } from "@/features/WatchlistScanner";
 
 import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
@@ -133,6 +137,49 @@ function Narrative() {
   );
 }
 
+const REPORTING_SHOWN = 20;
+
+/** Today's reporters, most relevant first: the user's watchlist, then stocks in today's
+ * scan (opportunities, gappers, movers, breakouts), then the rest A to Z. A heavy day has
+ * hundreds, so the card shows the first 20 and expands in place. */
+export function rankReporters(tickers: string[], watch: Set<string>, inScan: Set<string>): string[] {
+  const group = (t: string) => (watch.has(t) ? 0 : inScan.has(t) ? 1 : 2);
+  return [...new Set(tickers.map((t) => t.toUpperCase()))]
+    .sort((a, c) => group(a) - group(c) || a.localeCompare(c));
+}
+
+function ReportingToday({ b }: { b: Brief }) {
+  const { can, me } = useSession();
+  const [expanded, setExpanded] = useState(false);
+  const { chosen } = useScannerWatchlists(0, Boolean(me));
+  const detail = useApi(chosen ? `wl:${chosen.id}` : null, (signal) => watchlists.get(chosen!.id, signal));
+  const watch = new Set((detail.data?.items ?? []).map((i) => i.ticker.toUpperCase()));
+  const inScan = new Set<string>([
+    ...(b.opportunities as { ticker?: unknown }[]).map((o) => String(o.ticker ?? "")),
+    ...b.gappers.map((g) => g.ticker), ...b.gainers.map((g) => g.ticker), ...b.losers.map((g) => g.ticker),
+    ...b.top_breakout_scores.map((t) => String(t.ticker ?? "")), ...b.golden_crosses,
+  ].filter(Boolean).map((t) => t.toUpperCase()));
+  const ranked = rankReporters(b.earnings_today, watch, inScan);
+  const shown = expanded ? ranked : ranked.slice(0, REPORTING_SHOWN);
+  return (
+    <Card title="Reporting today" aside={`${ranked.length} ${ranked.length === 1 ? "company" : "companies"}`} id="et">
+      <div className="chips" data-testid="reporting-today">
+        {shown.map((t) => <span key={t} title={watch.has(t) ? "On your watchlist" : inScan.has(t) ? "In today's scan" : undefined}><TickerLink ticker={t} /></span>)}
+      </div>
+      {(watch.size > 0 || inScan.size > 0) && !expanded && <p className="cap">Your watchlist and today&apos;s scan picks first.</p>}
+      <div className="row-actions">
+        {ranked.length > REPORTING_SHOWN && (
+          <button type="button" className="btn btn-sm" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Show fewer" : `Show all ${ranked.length}`}
+          </button>
+        )}
+        <Link className="btn btn-sm" href="/scanner?signal=earnings">Open in Scanner</Link>
+      </div>
+      {!can("can_earnings") && <p className="cap">Free on every plan. Pro adds the 7-day calendar with before or after the bell timing.</p>}
+    </Card>
+  );
+}
+
 function BriefBody({ b }: { b: Brief }) {
   const { can } = useSession();
   return (
@@ -171,12 +218,7 @@ function BriefBody({ b }: { b: Brief }) {
               ) : <p className="cap">No PreBreakout picks in this snapshot.</p>}
           </Card>
           </details>
-          {b.earnings_today.length > 0 && (
-            <Card title="Reporting today" id="et">
-              <div className="chips">{b.earnings_today.map((t) => <TickerLink key={t} ticker={t} />)}</div>
-              {!can("can_earnings") && <p className="cap">Free on every plan. Pro adds the 7-day calendar with before or after the bell timing.</p>}
-            </Card>
-          )}
+          {b.earnings_today.length > 0 && <ReportingToday b={b} />}
         </aside>
       </div>
     </>
