@@ -161,7 +161,7 @@ jobs:
           nohup python -m uvicorn api.main:app --port 8011 > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8011/healthz > /dev/null; then exit 0; fi
-            sleep 2
+            echo "waiting for the API (try $i of 30)"; sleep 2
           done
           echo "API did not start"; tail -50 "$RUNNER_TEMP/api.log"; exit 1
 
@@ -172,7 +172,7 @@ jobs:
           PORT=3100 nohup npm start > "$RUNNER_TEMP/web.log" 2>&1 &
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:3100/api/healthz > /dev/null; then exit 0; fi
-            sleep 2
+            echo "waiting for the web app (try $i of 30)"; sleep 2
           done
           echo "Web app did not start"; tail -50 "$RUNNER_TEMP/web.log"; exit 1
 
