@@ -1,4 +1,6 @@
 name: Scheduled Market Scans
+# Refresh scans are named "| refresh" so System Health can tell them apart.
+run-name: ${{ (github.event_name == 'workflow_dispatch' && inputs.record_research == false) && 'Scheduled Market Scans | refresh' || 'Scheduled Market Scans' }}
 
 on:
   # Manual trigger (Actions tab) or external scheduler (e.g. Render cron) via the

@@ -197,6 +197,23 @@ class ScenarioTests(unittest.TestCase):
         self.assertIn("ZERO_OBSERVATIONS", codes(r))
         self.assertEqual(r["subsystems"]["research_capture"]["status"], "DEGRADED")
 
+
+    def test_07b_refresh_scans_capture_nothing_by_design(self):
+        b = baseline()
+
+        def extra(utc_hm, title=None):
+            created = f"2026-09-30T{utc_hm}:00+00:00"
+            r = {"created_at": created, "updated_at": f"2026-09-30T{utc_hm}:00+00:00", "conclusion": "success",
+                 "status": "completed", "event": "workflow_dispatch"}
+            if title:
+                r["display_title"] = title
+            return r
+        # 13:35 ET untitled (matched by time) and a titled refresh run at an odd time.
+        b["scan_runs"] = b["scan_runs"] + [extra("17:35"), extra("18:05", "Scheduled Market Scans | refresh")]
+        self.assertNotIn("ZERO_OBSERVATIONS", codes(run(b)))
+        # A research scan outside the refresh windows that captured nothing is still flagged.
+        b["scan_runs"] = b["scan_runs"] + [extra("15:05", "Scheduled Market Scans")]
+        self.assertIn("ZERO_OBSERVATIONS", codes(run(b)))
     def test_08_stale_universe(self):
         b = baseline()
         b["universe"].update({"source": "cached", "cached_at": "2026-09-20T00:00:00+00:00"})
