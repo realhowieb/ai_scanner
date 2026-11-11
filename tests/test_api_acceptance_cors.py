@@ -50,5 +50,45 @@ class CorsChecksWithoutOrigin(unittest.TestCase):
         self.assertEqual(_cors(run), {"CORS refuses an unlisted origin": "FAIL"})
 
 
+@unittest.skipUnless(HAS_HTTPX, "needs httpx")
+class PlanLimitInputs(unittest.TestCase):
+    def test_valid_distinct_thresholds_reach_limit_and_cleanup(self):
+        import api_acceptance
+        import httpx
+
+        for limit in (1, 5, 25):
+            with self.subTest(limit=limit):
+                alerts = {}
+                submitted = []
+
+                def handler(request):
+                    import json
+                    if request.method == "GET":
+                        return httpx.Response(200, json={"limit": limit, "used": len(alerts)})
+                    if request.method == "DELETE":
+                        alerts.pop(int(request.url.path.rsplit("/", 1)[-1]))
+                        return httpx.Response(204)
+                    body = json.loads(request.content)
+                    threshold = body["threshold"]
+                    submitted.append(threshold)
+                    if not 0 < threshold <= 1_000_000:
+                        return httpx.Response(422)
+                    if len(alerts) >= limit:
+                        return httpx.Response(403)
+                    if threshold in alerts.values():
+                        return httpx.Response(409)
+                    aid = len(alerts) + 1
+                    alerts[aid] = threshold
+                    return httpx.Response(201, json={"id": aid})
+
+                run = api_acceptance.Run("https://api.test")
+                run.http = httpx.Client(transport=httpx.MockTransport(handler))
+                api_acceptance.plan_limit(run, {"h": {}, "role": "TEST"})
+                self.assertEqual(run.results[-1]["status"], "PASS")
+                self.assertEqual(len(set(submitted)), limit + 1)
+                self.assertEqual(alerts, {})
+                run.http.close()
+
+
 if __name__ == "__main__":
     unittest.main()
