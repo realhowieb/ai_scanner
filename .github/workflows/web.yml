@@ -58,7 +58,7 @@ jobs:
           python -m pytest -q \
             tests/test_ai_observability.py tests/test_integration_readiness.py \
             tests/test_monitoring.py tests/test_webpush.py tests/test_api_without_ui_packages.py \
-            tests/test_run85_ai_claims.py tests/test_ai_summary.py tests/test_watchlist_ai_note.py \
+            tests/test_ai_claims.py tests/test_ai_summary.py tests/test_watchlist_ai_note.py \
             tests/test_api_paid_features.py
 
       - name: OpenAPI contract matches the API
@@ -85,3 +85,119 @@ jobs:
 
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
+
+  journey:
+    # The signed-in browser journey (web/scripts/journey.mjs) before merge, against a
+    # throwaway stack on the runner: Postgres, the API and a production web build, seeded
+    # by scripts/seed_e2e.py. No live service, secret or market-data key is involved, so
+    # a broken flow is caught here instead of by Live acceptance after a deploy.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hsf_e2e
+          POSTGRES_PASSWORD: hsf_e2e_only
+          POSTGRES_DB: hsf_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hsf_e2e:hsf_e2e_only@127.0.0.1:5432/hsf_e2e
+      # Deliberately fake: this stack lives only for the length of the job.
+      API_JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
+      HSF_SCHEDULED_SCANS_ENABLED: "0"
+      HSF_WARM_DAY_TRADER: "0"
+      PREBREAKOUT_LIVE_ENRICH: "0"
+      HSF_API_BASE_URL: http://127.0.0.1:8011
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies and the browser
+        working-directory: web
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ../api/requirements.txt
+          npm ci --no-audit --no-fund
+          npx playwright-core install chromium
+          # Same reasoning as Live acceptance: Ubuntu's mirrors sometimes go down, and the
+          # runner image already has what Chrome needs.
+          for i in 1 2 3; do
+            if timeout 180 npx playwright-core install-deps chromium; then exit 0; fi
+            echo "install-deps failed (try $i of 3)"
+            if [ "$i" -lt 3 ]; then sleep 20; fi
+          done
+          echo "::warning::Ubuntu package mirrors unreachable; running without Playwright's extra system packages."
+
+      - name: Seed the database and start the API
+        run: |
+          umask 077
+          printf '%s' "e2e-$(openssl rand -hex 12)-A1!" > "$RUNNER_TEMP/pw"
+          HSF_E2E_PASSWORD_FILE="$RUNNER_TEMP/pw" python scripts/seed_e2e.py
+          nohup python -m uvicorn api.main:app --port 8011 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8011/healthz > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "API did not start"; tail -50 "$RUNNER_TEMP/api.log"; exit 1
+
+      - name: Build and start the web app
+        working-directory: web
+        run: |
+          npm run build
+          PORT=3100 nohup npm start > "$RUNNER_TEMP/web.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3100/api/healthz > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Web app did not start"; tail -50 "$RUNNER_TEMP/web.log"; exit 1
+
+      - name: Signed-in browser journey
+        working-directory: web
+        env:
+          BASE_URL: http://localhost:3100
+          HSF_TEST_EMAIL: e2e-pro@example.com
+          HSF_TEST_EMAIL_2: e2e-other@example.com
+          OUT_DIR: journey-screenshots
+        run: |
+          export HSF_TEST_PASSWORD_FILE="$RUNNER_TEMP/pw"
+          node scripts/journey.mjs
+
+      - name: Server logs
+        if: failure()
+        run: |
+          tail -80 "$RUNNER_TEMP/api.log" || true
+          tail -40 "$RUNNER_TEMP/web.log" || true
+
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pre-merge-journey-screenshots
+          path: web/journey-screenshots
+          if-no-files-found: ignore
+          retention-days: 7

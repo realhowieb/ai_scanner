@@ -60,7 +60,7 @@ class StoreTests(unittest.TestCase):
 
 class ActionRecordingTests(unittest.TestCase):
     def setUp(self):
-        from tests.test_p1_37_38_admin_users import FakeDB
+        from tests.test_admin_users import FakeDB
 
         self.FakeDB = FakeDB
         self.rec = Recorder()
