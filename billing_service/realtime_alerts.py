@@ -229,9 +229,10 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
     aliases = {str(t).strip().upper().replace("-", "."): str(t).strip().upper()
                for t in tickers if re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]{0,14}", str(t).strip())}
     budget = [24]
+    stop = [False]
 
     def fetch(symbols):
-        if not symbols or budget[0] <= 0:
+        if not symbols or budget[0] <= 0 or stop[0]:
             return {}
         budget[0] -= 1
         try:
@@ -254,6 +255,8 @@ def _latest_snapshots(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]
                     return fetch([t for t in symbols if t not in bad])
                 middle = len(symbols) // 2
                 return {**fetch(symbols[:middle]), **fetch(symbols[middle:])}
+            if getattr(resp, "status_code", None) in (401, 403, 429):
+                stop[0] = True  # don't amplify credential/quota failures across chunks
             resp.raise_for_status()
             answer = resp.json()
             return answer if isinstance(answer, dict) else {}

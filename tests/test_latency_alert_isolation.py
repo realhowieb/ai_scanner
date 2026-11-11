@@ -86,14 +86,14 @@ class AlertIsolationTests(unittest.TestCase):
         fetch = mock.Mock(return_value=mock.Mock(status_code=429, raise_for_status=mock.Mock(side_effect=RuntimeError)))
         with mock.patch.dict('os.environ', {'ALPACA_API_KEY_ID': 'k', 'ALPACA_API_SECRET_KEY': 's'}), \
              mock.patch.dict(sys.modules, {'httpx': mock.Mock(get=fetch)}):
-            self.assertEqual(_latest_snapshots(['AAA', 'BBB']), {})
+            self.assertEqual(_latest_snapshots([f'S{i}' for i in range(201)]), {})
             fetch.assert_called_once()
 
 
 class SavedBriefPicksTests(unittest.TestCase):
     def test_saved_mode_never_imports_model_and_preserves_raw_tiebreak(self):
         from scheduler.morning_digest import _prebreakout_picks
-        frame = pd.DataFrame({'Ticker': ['AAA', 'BBB', 'CCC'], 'PreBreakoutProb%': [13.1, 13.1, 0],
+        frame = pd.DataFrame({'Ticker': ['AAA', 'BBB', 'CCC'], 'PreBreakoutProb%': [13.1, 13.1, float('nan')],
                               'PreBreakoutProbRaw': [.1, .2, 0], 'Last': [10, 20, 30]})
         original = frame.copy(deep=True)
         with mock.patch.dict(sys.modules, {'ml_prebreakout': None}):

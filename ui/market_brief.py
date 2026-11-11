@@ -49,10 +49,9 @@ def _brief_scan_df():
     return df
 
 
-# PreBreakout picks depend only on the scan, but scoring them loads the ML models and
-# daily price history: ~180 MB of working memory and ~10 s, which hsf-api used to redo
-# on every 5-minute Brief rebuild (the allocator keeps that peak, so memory climbed all
-# day). They are now scored once per scan run and reused until a new scan lands.
+# The scheduled scan already saved prediction-time probabilities. The API only
+# selects/sorts those saved values, avoiding the model's startup memory peak.
+# Memoize the tiny pick list per scan version; never rescore in a Brief rebuild.
 _PICKS_MEMO: Dict[str, Any] = {"key": None, "picks": []}
 
 

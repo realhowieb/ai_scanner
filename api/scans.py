@@ -9,6 +9,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run_df, run_freshness, scan_freshness
@@ -779,23 +781,36 @@ SCORE_HISTORY_RUNS = 24  # about eight sessions of full-market scans
 score_cache = TTLCache(max_entries=2, name="score_history")
 
 
+
+@lru_cache(maxsize=1)
+def _score_projection_method():
+    """Reuse across unrelated deploys; invalidate when scorer/projection code changes."""
+    import hashlib
+
+    from ui.opportunities import HSF_SCORE_VERSION
+
+    root = Path(__file__).resolve().parents[1]
+    code = b"".join((root / name).read_bytes() for name in
+                    ("ui/results_intelligence.py", "ui/opportunities.py"))
+    return f"score-history-1:{HSF_SCORE_VERSION}:{hashlib.sha256(code).hexdigest()[:16]}"
+
 def _score_window(runs):
     """One batch for missing payloads; cached by run version and scoring method.
 
     Daily snapshots can be overwritten. A new created_at/row_count or score
     method invalidates only that projection; never assume run ID is immutable.
     """
-    from ui.opportunities import HSF_SCORE_VERSION
+    method = _score_projection_method()
 
     stamps = {int(r["id"]): f"{r['created_at']}|{r.get('row_count')}" for r in runs}
-    key = (HSF_SCORE_VERSION, tuple(stamps.items()))
+    key = (method, tuple(stamps.items()))
 
     def load():
         from db.scan_score_cache import load_score_rows, load_scores, save_scores
         from ui.results_intelligence import consolidate_scanner_results
 
         try:
-            saved = load_scores(list(stamps), HSF_SCORE_VERSION)
+            saved = load_scores(list(stamps), method)
         except Exception as exc:
             swallowed("api.scans.score_cache.read", exc)
             saved = {}
@@ -822,7 +837,7 @@ def _score_window(runs):
             except Exception as exc:
                 swallowed("api.scans.score_cache.build", exc)
         try:
-            save_scores(records, HSF_SCORE_VERSION)
+            save_scores(records, method)
         except Exception as exc:
             swallowed("api.scans.score_cache.write", exc)
         return result
