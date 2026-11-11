@@ -39,7 +39,6 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET | `/v1/runs`, `/v1/runs/{id}` | Bearer, **Pro** | Your saved scans (the web's Scan History) and one with its rows. 404 when not yours. |
 | GET | `/v1/track-record`, `/v1/track-record/daily` | Bearer, **Pro** | Versioned historical signal research: absolute and SPY-excess returns, positive/outperformance rates, selected/evaluated/excluded counts, coverage and per-pick timing provenance. First session open strictly after snapshot availability; daily excess series. Not portfolio returns. |
 | GET | `/v1/outcomes/summary`, `/scores`, `/horizons`, `/setups`, `/timeseries`, `/symbols/{ticker}`, `/query` | Bearer, **Pro** | Outcome Intelligence: every matured HSF signal vs SPY, with sample sizes, evidence labels and explicit filters echoed back. See docs/OUTCOME_INTELLIGENCE.md. |
-| GET | `/v1/research/datasets`, `/datasets/{dataset_version}`, `/coverage`, `/observations`, `/observations/{id}`, `/features/{id}` | Bearer, **admin only** | Internal research dataset (read-only): point-in-time feature snapshots kept apart from outcomes, coverage, finalized dataset versions. Not for Web v2 navigation. See docs/RESEARCH_DATASET.md. |
 | GET | `/v1/earnings?days=7&tickers=…` | Bearer, **Pro** | Upcoming earnings (0–30 days), soonest first, optionally only for given tickers. |
 | GET | `/v1/brief` | Bearer | The Market Brief (same builder as the morning email): backdrop, breadth, sectors, top opportunities with movement, gappers, movers, setups, earnings today. PreBreakout picks Premium. Cached 5 min. |
 | GET | `/v1/day-trader?source=…` | Bearer, **Pro** | Live Day Trader table for `watchlist` (default list or `watchlist_id`), `movers`, `movers_sp500`, `movers_nasdaq`, `premarket`, `postmarket`, `scan_picks`, `megacaps` or `custom` (`symbols=`). Quotes shared 30 s; poll every 30–60 s. |
@@ -59,7 +58,6 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET / PATCH / DELETE | `/v1/watchlists/{id}` | Bearer | Items with notes; rename / make default `{"name"?,"make_default"?}`; delete (204). 404 when not yours. |
 | POST | `/v1/watchlists/{id}/tickers` | Bearer | `{"tickers":[...]}` (≤200) → `added`, `already_present`, `invalid`. |
 | PATCH / DELETE | `/v1/watchlists/{id}/tickers/{ticker}` | Bearer | Set the note `{"note"}`; remove the ticker (204). |
-| POST / DELETE | `/v1/watchlists/{id}/symbols`, `/v1/watchlists/{id}/symbols/{ticker}` | Bearer | Same as `/tickers` (add; remove). |
 | GET | `/v1/watchlists/{id}/intelligence` | Bearer | Every symbol's HSF Score, rank and their change since the previous scan, setup, signals, PreBreakout (Premium), price, RVOL, EMA cross, freshness and active alert count, from the latest saved market scan. See [WATCHLIST_INTELLIGENCE_API.md](WATCHLIST_INTELLIGENCE_API.md). |
 | GET | `/v1/watchlists/{id}/changes` | Bearer | The canonical HSF changes between the two latest scans for the list's symbols, with rank moves, plus your rule alerts on them since the previous scan. |
 | GET / POST | `/v1/alerts` | Bearer | Your alerts with `limit`, `used`, `email_enabled`; create `{"type","ticker"?,"threshold"?,"direction"?,"watchlist_only"?}`. Same types and input rules as the web app; Free 1 alert, Pro 5, Premium 25 (403 at the limit, 409 duplicate, 422 bad input). |
@@ -69,7 +67,6 @@ Interactive docs (OpenAPI) are served at `/docs` once deployed.
 | GET / POST | `/v1/alerts/rules` | Bearer | Your alert rules with `limit`, `used` and plan `capabilities`; create `{"rule_type","ticker"|"watchlist_id","threshold"?,"value"?,"delivery_channels"?,"cooldown_seconds"?,"enabled"?}` (201; 403 plan limit/type/channel; 404 watchlist not yours; 409 duplicate; 422 bad input). Rules share the plan's alert limit with ticker alerts. |
 | GET | `/v1/alerts/rules/types` | Bearer | Rule types, thresholds, default cooldowns and whether your plan includes each. |
 | GET / PATCH / DELETE | `/v1/alerts/rules/{id}` | Bearer | One rule; change `threshold`, `value`, `enabled`, `delivery_channels`, `cooldown_seconds`; delete (204, its events stay). |
-| GET | `/v1/me/capabilities` | Bearer | Your plan's watchlist and alert limits, rule types and delivery channels. |
 
 Every route declares a response model, so `/openapi.json` describes each payload
 and clients can be generated from it. Web v2's client is generated from the committed

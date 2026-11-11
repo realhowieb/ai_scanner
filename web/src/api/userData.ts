@@ -97,11 +97,6 @@ export const alertRules = {
     if (typeof body.enabled === "boolean") captureUsage("alert_enabled_changed", { enabled: body.enabled });
     return result;
   },
-  setEnabled: async (id: number, enabled: boolean) => {
-    const result = await unwrap(api.PATCH("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } }, body: { enabled } }));
-    captureUsage("alert_enabled_changed", { enabled });
-    return result;
-  },
   remove: async (id: number) => {
     const result = await unwrap(api.DELETE("/v1/alerts/rules/{rule_id}", { params: { path: { rule_id: id } } }));
     captureUsage("alert_deleted");

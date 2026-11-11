@@ -559,7 +559,7 @@ def _stair(days: int) -> Dict[str, Any]:
 
 # ---- ML v4 readiness -----------------------------------------------------------------------------
 def ml_readiness() -> Dict[str, Any]:
-    """The compact readiness panel from the cached /v1/ml/readiness view."""
+    """The compact readiness panel from the cached api.ml_readiness view."""
     from api import ml_readiness as mlr
 
     view = mlr.readiness()
