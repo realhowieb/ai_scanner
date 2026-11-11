@@ -31,6 +31,7 @@ import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { ShareStockButton } from "./ShareStock";
 import { SmartAlerts } from "./SmartAlerts";
 import { StockFilings, StockNews } from "./StockNews";
+import type { StockExtras } from "./StockNews";
 
 type Stock = Schemas["StockDetail"];
 
@@ -319,8 +320,8 @@ function AINote({ s }: { s: Stock }) {
   );
 }
 
-export function StockView({ s, premium, pro = false, aiNotes = false, onChanged }: {
-  s: Stock; premium: boolean; pro?: boolean; aiNotes?: boolean; onChanged?: () => void;
+export function StockView({ s, premium, pro = false, aiNotes = false, onChanged, extras }: {
+  s: Stock; premium: boolean; pro?: boolean; aiNotes?: boolean; onChanged?: () => void; extras?: StockExtras;
 }) {
   const comps = Object.entries(s.score_components || {}).filter(([, v]) => Number.isFinite(v));
   const compMax = Math.max(1, ...comps.map(([, v]) => Math.abs(v)));
@@ -389,8 +390,8 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged 
             </Card>
           )}
           {aiNotes && s.in_latest_scan && <Card title="AI note" id="ai" source="ai"><AINote s={s} /></Card>}
-          <StockNews ticker={s.ticker} />
-          <StockFilings ticker={s.ticker} />
+          <StockNews ticker={s.ticker} state={extras?.news} />
+          <StockFilings ticker={s.ticker} state={extras?.filings} />
         </div>
 
         <aside className="col-side">

@@ -130,8 +130,7 @@ def main() -> None:
     for n in (1, 4, 8):
         ids = [int(r["id"]) for r in runs[:n] if r.get("id") is not None]
         step(f"run_df for latest {n} runs", lambda ids=ids: [today.run_df(i) for i in ids])
-    ids24 = [int(r["id"]) for r in runs[:scans.SCORE_HISTORY_RUNS] if r.get("id") is not None]
-    step("score history (24 runs)", lambda: [scans._run_ticker_scores(i) for i in ids24])
+    step("score history (batched projections)", scans.warm_score_history)
 
     def outcomes_summary() -> None:
         from api import outcomes
