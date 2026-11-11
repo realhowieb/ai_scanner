@@ -112,8 +112,20 @@ class KeepWarmTest(unittest.TestCase):
             self.assertTrue(market.keep_day_trader_warm_once(self._at(8, 0)))   # pre-market
             self.assertFalse(market.keep_day_trader_warm_once(self._at(22, 0)))  # night
             self.assertFalse(market.keep_day_trader_warm_once(self._at(11, 0, day=24)))  # Saturday
-        self.assertEqual(dtr.call_count, 2)
-        dtr.assert_called_with("movers")
+        # Both warm passes rebuild all four movers lists.
+        self.assertEqual([c.args[0] for c in dtr.call_args_list], list(market.DT_KEEP_WARM_SOURCES) * 2)
+
+    def test_one_failing_list_does_not_stop_the_rest(self):
+        from api import market
+
+        def flaky(source):
+            if source == "movers_sp500":
+                raise RuntimeError("alpaca down")
+            return {}
+
+        with mock.patch.object(market, "day_trader", side_effect=flaky) as dtr:
+            self.assertTrue(market.keep_day_trader_warm_once(self._at(11, 0)))
+        self.assertEqual(dtr.call_count, len(market.DT_KEEP_WARM_SOURCES))
 
     def test_switches_off(self):
         from api import market
@@ -122,6 +134,41 @@ class KeepWarmTest(unittest.TestCase):
             with mock.patch.object(market, "day_trader") as dtr, mock.patch.dict("os.environ", env):
                 self.assertFalse(market.keep_day_trader_warm_once(self._at(11, 0)))
             dtr.assert_not_called()
+
+
+class SharedMoversPassTest(unittest.TestCase):
+    def setUp(self):
+        from api import today
+
+        today.clear_cache()
+        self.addCleanup(today.clear_cache)
+
+    def test_exchange_lists_are_cut_from_one_market_pass(self):
+        from api import market
+        from ui import day_trader as dtm
+
+        scored = [(9.0, "NYSE1"), (8.0, "NAS1"), (7.0, "SPX1"), (6.0, "NYSE2")]
+        with mock.patch("market_data.premarket_session_date", return_value=None), \
+                mock.patch.object(dtm, "_movers_universe", return_value=["NYSE1", "NAS1", "SPX1", "NYSE2"]), \
+                mock.patch.object(dtm, "_movers_scored", return_value=scored) as pass_, \
+                mock.patch.object(dtm, "_other_listed_universe", return_value=["NYSE1", "NYSE2"]), \
+                mock.patch.object(dtm, "_nasdaq_universe", return_value=["NAS1"]), \
+                mock.patch.object(dtm, "_sp500_universe", return_value=["SPX1"]):
+            self.assertEqual(market._dt_symbols("movers", [], []), ["NYSE1", "NAS1", "SPX1", "NYSE2"])
+            self.assertEqual(market._dt_symbols("movers_nyse", [], []), ["NYSE1", "NYSE2"])
+            self.assertEqual(market._dt_symbols("movers_nasdaq", [], []), ["NAS1"])
+            self.assertEqual(market._dt_symbols("movers_sp500", [], []), ["SPX1"])
+        pass_.assert_called_once()  # one whole-market snapshot pass for all four lists
+
+    def test_missing_exchange_file_falls_back_to_whole_market(self):
+        from api import market
+        from ui import day_trader as dtm
+
+        with mock.patch("market_data.premarket_session_date", return_value=None), \
+                mock.patch.object(dtm, "_movers_universe", return_value=["A", "B"]), \
+                mock.patch.object(dtm, "_movers_scored", return_value=[(2.0, "A"), (1.0, "B")]), \
+                mock.patch.object(dtm, "_other_listed_universe", return_value=[]):
+            self.assertEqual(market._dt_symbols("movers_nyse", [], []), ["A", "B"])
 
 
 if __name__ == "__main__":

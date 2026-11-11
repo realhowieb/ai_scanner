@@ -21,6 +21,7 @@
   --info-bg: #10233a; --info-bg-2: #0f1c2b; --info-line: #1f456b; --info-text: #bfe3ff; --info-strong: #2d5a78;
   --danger: #c2414b; --danger-hover: #d4505a; --danger-bg: #2a1517; --danger-line: #5b2a2e; --danger-line-2: #8a3a40;
   --danger-text: #ffb3b3; --danger-text-2: #ffd0d0;
+  --loader-deep: #0f3a55; --loader-deeper: #082234; --loader-face-top: #8ad8ff; --loader-face-bottom: #2a9fe0;
   --select-bg: #22384a; --sma20: #c792ea; --on-danger: #fff;
   /* shape */
   --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 12px; --radius: 12px; --radius-pill: 999px;
@@ -275,7 +276,27 @@ a.tk:hover .tk-name { color: var(--text-2); }
 .sk-row { height: 18px; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--raise), var(--raise-2), var(--raise)); background-size: 200% 100%; animation: sk 1.4s infinite; }
 .sk-row:nth-child(3n) { width: 70%; }
 @keyframes sk { to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .sk-row, .spinner { animation: none !important; } }
+/* HSF loader: 3D wordmark tilting over a rising price line (page-sized loads) */
+.skeleton-brand { padding: 0; }
+.hsf-loader { min-height: 260px; border-radius: var(--radius-xl); background: radial-gradient(120% 90% at 50% 100%, var(--bg-2) 0%, var(--bg) 70%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 16px; text-align: center; }
+.hsf-loader-art { display: grid; gap: 10px; justify-items: center; perspective: 700px; }
+.hsf-mark { position: relative; transform-style: preserve-3d; font-family: var(--font-display); font-weight: 700; font-size: 54px; letter-spacing: -0.02em; line-height: 1; animation: hsf-tilt 3.2s ease-in-out infinite; }
+.hsf-mark > span { position: absolute; left: 50%; top: 50%; white-space: nowrap; }
+.hsf-mark .hsf-mark-sizer { position: static; visibility: hidden; }
+.hsf-mark-layer { transform: translate(-50%, -50%) translateZ(calc(var(--d) * -1.5px)); color: color-mix(in oklab, var(--loader-deep) calc(100% - var(--d) * 6%), var(--loader-deeper)); }
+.hsf-mark-face { transform: translate(-50%, -50%); color: var(--accent); background: linear-gradient(180deg, var(--loader-face-top), var(--accent) 55%, var(--loader-face-bottom)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hsf-spark { width: 180px; height: 34px; overflow: visible; }
+.hsf-spark path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 260; stroke-dashoffset: 260; animation: hsf-draw 3.2s ease-in-out infinite; }
+.hsf-spark circle { fill: var(--accent); opacity: 0; animation: hsf-dot 3.2s ease-in-out infinite; }
+@keyframes hsf-tilt { 0%, 100% { transform: rotateX(18deg) rotateY(-14deg); } 50% { transform: rotateX(6deg) rotateY(14deg); } }
+@keyframes hsf-draw { 0% { stroke-dashoffset: 260; } 55%, 80% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -260; } }
+@keyframes hsf-dot { 0%, 50% { opacity: 0; } 58%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-row, .spinner, .hsf-mark, .hsf-spark path, .hsf-spark circle { animation: none !important; }
+  .hsf-mark { transform: rotateX(10deg) rotateY(-12deg); }
+  .hsf-spark path { stroke-dashoffset: 0; }
+  .hsf-spark circle { opacity: 1; }
+}
 .empty { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
 .error { background: var(--danger-bg); border: 1px solid var(--danger-line); border-radius: var(--radius-xl); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
