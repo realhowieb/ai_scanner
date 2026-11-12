@@ -528,6 +528,28 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .since-scan { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; }
 .since-scan .pill { font-size: 11px; padding: 1px 7px; }
 .sc-facts .since-scan { display: flex; margin-top: 2px; }
+/* Scanner phone cards (2026-11-12): ticker row, badge row, fixed fact grid, PreBreakout + chart row. */
+.scan-card .sc-top { gap: 10px; }
+.scan-card .sc-rank { flex: none; min-width: 24px; }
+.scan-card .sc-top .tk { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.scan-card .sc-top .tk-stack { overflow: hidden; }
+.scan-card .sc-top .tk-name { max-width: 100%; }
+.scan-card .sc-top .btn, .scan-card .sc-top .icon-btn { flex: none; }
+.sc-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sc-tags:empty { display: none; }
+.compare-chip { cursor: pointer; font: inherit; font-size: 12px; min-height: 26px; color: var(--text-2); }
+.compare-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.compare-chip:disabled { opacity: .5; cursor: not-allowed; }
+.sc-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px 12px; margin: 0; }
+.sc-grid > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-grid dt, .sc-label { font-size: 12px; color: var(--muted); }
+.sc-grid dd { margin: 0; font-size: 14px; min-width: 0; }
+.sc-grid .since-scan { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; white-space: normal; }
+.sc-grid .since-scan > span { white-space: nowrap; }
+.sc-grid .sc-sector dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-bottom { display: flex; align-items: center; gap: 12px; }
+.sc-prob { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-bottom .sc-spark { margin-left: auto; flex: none; }
 .row-tools { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .icon-btn { width: 36px; height: 36px; flex: 0 0 auto; border-radius: var(--radius-md); border: 1px solid var(--line); background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .icon-btn:hover { color: var(--text); border-color: var(--line-strong); }
