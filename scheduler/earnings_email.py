@@ -60,8 +60,21 @@ def score_tickers(tickers: List[str], *, premarket: bool = False) -> Dict[str, D
     try:
         from scheduler.earnings_autoscore import fresh_scores, scan_setups
 
-        # This slot's Premium auto-score pass already scored the week's reporters.
-        rows = list((fresh_scores(premarket=premarket) or {}).values()) or scan_setups(tickers, premarket=premarket)
+        # This slot's Premium auto-score pass already scored most of the week's reporters;
+        # it stops at its cap, so score the names it didn't reach here.
+        fresh = fresh_scores(premarket=premarket) or {}
+        missing = [t for t in tickers if _key(t) not in fresh]
+        rows = list(fresh.values())
+        if missing:
+            try:
+                rows += scan_setups(missing, premarket=premarket)
+            except Exception as e:
+                if not fresh:
+                    raise
+                print(f"[earnings_email] top-up scoring failed: {type(e).__name__}")
+        if fresh and missing:
+            print(f"[earnings_email] auto-score pass had {len(tickers) - len(missing)} of "
+                  f"{len(tickers)}; scored {len(missing)} more")
         out: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             k = _key(row.get("ticker"))
