@@ -1,6 +1,8 @@
 """P1-44: schema setup runs once per process; warm connections have a connect timeout."""
 import ast
+import concurrent.futures
 import sys
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -37,6 +39,35 @@ class SchemaOnceTests(unittest.TestCase):
         self.ensure(_PgConn(), 2)
         self.ensure(_PgConn(dbname="branch"), 3)  # another database runs it again
         self.assertEqual(self.calls, [1, 3])
+
+    def test_concurrent_first_requests_share_one_initialization(self):
+        entered, release, second_started = (threading.Event() for _ in range(3))
+        calls = []
+
+        @engine.schema_once
+        def initialize(conn):
+            calls.append(1)
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError("test initializer timed out")
+
+        def second_request():
+            second_started.set()
+            initialize(_PgConn())
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(initialize, _PgConn())
+            try:
+                self.assertTrue(entered.wait(2))
+                second = pool.submit(second_request)
+                self.assertTrue(second_started.wait(2))
+                with self.assertRaises(concurrent.futures.TimeoutError):
+                    second.result(timeout=0.1)
+            finally:
+                release.set()
+            first.result(timeout=2)
+            second.result(timeout=2)
+        self.assertEqual(calls, [1])
 
     def test_connections_without_info_always_run(self):
         for conn in (object(), mock.MagicMock()):  # SQLite / test fakes

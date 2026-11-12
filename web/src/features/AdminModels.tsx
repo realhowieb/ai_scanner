@@ -15,6 +15,7 @@ import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { etTime } from "@/lib/format";
 import { MlNextSteps } from "@/features/MlNextSteps";
+import { AiConfidenceCard } from "@/features/AdminAiConfidence";
 
 type Status = "candidate" | "validated" | "shadow" | "champion" | "retired";
 type Target = Exclude<Status, "candidate">;
@@ -377,6 +378,7 @@ export function ModelsTab() {
   return (
     <div className="stack">
       <p className="notice">PreBreakout and AI Confidence are separate production scorers. ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
+      <AiConfidenceCard />
       <ModelSummary />
       <ProductionCaptureHealth />
       <MlNextSteps />

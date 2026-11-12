@@ -3391,6 +3391,20 @@
     "title": "AdminUsersDay",
     "type": "object"
    },
+   "AiConfidenceExplain": {
+    "properties": {
+     "ticker": {
+      "pattern": "^[A-Za-z0-9.\\-]{1,12}$",
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker"
+    ],
+    "title": "AiConfidenceExplain",
+    "type": "object"
+   },
    "Alert": {
     "properties": {
      "created_at": {
@@ -22716,6 +22730,103 @@
     "tags": [
      "admin (admins only)"
     ],
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/ai-confidence": {
+   "get": {
+    "operationId": "ml_ai_confidence_v1_admin_ml_ai_confidence_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Ai Confidence V1 Admin Ml Ai Confidence Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] AI Confidence: model card, latest scan scores and calibration",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/ai-confidence/explain": {
+   "post": {
+    "operationId": "ml_ai_confidence_explain_v1_admin_ml_ai_confidence_explain_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AiConfidenceExplain"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Ai Confidence Explain V1 Admin Ml Ai Confidence Explain Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "404": {
+      "description": "No recent AI Confidence saved for this ticker"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] Why one stock got its AI Confidence (Claude, on demand)",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
     "x-internal": true
    }
   },
