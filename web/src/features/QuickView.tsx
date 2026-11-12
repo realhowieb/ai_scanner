@@ -15,6 +15,7 @@ import { useApi } from "@/hooks/useApi";
 import { useCompanyName } from "@/lib/companyNames";
 import { pct, price, setupLabel } from "@/lib/format";
 
+import { PickupLine } from "./Pickup";
 import { PriceChart } from "./PriceChart";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { RankMove, sinceScan } from "./SetupTable";
@@ -41,6 +42,7 @@ function Body({ row, s, pro, compared }: { row: Row; s: Stock; pro: boolean; com
       <RankMove row={row} compared={compared} />
       {row.sector && <span className="cap">{row.sector}</span>}
     </div>
+    <PickupLine pickup={row.pickup ?? s.pickup} last={row.last} />
     {s.bars.length >= 2
       ? <PriceChart bars={s.bars} events={signalEvents(s)} earningsDate={earningsDate(s.earnings_days)} volumeFeed={s.volume_feed} />
       : <Empty title="No price history cached for this ticker." />}

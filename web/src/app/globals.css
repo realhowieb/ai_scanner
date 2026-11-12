@@ -547,6 +547,10 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .sc-grid .since-scan { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; white-space: normal; }
 .sc-grid .since-scan > span { white-space: nowrap; }
 .sc-grid .sc-sector dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picked-cell { display: inline-flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+.picked-cell .cap { font-size: 11px; }
+.sc-grid .picked-cell { white-space: normal; }
+.pickup-line strong { color: var(--text); font-weight: 600; }
 .sc-bottom { display: flex; align-items: center; gap: 12px; }
 .sc-prob { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sc-bottom .sc-spark { margin-left: auto; flex: none; }

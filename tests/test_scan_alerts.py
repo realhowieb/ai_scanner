@@ -68,6 +68,12 @@ class ScanFilterTests(unittest.TestCase):
         many = [f"T{i}" for i in range(11)]
         self.assertTrue(self.ar.scan_message({"value": None}, many).endswith("and 3 more"))
 
+    def test_message_names_the_scan_time_and_prices(self):
+        rule = {"value": '{"name":"Gappers"}'}
+        at = dt.datetime(2026, 11, 12, 14, 45, tzinfo=dt.timezone.utc)  # 9:45 AM EST
+        self.assertEqual(self.ar.scan_message(rule, ["AAA", "BBB"], prices={"AAA": 12.3, "BBB": None}, scan_at=at),
+                         "2 new stocks match Gappers in the 9:45 AM ET scan: AAA at $12.30, BBB")
+
 
 @unittest.skipUnless(importlib.util.find_spec("fastapi"), "needs fastapi (entitlements_for lives in api.main)")
 class ScanAlertEvaluatorTests(unittest.TestCase):
@@ -102,7 +108,8 @@ class ScanAlertEvaluatorTests(unittest.TestCase):
         self.assertEqual(r["triggered"], 1)
         e = self.db.events()[-1]
         self.assertEqual((e["ticker"], e["trigger_value"]), ("CCC", 2.0))  # best rank first; DDD isn't a breakout
-        self.assertEqual(e["message"], "2 new stocks match Strong breakouts: CCC, EEE")
+        self.assertEqual(e["message"], "2 new stocks match Strong breakouts in the 10:55 AM ET scan: "
+                                       "CCC at $10.00, EEE at $10.00")
         self.assertEqual(len(self.emails), 1)
         again = self.ar.evaluate_once(NOW + dt.timedelta(minutes=61), observation=second)
         self.assertEqual((again["triggered"], again["evaluated"]), (0, 0))

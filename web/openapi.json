@@ -13659,6 +13659,50 @@
     "title": "PerfPick",
     "type": "object"
    },
+   "Pickup": {
+    "properties": {
+     "at": {
+      "description": "ISO time of the scan that picked the stock up: the first scan of its current unbroken run of full-market scans (as exact as the scan schedule, about hourly in market hours)",
+      "title": "At",
+      "type": "string"
+     },
+     "open_ended": {
+      "default": false,
+      "description": "True when the stock is in every scan HSF keeps for this (about two sessions), so it was picked up at or before `at`",
+      "title": "Open Ended",
+      "type": "boolean"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Last price in that scan",
+      "title": "Price"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "HSF rank in that scan (1 = best)",
+      "title": "Rank"
+     }
+    },
+    "required": [
+     "at"
+    ],
+    "title": "Pickup",
+    "type": "object"
+   },
    "PlanRow": {
     "properties": {
      "basic": {
@@ -16695,6 +16739,17 @@
       ],
       "title": "N Signals"
      },
+     "pickup": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Pickup"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When HSF picked this stock up; null when unknown"
+     },
      "previous_rank": {
       "anyOf": [
        {
@@ -18239,6 +18294,17 @@
       ],
       "title": "Outcome Cohort"
      },
+     "pickup": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Pickup"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When HSF picked this stock up; null when it isn't in the latest scan or that's unknown"
+     },
      "price": {
       "anyOf": [
        {
@@ -18541,6 +18607,7 @@
         "sector",
         "spark",
         "last",
+        "picked",
         "change",
         "gap",
         "rvol",
@@ -18548,7 +18615,7 @@
        ],
        "type": "string"
       },
-      "maxItems": 8,
+      "maxItems": 9,
       "title": "Columns",
       "type": "array"
      },
@@ -18564,6 +18631,7 @@
         "sector",
         "spark",
         "last",
+        "picked",
         "change",
         "gap",
         "rvol",
@@ -18571,7 +18639,7 @@
        ],
        "type": "string"
       },
-      "maxItems": 8,
+      "maxItems": 9,
       "title": "Hidden",
       "type": "array"
      }
@@ -20782,6 +20850,17 @@
        }
       ],
       "title": "N Signals"
+     },
+     "pickup": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Pickup"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When HSF picked this stock up; null when unknown"
      },
      "previous_rank": {
       "anyOf": [
