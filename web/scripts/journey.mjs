@@ -118,6 +118,24 @@ await step("Scanner quick view opens a setup without leaving the page", async ()
   check("Scanner quick view opens a setup without leaving the page", /\/scanner/.test(page.url()), ticker);
 });
 
+await step("Scanner phone cards keep ticker, badges and actions inside the card; Compare toggles", async () => {
+  // Same session at iPhone width: the table turns into cards (#ticker row, badge row, fact grid).
+  await page.setViewportSize({ width: 390, height: 844 });
+  const card = page.locator(".scan-card").first();
+  await card.waitFor();
+  const over = await page.$$eval(".scan-card", (cs) => cs.filter((c) => {
+    const r = c.getBoundingClientRect();
+    return [...c.querySelectorAll("*")].some((e) => { const q = e.getBoundingClientRect(); return q.width > 0 && q.right > r.right + 1; });
+  }).length);
+  const chip = card.getByRole("button", { name: /^Compare / });
+  await chip.click();
+  const pressed = await chip.getAttribute("aria-pressed");
+  await chip.click();
+  await shot(page, "journey-1b-scanner-phone");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  check("Scanner phone cards keep ticker, badges and actions inside the card; Compare toggles", over === 0 && pressed === "true", `overflowing cards ${over}, compare ${pressed}`);
+});
+
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
   await page.locator(`table a.tk[href="/stocks/${encodeURIComponent(ticker)}"]`).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));
