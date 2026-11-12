@@ -186,6 +186,14 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     run.check(A, "/me plan", me.get("plan") == tier and me.get("alert_limit") == alert_limit,
               f"plan={me.get('plan')} alert_limit={me.get('alert_limit')}")
 
+    confidence = run.req("GET", "/v1/admin/ml/ai-confidence", headers=h)
+    run.check(A, "AI Confidence admin access", confidence.status_code == (200 if tier == "admin" else 403),
+              f"HTTP {confidence.status_code}")
+    if tier == "admin" and confidence.status_code == 200:
+        evidence = confidence.json()
+        run.check(A, "AI Confidence evidence shape", isinstance(evidence.get("latest", {}).get("rows"), list)
+                  and isinstance(evidence.get("live", {}).get("buckets"), list), "latest rows and live calibration")
+
     r = run.req("GET", "/v1/scans/latest?limit=200", headers=h)
     scan = _strict_json(r.text)
     setups = scan.get("setups", [])
