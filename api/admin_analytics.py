@@ -393,9 +393,13 @@ def scanner_research(days: int) -> Dict[str, Any]:
     """The compact scheduled-scan research set for a period. One set is kept (10 minutes) and
     concurrent callers share one load, so the Research tab reads the database once."""
     def load() -> Dict[str, Any]:
+        from api.memory import heavy_load
+
         since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
-        return compact_research(_stream(_SCANNER_SQL, (since, ar.SCANNER_CONTEXT_PREFIX + "%",
-                                                       MAX_SCANNER_OBSERVATIONS)), limit=MAX_SCANNER_OBSERVATIONS)
+        with heavy_load("admin_research"):
+            return compact_research(_stream(_SCANNER_SQL, (since, ar.SCANNER_CONTEXT_PREFIX + "%",
+                                                           MAX_SCANNER_OBSERVATIONS)),
+                                    limit=MAX_SCANNER_OBSERVATIONS)
     return _datasets.get(("scanner", days), load, TTL_S)
 
 
@@ -533,9 +537,11 @@ def stair_stepper(days: int = 30) -> Dict[str, Any]:
 
 def _stair(days: int) -> Dict[str, Any]:
     from analytics.stair_step_research import OUTCOME_HORIZONS, build_research_report
+    from api.memory import heavy_load
 
-    observations = [o for o in stair_observations(days) if ar.is_stair_stepper(o)]
-    report = build_research_report(observations)
+    with heavy_load("admin_stair"):
+        observations = [o for o in stair_observations(days) if ar.is_stair_stepper(o)]
+        report = build_research_report(observations)
     stamps = [t for o in observations if (t := ar.parse_timestamp(o.get("timestamp"))) is not None]
     windows = []
     for item in report.get("window_comparison") or []:
