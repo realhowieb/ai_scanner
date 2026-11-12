@@ -1,0 +1,65 @@
+name: ML Dataset Freeze
+
+# Manual only. Freezes ONE new research dataset version for ML v4 training,
+# built through the same as-of path the ML v4 trainer uses to rebuild it.
+#   mode=preview (default): read-only. Twin builds, readiness at the freeze
+#     instant, cohort summary and fingerprint. Writes nothing.
+#   mode=freeze: same checks, then one INSERT into research_dataset_versions
+#     (insert-once, never overwritten), then a trainer reload must reproduce
+#     its fingerprint. Requires confirm=FREEZE. Never trains a model.
+# The cohort starts 2026-09-14 so the 2026-09-12/13 bootstrap burst stays out.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "preview (read-only) or freeze (writes one registry row)"
+        required: true
+        default: "preview"
+        type: choice
+        options:
+          - preview
+          - freeze
+      confirm:
+        description: "Type FREEZE to allow mode=freeze"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-v4
+  cancel-in-progress: false
+
+jobs:
+  freeze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Build, check and (optionally) freeze
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$MODE" = "freeze" ]; then
+            if [ "$CONFIRM" != "FREEZE" ]; then
+              echo 'mode=freeze needs confirm=FREEZE; nothing written.'
+              exit 1
+            fi
+            python scripts/ml_freeze_dataset.py --freeze FREEZE
+          else
+            python scripts/ml_freeze_dataset.py
+          fi
