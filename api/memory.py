@@ -14,6 +14,7 @@ import ctypes
 import ctypes.util
 import os
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from typing import Optional
@@ -165,6 +166,40 @@ def observe_memory(operation: str):
             logging.getLogger("hsf.memory").info(json.dumps({
                 "event": "memory_growth", "operation": operation,
                 "rss_before_mb": before, "rss_after_mb": after, "rss_delta_mb": round(after - before, 1)}))
+
+
+# ---- heavy loads one at a time -----------------------------------------------------------------------
+# Opening Admin starts several big research reads at once (signal research, evidence, ML
+# readiness). Together they pushed the process past 510 MB and, by holding the interpreter
+# on three threads, slowed every other request for about a minute. heavy_load() makes such
+# loads take turns, so the peak is the largest single load instead of their sum, and hands
+# the freed pages back to the OS before the next one starts.
+_heavy_lock = threading.RLock()
+
+
+def release_memory() -> bool:
+    """Collect garbage and return free allocator pages to the OS. True when trimmed."""
+    import gc
+
+    gc.collect()
+    lib = _glibc()
+    return bool(lib.malloc_trim(0)) if lib is not None else False
+
+
+@contextmanager
+def heavy_load(operation: str):
+    """Run one memory-heavy load at a time (process-wide; re-entrant on the same thread)."""
+    if os.getenv("HSF_HEAVY_LOAD_SERIAL", "1").strip() == "0":
+        yield
+        return
+    with _heavy_lock:
+        try:
+            yield
+        finally:
+            try:
+                release_memory()
+            except Exception:  # noqa: BLE001 - tidying must never fail the load
+                pass
 
 
 def maintain_memory() -> dict:

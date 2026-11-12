@@ -105,6 +105,12 @@ function ActionsCell({ row }: { row: { original: Row } }) {
   </span>;
 }
 
+/** Phone cards: a labelled Compare toggle instead of a bare checkbox (iPhone Safari draws an unticked box as a black square). */
+function CompareChip({ ticker, on, full, onToggle }: { ticker: string; on: boolean; full: boolean; onToggle: (ticker: string) => void }) {
+  return <button type="button" className={on ? "pill compare-chip on" : "pill compare-chip"} aria-pressed={on} aria-label={`Compare ${ticker}`}
+    disabled={full && !on} title={full && !on ? "Up to 4 stocks" : undefined} onClick={() => onToggle(ticker)}>{on ? "✓ Compare" : "Compare"}</button>;
+}
+
 function RankHead() { const c = useCtx(); return c.ranks ? <span title="Rank in the latest scan">Rank</span> : c.numbered ? "#" : <span className="sr-only">Row</span>; }
 function RankCell({ row }: { row: { index: number; original: Row } }) {
   const c = useCtx();
@@ -203,7 +209,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
         {selected.length >= 2 && <Link className="btn btn-sm" href={`/stocks/compare?symbols=${encodeURIComponent(selected.join(","))}`}>Compare selected</Link>}
         {selected.length > 0 && <button type="button" className="btn btn-sm" onClick={() => setSelected([])}>Clear selection</button>}
       </div>}
-      <p className="table-scroll-hint cap">Scroll the table for more columns · tick boxes select 2–4 stocks to compare.</p>
+      <p className="table-scroll-hint cap">Scroll the table for more columns · tick boxes or Compare select 2–4 stocks to compare.</p>
       <TableCtx.Provider value={ctx}>
       <div className="table-wrap only-wide" tabIndex={0} role="region" aria-label="Ranked setups table; scroll for more columns">
         <table className="table">
@@ -243,31 +249,36 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
       </TableCtx.Provider>
       <ol className="cards only-narrow" start={offset + 1}>
         {rows.map((r, i) => (
-          <li key={`${r.ticker}-${i}`} className="result-card setup-card">
+          <li key={`${r.ticker}-${i}`} className="result-card setup-card scan-card">
+            {/* Row 1: rank, ticker + name (gets the room), actions. Badges get their own row so they never crowd the ticker. */}
             <div className="sc-top">
-              {ranks ? ranks[r.ticker] != null && <span className="mono cap" title="Rank in the latest scan">#{ranks[r.ticker]}</span>
-                : numbered && <span className="mono cap">#{offset + i + 1}</span>}
-              {sparks && choose(r.ticker)}
+              {ranks ? ranks[r.ticker] != null && <span className="mono cap sc-rank" title="Rank in the latest scan">#{ranks[r.ticker]}</span>
+                : numbered && <span className="mono cap sc-rank">#{offset + i + 1}</span>}
               <TickerLink ticker={r.ticker} named scanId={scanId} />
+              {onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${r.ticker}`} onClick={() => onView(r)}>View</button>}
+              <SaveToWatchlistButton ticker={r.ticker} compact />
+            </div>
+            <div className="sc-tags">
               {visible("setup") && !isUnranked(ranks, r.ticker, auto) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
               {!ranks && <RankMove row={r} compared={compared} />}
               {r.fading && <Pill tone="warn">Fading</Pill>}
               <NewsMark ticker={r.ticker} flag={news[r.ticker]} />
-              <span className="grow" />
-              {onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${r.ticker}`} onClick={() => onView(r)}>View</button>}
-              <SaveToWatchlistButton ticker={r.ticker} compact />
+              {sparks && <CompareChip ticker={r.ticker} on={selected.includes(r.ticker)} full={selected.length >= 4} onToggle={toggle} />}
             </div>
-            <dl className="sc-facts">
-              {showSector && visible("sector") && r.sector && <div><dt>Sector</dt><dd>{r.sector}</dd></div>}
-              {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
+            {/* Fixed grid: every card puts each fact in the same place. */}
+            <dl className="sc-grid">
               <div><dt>HSF</dt><dd>{isUnranked(ranks, r.ticker, auto) ? <span className="cap" title={NOT_RANKED}>Not ranked</span> : <>{<ScoreBadge score={r.score} />}{auto?.has(r.ticker) && <> <AutoTag /></>}</>}</dd></div>
               <div hidden={!visible("last")}><dt>Last</dt><dd className="mono">{price(r.last)}<SinceScan row={r} /></dd></div>
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${upDown(r.chg_pct)}`}>{pct(r.chg_pct)}</dd></div>
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
-              {premium && <div hidden={!visible("prob")}><dt>PreBreakout</dt><dd><PreBreakoutMeter prob={r.prob} rank={r.prob_rank} /></dd></div>}
-              {sparks && visible("spark") && <div className="sc-spark"><dt className="sr-only">20 sessions</dt><dd><DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} /></dd></div>}
+              {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
+              {showSector && visible("sector") && <div className="sc-sector"><dt>Sector</dt><dd>{r.sector ?? "—"}</dd></div>}
             </dl>
+            {((premium && visible("prob")) || (sparks && visible("spark"))) && <div className="sc-bottom">
+              {premium && visible("prob") && <div className="sc-prob"><span className="sc-label">PreBreakout</span><PreBreakoutMeter prob={r.prob} rank={r.prob_rank} /></div>}
+              {sparks && visible("spark") && <div className="sc-spark"><span className="sr-only">20 sessions</span><DailySpark points={series[r.ticker]} ticker={r.ticker} width={72} height={22} /></div>}
+            </div>}
           </li>
         ))}
       </ol>

@@ -39,7 +39,15 @@ def _bounds(now: dt.datetime) -> tuple:
 
 
 def build(now: dt.datetime | None = None) -> Dict[str, Any]:
-    """The full readiness report (uncached)."""
+    """The full readiness report (uncached). Takes its turn with the other heavy Admin
+    loads (api.memory.heavy_load) so they never hold their rows in memory together."""
+    from api.memory import heavy_load
+
+    with heavy_load("ml_readiness"):
+        return _build(now)
+
+
+def _build(now: dt.datetime | None = None) -> Dict[str, Any]:
     from db.research_datasets import ResearchDataUnavailable, fetch_readiness_rows, fetch_scan_index
 
     now = now or dt.datetime.now(dt.timezone.utc)
