@@ -1,0 +1,188 @@
+"""Read-only audit: how good are the PreBreakout % scores users actually saw?
+
+Uses the scores saved in the canonical daily snapshots (what the PreBreakout
+tab ranked), on rows old enough for the label to have resolved. Reports hit
+rate by per-scan model rank (top 10 = the tab), calibration of the displayed %,
+AUC per served model version and per week, and simple heuristic baselines.
+
+Label = the production PreBreakout target (FutureQualitySetupHit): within 1-3
+trading days the same symbol becomes a high-quality setup (breakout or
+BreakoutScore >= 8) that then hits +4% before -2% within 5 trading days.
+Computed for every row (not just training candidates) so rows the tab shows
+that the model never trained on are measured too. Nothing is written.
+Run via the Diagnostics workflow; the report prints at the end.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+import ml_prebreakout as mp  # noqa: E402
+
+DAYS_BACK = int(os.environ.get("AUDIT_DAYS_BACK", "75"))
+MATURITY_DAYS = 10
+
+
+def _auc(y, s):
+    try:
+        from sklearn.metrics import roc_auc_score
+    except Exception:
+        return None
+    y = pd.Series(y).astype(float)
+    s = pd.Series(s).astype(float)
+    ok = y.notna() & s.notna()
+    if ok.sum() < 50 or y[ok].nunique() < 2:
+        return None
+    return round(float(roc_auc_score(y[ok], s[ok])), 4)
+
+
+def _model_version(cell):
+    try:
+        rec = json.loads(cell) if isinstance(cell, str) else (cell or {})
+        pb = rec.get("prebreakout") or {}
+        art = pb.get("loaded_artifact") or {}
+        return str(art.get("version") or art.get("model_version") or pb.get("trained_at") or "unknown")
+    except Exception:
+        return "unknown"
+
+
+def _future_setup_label(labeled: pd.DataFrame) -> pd.Series:
+    """Production target logic, for every row (not only candidates)."""
+    setup = mp._high_quality_setup_mask(labeled) & (labeled[mp.TARGET_COLUMN].astype(int) == 1)
+    ts = pd.to_datetime(labeled["Timestamp"], errors="coerce", utc=True)
+    out = pd.Series(0, index=labeled.index)
+    for _, idx in labeled.groupby(labeled["Symbol"], sort=False).groups.items():
+        idx = list(idx)
+        setups = [i for i in idx if bool(setup.loc[i])]
+        if not setups:
+            continue
+        for i in idx:
+            start = ts.loc[i]
+            if pd.isna(start):
+                continue
+            for j in setups:
+                f = ts.loc[j]
+                if pd.isna(f) or f <= start:
+                    continue
+                lead = int(np.busday_count(start.date(), f.date()))
+                if lead > mp.PREBREAKOUT_LEAD_DAYS:
+                    break
+                if lead >= 1:
+                    out.loc[i] = 1
+                    break
+    return out
+
+
+def _bucket_table(frame, key, label="y"):
+    rows = []
+    for name, g in frame.groupby(key, observed=True, sort=True):
+        rows.append({
+            "bucket": str(name), "n": int(len(g)),
+            "hit_pct": round(float(g[label].mean()) * 100, 1),
+            "own_4up_first_pct": round(float(g["own_hit"].mean()) * 100, 1),
+            "avg_5d_ret_pct": round(float(g["ret5"].mean()) * 100, 2),
+            "candidate_share_pct": round(float(g["cand"].mean()) * 100, 1),
+            "avg_shown_pct": round(float(g["shown"].mean()), 1) if g["shown"].notna().any() else None,
+        })
+    return rows
+
+
+def main() -> None:
+    df = mp.load_run_history(days_back=DAYS_BACK, canonical_only=True)
+    if df.empty:
+        print("no snapshot history")
+        return
+    print(f"[audit] snapshot rows loaded: {len(df)}")
+    labeled = mp.add_forward_return_labels(df, lookback_days=DAYS_BACK)
+    labeled = mp.sort_symbol_history(labeled).reset_index(drop=True)
+    labeled["y"] = _future_setup_label(labeled)
+    ts = pd.to_datetime(labeled["Timestamp"], utc=True, errors="coerce")
+    labeled = labeled.loc[ts <= mp._utc_now() - timedelta(days=MATURITY_DAYS)].copy()
+    labeled["_ts"] = pd.to_datetime(labeled["Timestamp"], utc=True, errors="coerce")
+    labeled["raw"] = pd.to_numeric(labeled.get("PreBreakoutProbRaw"), errors="coerce")
+    labeled["shown"] = pd.to_numeric(labeled.get("PreBreakoutProb%"), errors="coerce")
+    labeled["cand"] = mp.prebreakout_candidate_mask(labeled).astype(int)
+    labeled["own_hit"] = pd.to_numeric(labeled[mp.TARGET_COLUMN], errors="coerce")
+    labeled["ret5"] = pd.to_numeric(labeled[mp.RETURN_COLUMN], errors="coerce")
+    labeled["version"] = labeled["ModelProvenance"].map(_model_version) if "ModelProvenance" in labeled else "unknown"
+    scored = labeled.loc[labeled["raw"].notna()].copy()
+    scored["run_key"] = scored["run_time"].astype(str)
+    scored["rank"] = scored.groupby("run_key")["raw"].rank(ascending=False, method="first")
+    scored["scan_size"] = scored.groupby("run_key")["raw"].transform("size")
+    scored["rank_bucket"] = pd.cut(scored["rank"], [0, 10, 25, 50, 100, 1e9],
+                                   labels=["01-10 (tab)", "11-25", "26-50", "51-100", "101+"])
+    cand = scored.loc[scored["cand"] == 1].copy()
+    cand["crank"] = cand.groupby("run_key")["raw"].rank(ascending=False, method="first")
+    cand["crank_bucket"] = pd.cut(cand["crank"], [0, 10, 25, 50, 100, 1e9],
+                                  labels=["01-10", "11-25", "26-50", "51-100", "101+"])
+
+    report = {
+        "window": {"days_back": DAYS_BACK, "maturity_days": MATURITY_DAYS,
+                   "first": str(scored["_ts"].min()), "last": str(scored["_ts"].max()),
+                   "snapshots": int(scored["run_key"].nunique()),
+                   "median_rows_per_snapshot": float(scored.groupby("run_key").size().median())},
+        "rows_labeled": int(len(labeled)), "rows_scored": int(len(scored)),
+        "score_coverage_pct": round(float(labeled["raw"].notna().mean()) * 100, 1),
+        "base_rate_all_pct": round(float(scored["y"].mean()) * 100, 2),
+        "base_rate_candidates_pct": round(float(cand["y"].mean()) * 100, 2) if len(cand) else None,
+        "candidate_share_pct": round(float(scored["cand"].mean()) * 100, 1),
+        "auc_all_rows": _auc(scored["y"], scored["raw"]),
+        "auc_candidates": _auc(cand["y"], cand["raw"]),
+        "auc_own_4up_first_all_rows": _auc(scored["own_hit"], scored["raw"]),
+        "by_version": [], "by_week": [],
+        "rank_all_rows": _bucket_table(scored, "rank_bucket"),
+        "rank_candidates_only": _bucket_table(cand, "crank_bucket") if len(cand) else [],
+    }
+    for v, g in scored.groupby("version"):
+        c = g.loc[g["cand"] == 1]
+        report["by_version"].append({"version": v, "n": int(len(g)), "first": str(g["_ts"].min())[:10],
+                                     "last": str(g["_ts"].max())[:10], "auc_all": _auc(g["y"], g["raw"]),
+                                     "auc_candidates": _auc(c["y"], c["raw"]),
+                                     "top10_hit_pct": round(float(g.loc[g["rank"] <= 10, "y"].mean()) * 100, 1)
+                                     if (g["rank"] <= 10).any() else None,
+                                     "base_pct": round(float(g["y"].mean()) * 100, 1)})
+    scored["week"] = scored["_ts"].dt.tz_convert(None).dt.to_period("W").astype(str)
+    for w, g in scored.groupby("week"):
+        top = g.loc[g["rank"] <= 10]
+        report["by_week"].append({"week": w, "n": int(len(g)), "base_pct": round(float(g["y"].mean()) * 100, 1),
+                                  "top10_n": int(len(top)),
+                                  "top10_hit_pct": round(float(top["y"].mean()) * 100, 1) if len(top) else None,
+                                  "auc": _auc(g["y"], g["raw"])})
+    # Calibration of the displayed % (candidates = the population it was calibrated on).
+    for name, frame in (("calibration_candidates", cand), ("calibration_all_rows", scored)):
+        f = frame.loc[frame["shown"].notna()].copy()
+        f["shown_bucket"] = pd.cut(f["shown"], [-0.1, 14, 18, 22, 26, 30, 101],
+                                   labels=["<=14", "14-18", "18-22", "22-26", "26-30", "30+"])
+        report[name] = _bucket_table(f, "shown_bucket")
+        if len(f):
+            p = f["shown"] / 100.0
+            report[name + "_brier"] = round(float(((p - f["y"]) ** 2).mean()), 4)
+            report[name + "_brier_base_rate"] = round(float(((f["y"].mean() - f["y"]) ** 2).mean()), 4)
+    # Simple heuristic baselines on the same rows (higher = more likely).
+    base = {}
+    for col, sign in (("BreakoutScore", 1), ("BreakoutPos20D", 1), ("VolRel20", 1), ("Trend10D%", 1),
+                      ("Trend20D%", 1), ("HSFScore", 1), ("AIConfidence", 1), ("AI Confidence", 1)):
+        if col in scored.columns:
+            s = pd.to_numeric(scored[col], errors="coerce") * sign
+            if s.notna().mean() > 0.5:
+                base[col] = {"auc_all": _auc(scored["y"], s), "auc_candidates": _auc(cand["y"], pd.to_numeric(cand[col], errors="coerce") * sign) if len(cand) else None,
+                             "coverage_pct": round(float(s.notna().mean()) * 100, 1)}
+    report["heuristic_baselines"] = base
+    report["numeric_columns_seen"] = sorted(c for c in scored.columns if pd.api.types.is_numeric_dtype(scored[c]))[:80]
+
+    print("=== PREBREAKOUT LIVE AUDIT ===")
+    print(json.dumps(report, indent=1, default=str))
+
+
+if __name__ == "__main__":
+    main()
