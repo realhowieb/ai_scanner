@@ -63,6 +63,17 @@ Shadow job freshness (2 trading days), overdue labels (10 trading days), probabi
 - No live trading or order execution.
 - No performance claims without a real evaluation run on a finalized dataset.
 
+## Freezing a dataset version (2026-11-12)
+
+Use **ML Dataset Freeze** (manual). `mode=preview` is read-only: twin builds,
+readiness at the freeze instant, cohort summary and fingerprint. `mode=freeze`
+with `confirm=FREEZE` repeats the checks, re-reads right before the INSERT,
+writes one `research_dataset_versions` row and reloads it through the trainer
+to prove the fingerprint matches. The cohort starts 2026-09-14 (bootstrap
+burst excluded). Freeze only when readiness is READY: the trainer's preflight
+re-checks readiness at the version's `created_at`. Never re-score outcomes of
+a frozen member afterwards; that is what broke `hsf-ml-2026-10-08-v1`.
+
 ## Preparation safeguards (2026-11-04)
 
 Start with **ML v4 Train & Evaluate → mode=preflight**. It is now the default.
