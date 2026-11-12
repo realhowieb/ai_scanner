@@ -127,7 +127,7 @@ describe("Scanner table (TanStack)", () => {
     fireEvent.click(screen.getByText("Table display"));
     fireEvent.click(screen.getByRole("button", { name: "Move Last price earlier" }));
     fireEvent.click(screen.getByText("Save display"));
-    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "sector", "last", "rvol", "change"]));
+    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "sector", "last", "rvol", "picked", "change"]));
     expect(patches[0]?.table?.hidden).toEqual(["spark", "gap", "prob"]);
     await waitFor(() => expect(headers().slice(4, 7)).toEqual(["Last", "RVOL", "Chg %"]));
   });
@@ -141,13 +141,20 @@ describe("Scanner table (TanStack)", () => {
   });
 
   it("orders movable columns from the saved list", () => {
-    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["sector", "gap", "spark", "last", "change", "rvol", "prob"]);
-    expect(columnOrder(["setup", "gap", "sector"])).toEqual(["gap", "sector", "spark", "last", "change", "rvol", "prob"]);
+    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["sector", "gap", "spark", "last", "picked", "change", "rvol", "prob"]);
+    expect(columnOrder(["setup", "gap", "sector"])).toEqual(["gap", "sector", "spark", "last", "picked", "change", "rvol", "prob"]);
   });
 
   it("shows Sector for displays saved before it existed, unless turned off", () => {
-    expect(shownColumns({ columns: ["setup", "last"] })).toEqual(["sector", "setup", "last"]);
-    expect(shownColumns({ columns: ["setup", "last"], hidden: ["sector"] })).toEqual(["setup", "last"]);
+    expect(shownColumns({ columns: ["setup", "last"] })).toEqual(["sector", "setup", "last", "picked"]);
+    expect(shownColumns({ columns: ["setup", "last"], hidden: ["sector", "picked"] })).toEqual(["setup", "last"]);
     expect(shownColumns(null)).toContain("sector");
+    expect(shownColumns(null)).toContain("picked");
+  });
+
+  it("shows Picked up only when the rows carry a pickup", async () => {
+    const picked = rows.map((r, i) => i === 0 ? { ...r, pickup: { at: "2026-11-12T14:35:00+00:00", price: 9.5, rank: 4, open_ended: false } } : r);
+    render(<SessionProvider initialMe={me("pro")}><SetupTable rows={picked} premium={false} sparks /></SessionProvider>);
+    await waitFor(() => expect(headers().some((h) => h?.startsWith("Picked up"))).toBe(true));
   });
 });

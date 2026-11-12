@@ -288,13 +288,26 @@ def check_scan(matches: Sequence[str], state: Optional[Dict[str, Any]]
     return bool(fresh), fresh, new_state
 
 
-def scan_message(rule: Dict[str, Any], fresh: Sequence[str]) -> str:
+def scan_message(rule: Dict[str, Any], fresh: Sequence[str], *, prices: Optional[Dict[str, Any]] = None,
+                 scan_at: Any = None) -> str:
+    """'2 new stocks match Gappers in the 9:35 AM ET scan: AAA at $12.30, BBB at $4.10'. Prices and
+    the scan time are left out when unknown, so customers see when (and where) HSF picked each up."""
+    from api.scans import et_scan_label
+    from api.today import _num
+
     f = parse_scan_filters(rule.get("value"))
     name = f.get("name") or "your scan alert"
-    shown = ", ".join(fresh[:SCAN_MATCH_NAMES_IN_MESSAGE])
+
+    def name_of(t: str) -> str:
+        p = _num((prices or {}).get(t))
+        return f"{t} at ${p:.2f}" if p is not None else t
+
+    shown = ", ".join(name_of(t) for t in fresh[:SCAN_MATCH_NAMES_IN_MESSAGE])
     more = f" and {len(fresh) - SCAN_MATCH_NAMES_IN_MESSAGE} more" if len(fresh) > SCAN_MATCH_NAMES_IN_MESSAGE else ""
     noun = "stock matches" if len(fresh) == 1 else "stocks match"
-    return f"{len(fresh)} new {noun} {name}: {shown}{more}"
+    when = et_scan_label(scan_at, with_day=False) if scan_at is not None else None
+    scan = f" in the {when} scan" if when else ""
+    return f"{len(fresh)} new {noun} {name}{scan}: {shown}{more}"
 
 
 def _allowed(spec: Dict[str, Any], entitlements: Dict[str, bool]) -> bool:
@@ -661,7 +674,9 @@ def _evaluate_market_rule(r: Dict[str, Any], obs: Dict[str, Any], st: Optional[D
         "ticker": fresh[0], "rule_type": r["rule_type"], "operator": r["operator"],
         "threshold": r.get("threshold"), "trigger_value": float(len(fresh)), "previous_value": None,
         "hsf_score": top.get("hsf_score"), "setup": top.get("setup"),
-        "message": scan_message(r, fresh), "observation_id": obs_id,
+        "message": scan_message(r, fresh, scan_at=obs.get("scan_at"), prices={
+            t: watchlist_intel.ticker_view(obs, t, premium=r["_premium"]).get("price")
+            for t in fresh[:SCAN_MATCH_NAMES_IN_MESSAGE]}), "observation_id": obs_id,
         "market_data_as_of": watchlist_intel._iso(obs["scan_at"]), "triggered_at": now_s,
         "delivery": {c: "pending" if c != "in_app" else "delivered" for c in r["delivery_channels"]},
         "_channels": r["delivery_channels"], "_tier": r["_tier"],

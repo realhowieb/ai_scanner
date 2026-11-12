@@ -118,6 +118,13 @@ await step("Scanner quick view opens a setup without leaving the page", async ()
   check("Scanner quick view opens a setup without leaving the page", /\/scanner/.test(page.url()), ticker);
 });
 
+await step("Scanner shows when HSF picked up each setup", async () => {
+  // "Picked up" column: the first scan of the stock's current run, with the price then (pickup in /v1/scans/latest).
+  await page.getByRole("columnheader", { name: /Picked up/ }).first().waitFor();
+  const when = ((await page.locator("table .picked-cell .mono").first().textContent()) ?? "").trim();
+  check("Scanner shows when HSF picked up each setup", / ET$/.test(when), when);
+});
+
 await step("Scanner phone cards keep ticker, badges and actions inside the card; Compare toggles", async () => {
   // Same session at iPhone width: the table turns into cards (#ticker row, badge row, fact grid).
   await page.setViewportSize({ width: 390, height: 844 });
