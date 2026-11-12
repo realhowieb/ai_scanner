@@ -104,6 +104,25 @@ def main() -> None:
         print("no snapshot history")
         return
     print(f"[audit] snapshot rows loaded: {len(df)}")
+    df["_src"] = "snapshot"
+    # Stored near-setup candidates (the PreBreakout tab's population since it moved to them).
+    try:
+        from db.prebreakout_candidates import load_since
+
+        crow = []
+        for scan in load_since(DAYS_BACK):
+            for r in scan["rows"]:
+                rec = dict(r)
+                rec["Symbol"] = str(rec.get("Ticker") or rec.get("Symbol") or "").upper()
+                rec["Timestamp"] = rec["run_time"] = pd.Timestamp(scan["scanned_at"])
+                rec["_src"] = "candidates"
+                rec["_version"] = scan.get("model_version") or "unknown"
+                crow.append(rec)
+        if crow:
+            df = pd.concat([df, pd.DataFrame(crow)], ignore_index=True)
+        print(f"[audit] stored candidate rows loaded: {len(crow)}")
+    except Exception as e:
+        print(f"[audit] stored candidates unavailable: {e}")
     labeled = mp.add_forward_return_labels(df, lookback_days=DAYS_BACK)
     labeled = mp.sort_symbol_history(labeled).reset_index(drop=True)
     labeled["y"] = _future_setup_label(labeled)
@@ -116,13 +135,19 @@ def main() -> None:
     labeled["own_hit"] = pd.to_numeric(labeled[mp.TARGET_COLUMN], errors="coerce")
     labeled["ret5"] = pd.to_numeric(labeled[mp.RETURN_COLUMN], errors="coerce")
     labeled["version"] = labeled["ModelProvenance"].map(_model_version) if "ModelProvenance" in labeled else "unknown"
-    scored = labeled.loc[labeled["raw"].notna()].copy()
+    if "_version" in labeled:
+        labeled["version"] = labeled["_version"].where(labeled["_src"] == "candidates", labeled["version"])
+    scored_any = labeled.loc[labeled["raw"].notna()].copy()
+    scored = scored_any.loc[scored_any["_src"] == "snapshot"].copy()
     scored["run_key"] = scored["run_time"].astype(str)
     scored["rank"] = scored.groupby("run_key")["raw"].rank(ascending=False, method="first")
     scored["scan_size"] = scored.groupby("run_key")["raw"].transform("size")
     scored["rank_bucket"] = pd.cut(scored["rank"], [0, 10, 25, 50, 100, 1e9],
                                    labels=["01-10 (tab)", "11-25", "26-50", "51-100", "101+"])
-    cand = scored.loc[scored["cand"] == 1].copy()
+    scored_any["run_key"] = scored_any["run_time"].astype(str)
+    cand = scored_any.loc[scored_any["cand"] == 1].copy()
+    cand["rank"] = cand.groupby("run_key")["raw"].rank(ascending=False, method="first")
+    stored = cand.loc[cand["_src"] == "candidates"]
     cand["crank"] = cand.groupby("run_key")["raw"].rank(ascending=False, method="first")
     cand["crank_bucket"] = pd.cut(cand["crank"], [0, 10, 25, 50, 100, 1e9],
                                   labels=["01-10", "11-25", "26-50", "51-100", "101+"])
@@ -206,8 +231,45 @@ def main() -> None:
     report["rank_by_heuristic"] = alt
     report["numeric_columns_seen"] = sorted(c for c in scored.columns if pd.api.types.is_numeric_dtype(scored[c]))[:80]
 
+    top = stored.loc[stored["rank"] <= 10]
+    report["stored_candidates"] = {
+        "rows": int(len(stored)), "scans": int(stored["run_key"].nunique()) if len(stored) else 0,
+        "base_rate_pct": round(float(stored["y"].mean()) * 100, 2) if len(stored) else None,
+        "auc": _auc(stored["y"], stored["raw"]) if len(stored) else None,
+        "tab_top10_n": int(len(top)),
+        "tab_top10_hit_pct": round(float(top["y"].mean()) * 100, 1) if len(top) else None,
+        "tab_top10_avg_5d_ret_pct": round(float(top["ret5"].mean()) * 100, 2) if len(top) else None,
+    }
+
     print("=== PREBREAKOUT LIVE AUDIT ===")
     print(json.dumps(report, indent=1, default=str))
+    _write_summary(report)
+
+
+def _write_summary(report: dict) -> None:
+    """Headline table for the weekly run's GitHub job summary (no-op elsewhere)."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    sc = report.get("stored_candidates") or {}
+    tab = (report.get("rank_all_rows") or [{}])[0]
+    lines = [
+        "## PreBreakout weekly check",
+        f"Matured window: {report['window']['first'][:10]} to {report['window']['last'][:10]} "
+        f"(rows at least {MATURITY_DAYS} days old).",
+        "",
+        "| Population | Rows | Top-10 hit | Base rate | AUC |",
+        "|---|---|---|---|---|",
+        f"| Near-setup candidates (current tab) | {sc.get('rows', 0)} | {sc.get('tab_top10_hit_pct')}% "
+        f"| {sc.get('base_rate_pct')}% | {sc.get('auc')} |",
+        f"| Scan top 100 (old tab) | {report.get('rows_scored')} | {tab.get('hit_pct')}% "
+        f"| {report.get('base_rate_all_pct')}% | {report.get('auc_all_rows')} |",
+        "",
+        "Hit = becomes a setup within 1-3 trading days that then gains 4% before falling 2% within 5 days.",
+    ]
+    text = "\n".join(lines)
+    print(text)
+    if path:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(text + "\n")
 
 
 if __name__ == "__main__":

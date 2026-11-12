@@ -19,7 +19,7 @@ def redact_prebreakout_opportunity(value: Dict[str, Any], *, allowed: bool) -> D
     from analytics.prediction_provenance import customer_opportunity
     out = customer_opportunity(value or {})
     if allowed:
-        return out
+        return hide_prebreakout_outside_population(out)
     signals = [s for s in (out.get("signals") or []) if str(s).lower() != "prebreakout"]
     out["signals"] = signals
     if "n_signals" in out:
@@ -54,6 +54,42 @@ def redact_prebreakout_opportunity(value: Dict[str, Any], *, allowed: bool) -> D
         lifecycle.append(item)
     if lifecycle:
         out["lifecycle"] = lifecycle
+    return out
+
+
+# The PreBreakout model only learns from names that are not yet setups
+# (ml_prebreakout.prebreakout_candidate_mask: BreakoutScore below 8). On a name
+# that already is one its % has no meaning (live audit 2026-11-12: AUC 0.51), so
+# the display copy drops it. The saved scan and the HSF score are unchanged.
+PREBREAKOUT_SETUP_SCORE = 8.0
+
+
+def _setup_score(out: Dict[str, Any]) -> Any:
+    model = out.get("model") if isinstance(out.get("model"), dict) else {}
+    for v in (out.get("breakout_score"), out.get("BreakoutScore"), model.get("breakout_score")):
+        try:
+            v = float(v)
+            if v == v:
+                return v
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def hide_prebreakout_outside_population(out: Dict[str, Any]) -> Dict[str, Any]:
+    """Blank the PreBreakout % on a display copy whose name is already a setup."""
+    score = _setup_score(out)
+    if score is None or score < PREBREAKOUT_SETUP_SCORE:
+        return out
+    out = dict(out)
+    out["prob"] = None
+    for key in ("prob_raw", "prob_rank"):
+        if key in out:
+            out[key] = None
+    if isinstance(out.get("model"), dict):
+        model = dict(out["model"])
+        model["prebreakout_prob"] = None
+        out["model"] = model
     return out
 
 

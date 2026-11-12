@@ -273,6 +273,50 @@ def _score_prebreakout(results):
         return results
 
 
+# Columns kept per stored candidate: what the tab, alerts and audits read.
+PREBREAKOUT_CANDIDATE_FIELDS = (
+    "Ticker", "Last", "PctChange", "GapPct", "Volume", "VolRel20", "DollarVol20", "BreakoutScore",
+    "BreakoutPos20D", "Trend10D%", "Trend20D%", "Volatility20D%", "RSI14", "RSvsSPY", "IsBreakout",
+    "PatternTag", "EMACross", "Spark10D", "PreBreakoutProb", "PreBreakoutProb%", "PreBreakoutProbRaw",
+)
+
+
+def _save_prebreakout_candidates(sink: dict, *, universe: str, scan_started_at) -> None:
+    """Score the scan's near-setup names with PreBreakout and store them.
+
+    Side effect only: never changes the saved results or fails the scan.
+    """
+    rows = list((sink or {}).get("rows") or [])
+    if not rows:
+        print(f"[prebreakout] no near-setup candidates for {universe}")
+        return
+    try:
+        import pandas as pd
+
+        from db.prebreakout_candidates import save_candidates
+        from ml_prebreakout import MODEL_PATH, load_prebreakout_model, score_prebreakout
+
+        bundle = load_prebreakout_model(MODEL_PATH)
+        if not bundle:
+            print("[prebreakout] model unavailable; candidates not scored")
+            return
+        frame = pd.DataFrame(rows)
+        frame["SourceScanId"] = scan_started_at.isoformat()
+        scored = score_prebreakout(frame)
+        keep = [c for c in PREBREAKOUT_CANDIDATE_FIELDS if c in scored.columns]
+        out = scored[keep].copy()
+        out = out.loc[pd.to_numeric(out.get("PreBreakoutProbRaw"), errors="coerce").notna()]
+        out = out.sort_values("PreBreakoutProbRaw", ascending=False)
+        records = json.loads(out.to_json(orient="records", date_format="iso"))
+        saved = save_candidates(universe, scan_started_at.isoformat(), scan_started_at, records,
+                                model_version=str(bundle.get("model_version") or ""))
+        print(f"[prebreakout] scored {len(records)} of {sink.get('eligible')} near-setup candidates "
+              f"for {universe}; saved={saved}")
+    except Exception as e:
+        print(f"[prebreakout] candidate scoring failed: {type(e).__name__}: {e}")
+        _capture(e)
+
+
 def _results_to_json(results) -> str:
     if hasattr(results, "to_json"):
         return results.to_json(orient="records", date_format="iso")
@@ -480,10 +524,17 @@ def run_and_save(
             "min_dollar_vol": float(os.getenv("CRON_MIN_DOLLAR_VOL", "5000000")),
             "profile": profile or os.getenv("CRON_PROFILE", "regular"),
         }
+        # PreBreakout candidates: the near-setup names the model is built for
+        # (see db/prebreakout_candidates.py). Recorded scans only; kill switch
+        # HSF_PREBREAKOUT_CANDIDATES=0.
+        prebreakout_sink: dict | None = None
+        if _records_research() and os.getenv("HSF_PREBREAKOUT_CANDIDATES", "1").strip() != "0":
+            prebreakout_sink = {"n": int(os.getenv("HSF_PREBREAKOUT_CANDIDATES_N", "300"))}
         results = run_breakout_scan(
             tickers,
             coverage_sink=coverage_sink,
             research_sink=research_sink,
+            prebreakout_sink=prebreakout_sink,
             **scan_params,
             diagnostics=False,
             use_cache=True,
@@ -578,6 +629,8 @@ def run_and_save(
             allow_sqlite_fallback=False,
         )
         print(f"Saved {row_count} rows for {universe}.")
+        if prebreakout_sink is not None:
+            _save_prebreakout_candidates(prebreakout_sink, universe=universe, scan_started_at=scan_started_at)
 
         # Canonical observation capture (Run 38A). SIDE-EFFECT ONLY: observes the
         # completed scan and persists per-scanner canonical observations for

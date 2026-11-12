@@ -127,9 +127,42 @@ def _symbol_column(df) -> Optional[str]:
     return None
 
 
-def _prebreakout_picks(df, limit: int = 3, *, rescore: bool = True) -> List[Dict[str, Any]]:
-    """Top PreBreakout candidates [{symbol, prob}] from the snapshot (best first)."""
+def _stored_prebreakout_candidates(max_age_h: float = 24.0):
+    """The latest scan's scored near-setup candidates as a DataFrame, or None."""
     try:
+        import datetime as _dt
+
+        import pandas as pd
+
+        from db.prebreakout_candidates import load_latest
+
+        latest = load_latest("US_MARKET")
+        if not latest or not latest.get("rows"):
+            return None
+        scanned = latest["scanned_at"]
+        if scanned.tzinfo is None:
+            scanned = scanned.replace(tzinfo=_dt.timezone.utc)
+        if (_dt.datetime.now(_dt.timezone.utc) - scanned).total_seconds() > max_age_h * 3600:
+            return None
+        frame = pd.DataFrame(latest["rows"])
+        # Model order: the raw score, which the calibrated % only coarsens.
+        if "PreBreakoutProbRaw" in frame.columns:
+            frame["PreBreakoutProb%"] = pd.to_numeric(frame.get("PreBreakoutProb%"), errors="coerce")
+        return frame
+    except Exception:
+        return None
+
+
+def _prebreakout_picks(df, limit: int = 3, *, rescore: bool = True) -> List[Dict[str, Any]]:
+    """Top PreBreakout candidates [{symbol, prob}] (best first).
+
+    Prefers the near-setup names the latest scheduled scan scored (the model's real
+    population, see db/prebreakout_candidates.py); falls back to the snapshot rows.
+    """
+    try:
+        stored = _stored_prebreakout_candidates()
+        if stored is not None:
+            df, rescore = stored, False
         if rescore:
             from ml_prebreakout import score_prebreakout
 

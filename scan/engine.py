@@ -429,6 +429,7 @@ def run_breakout_scan(
     snapshot_saver: SnapshotSaver | None = None,
     coverage_sink: dict | None = None,
     research_sink: dict | None = None,
+    prebreakout_sink: dict | None = None,
 ) -> pd.DataFrame:
     """Public entry point for breakout scans.
 
@@ -745,6 +746,12 @@ def run_breakout_scan(
         except (TypeError, ValueError):
             nm_n = 0
     effective_top_n = top_n + nm_n
+    # PreBreakout candidates (opt-in via prebreakout_sink): the model is trained on
+    # names that are NOT yet setups, which never make the top_n. Rank every row so
+    # the best-scored near-setup names can be taken before the top_n cut.
+    # Production still receives exactly top_n rows.
+    if prebreakout_sink is not None:
+        effective_top_n = 10 ** 6
 
     try:
         df = legacy_breakout.run_breakout_scan(
@@ -767,6 +774,19 @@ def run_breakout_scan(
     except _ENGINE_BOUNDARY_ERRORS as e:
         _log_scan_error(e, context="legacy_breakout.run_breakout_scan", tickers=tickers)
         raise
+
+    if prebreakout_sink is not None and df is not None and hasattr(df, "iloc"):
+        try:
+            from ml_prebreakout import prebreakout_candidate_mask
+
+            cand_n = max(0, min(int(prebreakout_sink.get("n", 300)), 2000))
+            pool = df.loc[prebreakout_candidate_mask(df)] if len(df) else df
+            # df is BreakoutScore order: the first rows are the closest to a setup.
+            prebreakout_sink["rows"] = pool.head(cand_n).to_dict("records")
+            prebreakout_sink["eligible"] = int(len(pool))
+        except _ENGINE_BOUNDARY_ERRORS as e:
+            _diag_exception(diagnostics, "prebreakout_sink population skipped", e)
+        df = df.head(top_n + nm_n)
 
     if research_sink is not None and df is not None and hasattr(df, "iloc"):
         try:

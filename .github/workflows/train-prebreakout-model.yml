@@ -12,7 +12,7 @@ on:
         required: true
         default: "prebreakout-model-debug"
       mode:
-        description: "train = Run #17 training report; audit = live-vs-training feature audit only (read only)"
+        description: "train = Run #17 training report; audit = live-vs-training feature audit only (read only); challenger = fresh retrain vs live champion on near-setup candidates (report only)"
         required: false
         default: "train"
 
@@ -86,8 +86,19 @@ jobs:
           print(json.dumps(report, indent=1, sort_keys=True, default=str))
           PY
 
+      - name: Retrain challenger vs live champion (report only)
+        if: inputs.mode == 'challenger'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: "false"
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
+        run: python -u scripts/prebreakout_challenger.py
+
       - name: Evaluate PreBreakout model (report only)
-        if: inputs.mode != 'audit'
+        if: inputs.mode != 'audit' && inputs.mode != 'challenger'
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
