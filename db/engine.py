@@ -192,6 +192,7 @@ def _connect_timeout() -> int:
 import functools as _functools
 
 _schema_done: set = set()
+_schema_lock = _threading.RLock()
 
 
 def _database_key(conn):
@@ -217,9 +218,15 @@ def schema_once(fn):
         tag = (fn.__module__, fn.__qualname__, key)
         if tag in _schema_done:
             return None
-        result = fn(conn, *args, **kwargs)  # an exception leaves it to run again next time
-        _schema_done.add(tag)
-        return result
+        # IF NOT EXISTS does not make concurrent PostgreSQL DDL safe on an empty
+        # database. Serialize first-use setup, then recheck after waiting. RLock
+        # permits a schema helper to initialize a dependency on the same thread.
+        with _schema_lock:
+            if tag in _schema_done:
+                return None
+            result = fn(conn, *args, **kwargs)  # failures remain retryable
+            _schema_done.add(tag)
+            return result
 
     return wrapper
 
