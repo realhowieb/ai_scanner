@@ -34,16 +34,17 @@ MATURITY_DAYS = 10
 
 
 def _auc(y, s):
-    try:
-        from sklearn.metrics import roc_auc_score
-    except Exception:
-        return None
-    y = pd.Series(y).astype(float)
-    s = pd.Series(s).astype(float)
+    # Mann-Whitney AUC (sklearn is not installed in the Diagnostics job).
+    y = pd.Series(y).astype(float).reset_index(drop=True)
+    s = pd.Series(s).astype(float).reset_index(drop=True)
     ok = y.notna() & s.notna()
-    if ok.sum() < 50 or y[ok].nunique() < 2:
+    y, s = y[ok], s[ok]
+    if len(y) < 50 or y.nunique() < 2:
         return None
-    return round(float(roc_auc_score(y[ok], s[ok])), 4)
+    r = s.rank(method="average")
+    n1 = float((y == 1).sum())
+    n0 = float((y == 0).sum())
+    return round(float((r[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0)), 4)
 
 
 def _model_version(cell):
@@ -98,7 +99,7 @@ def _bucket_table(frame, key, label="y"):
 
 
 def main() -> None:
-    df = mp.load_run_history(days_back=DAYS_BACK, canonical_only=True)
+    df = mp.load_run_history(days_back=DAYS_BACK, max_runs=20000, canonical_only=True)
     if df.empty:
         print("no snapshot history")
         return
@@ -178,6 +179,31 @@ def main() -> None:
                 base[col] = {"auc_all": _auc(scored["y"], s), "auc_candidates": _auc(cand["y"], pd.to_numeric(cand[col], errors="coerce") * sign) if len(cand) else None,
                              "coverage_pct": round(float(s.notna().mean()) * 100, 1)}
     report["heuristic_baselines"] = base
+    # Why are shown rows (not) training candidates?
+    sc = pd.to_numeric(scored["BreakoutScore"], errors="coerce")
+    pos = pd.to_numeric(scored.get("BreakoutPos20D"), errors="coerce")
+    report["population"] = {
+        "is_breakout_pct": round(float(scored["IsBreakout"].apply(mp._as_bool).mean()) * 100, 1),
+        "score_ge_8_pct": round(float((sc >= 8).mean()) * 100, 1),
+        "below_20d_high_pct": round(float(mp._price_below_20d_high(scored).fillna(False).mean()) * 100, 1),
+        "breakout_score_quantiles": [round(float(x), 2) for x in sc.quantile([0, .1, .25, .5, .75, .9, 1]).tolist()],
+        "breakoutpos20d_quantiles": [round(float(x), 3) for x in pos.quantile([0, .1, .25, .5, .75, .9, 1]).tolist()] if pos.notna().any() else None,
+    }
+    # Same per-scan rank analysis for simple heuristics: top-10 hit rate if the tab ranked by them.
+    alt = {}
+    for col in ("BreakoutScore", "BreakoutPos20D", "VolRel20", "Trend10D%", "Trend20D%", "RSI14", "RSvsSPY", "Volatility20D%", "GapPct", "PctChange"):
+        if col not in scored.columns:
+            continue
+        for sign, tag in ((1, "high"), (-1, "low")):
+            v = pd.to_numeric(scored[col], errors="coerce") * sign
+            if v.notna().mean() < 0.5:
+                continue
+            rk = v.groupby(scored["run_key"]).rank(ascending=False, method="first")
+            top = scored.loc[rk <= 10]
+            alt[f"{col}_{tag}"] = {"auc": _auc(scored["y"], v), "top10_hit_pct": round(float(top["y"].mean()) * 100, 1),
+                                   "top10_own_4up_first_pct": round(float(top["own_hit"].mean()) * 100, 1),
+                                   "top10_avg_5d_ret_pct": round(float(top["ret5"].mean()) * 100, 2)}
+    report["rank_by_heuristic"] = alt
     report["numeric_columns_seen"] = sorted(c for c in scored.columns if pd.api.types.is_numeric_dtype(scored[c]))[:80]
 
     print("=== PREBREAKOUT LIVE AUDIT ===")
