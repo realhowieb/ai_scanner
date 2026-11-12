@@ -31,11 +31,34 @@ def et_today(now: Optional[dt.datetime] = None) -> dt.date:
     return (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York")).date()
 
 
-def window_tickers(start: dt.date, end: dt.date, limit: int = MAX_SYMBOLS) -> List[str]:
-    """Reporters between start and end (inclusive), soonest first, at most `limit`."""
-    from scheduler.earnings_email import reporters
+def _after_open(now: Optional[dt.datetime]) -> bool:
+    """True once the regular session has opened (9:30 ET) on `now`'s ET day."""
+    from zoneinfo import ZoneInfo
 
-    rows = sorted(reporters(start, end), key=lambda r: (r["date"], r["ticker"]))
+    t = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    return (t.hour, t.minute) >= (9, 30)
+
+
+def window_tickers(start: dt.date, end: dt.date, limit: int = MAX_SYMBOLS, *,
+                   now: Optional[dt.datetime] = None) -> List[str]:
+    """Reporters between start and end (inclusive), at most `limit`, the ones the emails
+    and the Earnings tab show first: tonight's (and this morning's, before the open) plus
+    the next trading day's, then the rest soonest first, then this morning's reporters
+    once the market has opened (they already reported). A busy day alone can pass the
+    cap (Nov 12 2026 had 517), so plain date order would never reach tomorrow."""
+    from scheduler.earnings_email import next_trading_day, reporters
+
+    nxt = next_trading_day(start)
+    reported = _after_open(now)
+
+    def tier(r: Dict[str, Any]) -> int:
+        if r["date"] == start and r["time"] == "bmo":
+            return 2 if reported else 0
+        if (r["date"] == start and r["time"] == "amc") or r["date"] == nxt:
+            return 0
+        return 1
+
+    rows = sorted(reporters(start, end), key=lambda r: (tier(r), r["date"], r["ticker"]))
     return [r["ticker"] for r in rows][:limit]
 
 
@@ -79,7 +102,7 @@ def run_earnings_autoscore(session: str = "regular", *, now: Optional[dt.datetim
     try:
         start = et_today(now)
         end = start + dt.timedelta(days=WINDOW_DAYS)
-        tickers = window_tickers(start, end)
+        tickers = window_tickers(start, end, now=now)
         if not tickers:
             print("[earnings_autoscore] no reporters in the window; nothing to score")
             return None
