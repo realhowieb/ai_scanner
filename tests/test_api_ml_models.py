@@ -41,7 +41,7 @@ class MlModelsApiTests(ApiTestCase):
 
     def test_admin_only(self):
         pro = self.auth(self.login().json()["access_token"])
-        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow", "/v1/admin/ml/production", "/v1/admin/ml/production/prebreakout"):
+        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow", "/v1/admin/ml/production", "/v1/admin/ml/production/prebreakout", "/v1/admin/ml/ai-confidence"):
             self.assertEqual(self.client.get(path, headers=pro).status_code, 403, path)
             self.assertEqual(self.client.get(path).status_code, 401, path)
         r = self.client.post("/v1/admin/ml/models/1/transition", headers=pro,
@@ -57,6 +57,43 @@ class MlModelsApiTests(ApiTestCase):
         from db.ml_model_registry import RegistryUnavailable
         with mock.patch("db.ml_operations.production_confidence", side_effect=RegistryUnavailable("down")):
             self.assertEqual(self.client.get("/v1/admin/ml/production", headers=self.boss).status_code, 503)
+
+    def test_ai_confidence_summary_and_explicit_failure(self):
+        value = {"model": None, "warnings": ["No active AI Confidence model in the database."],
+                 "latest": {"scanned_at": None, "rows": [], "tiers": {}}, "live": {"days": 60, "buckets": []}}
+        with mock.patch("db.ai_confidence_admin.summary", return_value=value):
+            r = self.client.get("/v1/admin/ml/ai-confidence", headers=self.boss)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), value)
+        from db.ml_model_registry import RegistryUnavailable
+        with mock.patch("db.ai_confidence_admin.summary", side_effect=RegistryUnavailable("down")):
+            self.assertEqual(self.client.get("/v1/admin/ml/ai-confidence", headers=self.boss).status_code, 503)
+
+    def test_ai_confidence_explain_is_admin_only_and_grounded_on_saved_inputs(self):
+        pro = self.auth(self.login().json()["access_token"])
+        self.assertEqual(self.client.post("/v1/admin/ml/ai-confidence/explain", headers=pro, json={"ticker": "NVDA"}).status_code, 403)
+        with mock.patch("db.ai_confidence_admin.ticker_features", return_value=None):
+            r = self.client.post("/v1/admin/ml/ai-confidence/explain", headers=self.boss, json={"ticker": "ZZZZ"})
+        self.assertEqual(r.status_code, 404)
+        found = {"ticker": "NVDA", "scanned_at": "2026-11-12T19:35:00+00:00", "ai_confidence": 46.2,
+                 "features": {"Trend10D%": 8.1, "VolRel20": 2.4}}
+        seen = {}
+
+        def fake_explain(row, *, earnings_days=None, username=None):
+            seen.update(row=row, days=earnings_days, user=username)
+            return "Trend and volume lift it.", None
+
+        with mock.patch("db.ai_confidence_admin.ticker_features", return_value=found), \
+                mock.patch("ui.ai_confidence_explain._earnings_days_for", return_value=2), \
+                mock.patch("ui.ai_confidence_explain.explain_confidence", side_effect=fake_explain):
+            r = self.client.post("/v1/admin/ml/ai-confidence/explain", headers=self.boss, json={"ticker": "nvda"})
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual((body["explanation"], body["tier"], body["earnings_in_days"]), ("Trend and volume lift it.", "High", 2))
+        self.assertEqual(seen["row"], {"ticker": "NVDA", "AI Confidence": 46.2, "Trend10D%": 8.1, "VolRel20": 2.4})
+        self.assertEqual(seen["user"], "boss@example.com")
+        bad = self.client.post("/v1/admin/ml/ai-confidence/explain", headers=self.boss, json={"ticker": "NV DA;"})
+        self.assertEqual(bad.status_code, 422)
 
     def test_prebreakout_evidence_and_explicit_failure(self):
         value = {"configured_model": {"model_version": "configured-prebreakout"},
