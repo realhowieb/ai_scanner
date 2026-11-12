@@ -105,7 +105,7 @@ describe("Admin > Models", () => {
     expect(tickers()).toEqual(["AMD", "NVDA"]);
     expect(within(card).getByText("30.0% – 40.0%")).toBeInTheDocument();
     expect(calls.some((c) => c.path === "/v1/admin/ml/ai-confidence/explain")).toBe(false);
-    await userEvent.click(within(scores).getAllByRole("button", { name: "Why this score?" })[1]);
+    await userEvent.click(within(within(scores).getByRole("row", { name: /NVDA/ })).getByRole("button", { name: "Why this score?" }));
     await userEvent.click(within(scores).getByRole("button", { name: "Explain NVDA with Claude" }));
     expect(await within(scores).findByText(/Strong 10-day trend/)).toBeInTheDocument();
     expect(calls.find((c) => c.path === "/v1/admin/ml/ai-confidence/explain")?.body).toEqual({ ticker: "NVDA" });
