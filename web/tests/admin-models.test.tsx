@@ -37,6 +37,19 @@ const gates = { gates_version: "hsf-ml-v4-gates-1", passed: false, checks: [
 const shadow = { scored: 60, labeled: 40, entry_days: 8, last_scored_at: "2026-11-24T21:41:00Z", roc_auc: 0.6, hit_rate: 0.3,
   vs_ai_confidence_as_served: { rows: 40, model_auc: 0.6, served_auc: 0.55, auc_delta: 0.05, brier_delta: -0.01 } };
 
+const aiConfidence = {
+  model: { model_version: "ai-confidence-xgb-v7", trained_at: "2026-09-09T20:55:40Z", saved_at: "2026-09-09T21:00:00Z", dataset_version: null,
+    target_rule: "path_first_hit_v1: +4% before -2% in 5 trading days", features: 6, calibration_method: null, calibration_points: 0,
+    training_buckets: [{ bucket: "20-30%", signals: 120, mean_confidence: 0.25, hit_rate: 0.22 }] },
+  warnings: ["The live model has no calibration map, so the shown percentages are raw model scores and run high."],
+  latest: { scanned_at: "2026-11-12T19:35:00Z", tiers: { High: 1, Medium: 0, Low: 1 }, rows: [
+    { ticker: "AMD", ai_confidence: 12.5, tier: "Low", breakout_score: 61.2, hsf_score: 70, setup: "Gapper", chg_pct: 3.1 },
+    { ticker: "NVDA", ai_confidence: 46.2, tier: "High", breakout_score: 80.4, hsf_score: 88, setup: "Breakout", chg_pct: 4.2 }] },
+  live: { days: 60, matured: 50, pending: 12, buckets: [
+    { bucket: "40-50%", signals: 50, mean_confidence: 44.1, hits: 15, misses: 30, unclear: 5, hit_rate_low: 30, hit_rate_high: 40 }] },
+  note: "Training buckets come from the validation set.",
+};
+
 let prebreakoutState: "available" | "missing" | "error" = "available";
 const calls: { path: string; method: string; body: unknown }[] = [];
 beforeEach(() => {
@@ -51,6 +64,9 @@ beforeEach(() => {
       configured_model: prebreakoutState === "missing" ? null : { model_version: "prebreakout-configured", trained_at: "2026-10-07T20:00:00Z", dataset_version: null },
       latest_capture: prebreakoutState === "missing" ? null : { model_version: "prebreakout-actual", signal_at: "2026-11-06T17:43:00Z", inferred_at: "2026-11-06T17:43:01Z", artifact_sha256: "pb-hash" },
     });
+    if (path === "/v1/admin/ml/ai-confidence") return jsonResponse(aiConfidence);
+    if (path === "/v1/admin/ml/ai-confidence/explain") return jsonResponse({ ticker: "NVDA", ai_confidence: 46.2, tier: "High", earnings_in_days: 2,
+      features: { "Trend10D%": 8.1, VolRel20: 2.4 }, explanation: "Strong 10-day trend and heavy volume lift the estimate.", error: null });
     if (path === "/v1/admin/ml/production/health") return jsonResponse({
       generated_at: "2026-11-06T20:00:00Z", since: "2026-10-30T20:00:00Z",
       note: "Capture completeness and identity only, not predictive quality.",
@@ -76,6 +92,24 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Admin > Models", () => {
+  it("restores the AI Confidence card: model status, sortable scores, calibration and an on-demand explainer", async () => {
+    render(<ModelsTab />);
+    const card = (await screen.findByRole("heading", { name: "AI Confidence" })).closest("section")!;
+    expect(await within(card).findByText("ai-confidence-xgb-v7")).toBeInTheDocument();
+    expect(within(card).getByText("Not calibrated")).toBeInTheDocument();
+    expect(within(card).getByText(/no calibration map/)).toBeInTheDocument();
+    const scores = within(card).getByRole("region", { name: "Latest scan scores" });
+    const tickers = () => within(scores).getAllByRole("rowheader").map((c) => c.textContent);
+    expect(tickers()).toEqual(["NVDA", "AMD"]);
+    await userEvent.click(within(scores).getByRole("button", { name: "AI Confidence" }));
+    expect(tickers()).toEqual(["AMD", "NVDA"]);
+    expect(within(card).getByText("30.0% – 40.0%")).toBeInTheDocument();
+    expect(calls.some((c) => c.path === "/v1/admin/ml/ai-confidence/explain")).toBe(false);
+    await userEvent.click(within(scores).getAllByRole("button", { name: "Why this score?" })[1]);
+    await userEvent.click(within(scores).getByRole("button", { name: "Explain NVDA with Claude" }));
+    expect(await within(scores).findByText(/Strong 10-day trend/)).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/v1/admin/ml/ai-confidence/explain")?.body).toEqual({ ticker: "NVDA" });
+  });
   it("shows monitoring, shadow results against AI Confidence and the registry", async () => {
     render(<ModelsTab />);
     expect(screen.getByText(/AI Confidence keeps using the production model/)).toBeInTheDocument();

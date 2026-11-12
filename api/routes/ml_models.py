@@ -33,6 +33,10 @@ class MlTransition(BaseModel):
     approve: bool = Field(False, description="Required (true) to make a model champion")
 
 
+class AiConfidenceExplain(BaseModel):
+    ticker: str = Field(pattern=r"^[A-Za-z0-9.\-]{1,12}$")
+
+
 class MlRollback(BaseModel):
     target_label: str = Field(pattern=_LABEL)
     horizon_days: int = Field(ge=1, le=5)
@@ -97,6 +101,29 @@ def register(app: FastAPI) -> None:
         from db.ml_operations import production_confidence
 
         return json_safe(_call(production_confidence))
+
+    @get("/v1/admin/ml/ai-confidence", "AI Confidence: model card, latest scan scores and calibration")
+    def ml_ai_confidence(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.ai_confidence_admin import summary
+
+        return json_safe(_call(summary))
+
+    @post("/v1/admin/ml/ai-confidence/explain", "Why one stock got its AI Confidence (Claude, on demand)",
+          {404: {"description": "No recent AI Confidence saved for this ticker"}})
+    def ml_ai_confidence_explain(body: AiConfidenceExplain, a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.ai_confidence_admin import ticker_features
+        from ui.ai_confidence_explain import _earnings_days_for, confidence_tier, explain_confidence
+
+        found = _call(lambda: ticker_features(body.ticker))
+        if not found:
+            raise HTTPException(404, "No AI Confidence saved for this ticker in the last 14 days.")
+        row = {"ticker": found["ticker"], "AI Confidence": found["ai_confidence"], **found["features"]}
+        days = _earnings_days_for(found["ticker"])
+        text, error = explain_confidence(row, earnings_days=days, username=_user(a))
+        return json_safe({"ticker": found["ticker"], "scanned_at": found["scanned_at"],
+                          "ai_confidence": found["ai_confidence"], "tier": confidence_tier(found["ai_confidence"]),
+                          "features": found["features"], "earnings_in_days": days,
+                          "explanation": text, "error": None if text else (error or "No explanation returned.")})
 
     @get("/v1/admin/ml/production/prebreakout", "Production PreBreakout: configured model and latest capture")
     def ml_prebreakout_production(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
