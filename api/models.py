@@ -350,6 +350,17 @@ class IndicatorEvidence(BaseModel):
     macd_above_signal: bool
 
 
+class Pickup(BaseModel):
+    at: str = Field(description=(
+        "ISO time of the scan that picked the stock up: the first scan of its current unbroken run of "
+        "full-market scans (as exact as the scan schedule, about hourly in market hours)"))
+    price: Optional[float] = Field(default=None, description="Last price in that scan")
+    rank: Optional[int] = Field(default=None, description="HSF rank in that scan (1 = best)")
+    open_ended: bool = Field(default=False, description=(
+        "True when the stock is in every scan HSF keeps for this (about two sessions), so it was "
+        "picked up at or before `at`"))
+
+
 class ScanSetup(Setup):
     indicator_evidence: Optional[IndicatorEvidence] = None
     rsi_14: Optional[float] = None
@@ -366,6 +377,7 @@ class ScanSetup(Setup):
         "(see LatestScan.previous_scan_at)"))
     sector: Optional[str] = Field(default=None, description="Sector from Nasdaq's stock screener; null when unknown")
     market_cap: Optional[float] = Field(default=None, description="Market cap in dollars from Nasdaq's stock screener; null when unknown")
+    pickup: Optional[Pickup] = Field(default=None, description="When HSF picked this stock up; null when unknown")
 
 
 class SectorCount(BaseModel):
@@ -532,6 +544,8 @@ class StockDetail(BaseModel):
     historical_locked: bool = Field(default=False, description="True below Pro: historical research "
                                     "(history_summary, historical_context, outcome_cohort) is a Pro feature")
     lifecycle: List[LifecycleEvent] = []
+    pickup: Optional[Pickup] = Field(default=None, description=(
+        "When HSF picked this stock up; null when it isn't in the latest scan or that's unknown"))
     bars: List[Bar] = Field(default=[], description="Daily bars cached by the scans, oldest first (up to 120)")
     bars_as_of: Optional[str] = None
     volume_feed: Optional[str] = Field(default=None, description="Market-data feed behind bar volume: 'iex' counts IEX exchange trades only, 'sip' is consolidated")

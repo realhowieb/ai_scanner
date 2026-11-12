@@ -25,6 +25,7 @@ import { SnapshotTime } from "./SnapshotTime";
 import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
 import { PriceAlertButton } from "./PriceAlert";
+import { PickupLine } from "./Pickup";
 import { PriceChart, type ChartEvent } from "./PriceChart";
 import { ScoreHistory } from "./ScoreHistory";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
@@ -352,6 +353,7 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged,
               <span className="cap">{s.from_history ? "from the last recorded observation" : s.scan_at ? `at the ${etTime(s.scan_at)} scan` : ""}, not a live quote</span>
             </div>
           ) : lastBar ? <div className="quote"><span className="mono big">{price(lastBar.close)}</span><span className="cap">Daily close through {shortDate(s.bars_as_of ?? lastBar.date)} · not a live quote; no scan price available.</span></div> : <p className="cap">No price from the scans.</p>}
+          <PickupLine pickup={s.pickup} last={s.price} />
         </div>
         <div className="row-actions">
           <SaveToWatchlistButton ticker={s.ticker} inLists={s.watchlists.map((w) => w.id)} onSaved={onChanged}

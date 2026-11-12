@@ -97,6 +97,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     # radar and watchlist intel, so the previous run is usually cached already).
     rank = {id(o): i + 1 for i, o in enumerate(opps)}
     prev_rank = previous_ranks(runs)
+    pickup_of = pickups()
     sector_of = {id(o): sector_for(o.get("ticker")) for o in opps}
     cap_of = {id(o): market_cap_for(o.get("ticker")) for o in opps}
     if min_score:
@@ -142,7 +143,8 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             "previous_scan_at": _iso(runs[1]["created_at"]) if prev_rank is not None else None,
             "sectors": [{"sector": k, "count": v} for k, v in sorted(sector_counts.items(), key=lambda kv: (-kv[1], kv[0]))],
             "setups": [{**_scan_row(o), "rank": rank[id(o)], "sector": sector_of[id(o)], "market_cap": cap_of[id(o)],
-                        "previous_rank": (prev_rank or {}).get(str(o.get("ticker") or "").upper())}
+                        "previous_rank": (prev_rank or {}).get(str(o.get("ticker") or "").upper()),
+                        "pickup": pickup_of.get(str(o.get("ticker") or "").upper())}
                        for o in visible[offset:offset + limit]]}
 
 
@@ -647,6 +649,8 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
         "historical_context": intel.get("historical_context"),
         "outcome_cohort": intel.get("outcome_cohort"),
         "lifecycle": intel.get("lifecycle") or [],
+        # Only while the name is in the latest scan: a pickup belongs to its current run of scans.
+        "pickup": pickup_for(ticker) if core["in_latest_scan"] else None,
     }
     # Historical research is Pro (can_track_record), as on the web's stock page (Run 85E).
     out["historical_locked"] = not bool(entitlements.get("can_track_record"))
@@ -792,7 +796,7 @@ def _score_projection_method():
     root = Path(__file__).resolve().parents[1]
     code = b"".join((root / name).read_bytes() for name in
                     ("ui/results_intelligence.py", "ui/opportunities.py"))
-    return f"score-history-1:{HSF_SCORE_VERSION}:{hashlib.sha256(code).hexdigest()[:16]}"
+    return f"score-history-2:{HSF_SCORE_VERSION}:{hashlib.sha256(code).hexdigest()[:16]}"
 
 def _score_window(runs):
     """One batch for missing payloads; cached by run version and scoring method.
@@ -830,8 +834,9 @@ def _score_window(runs):
                 rows = json.loads(raw) if isinstance(raw, str) else raw
                 if not isinstance(rows, list):
                     continue
-                scores = {o["ticker"]: {"score": o.get("score"), "signals": list(o.get("signals") or [])}
-                          for o in consolidate_scanner_results(rows, top_n=None)}
+                scores = {o["ticker"]: {"score": o.get("score"), "signals": list(o.get("signals") or []),
+                                        "rank": i + 1, "last": _num(o.get("last"))}
+                          for i, o in enumerate(consolidate_scanner_results(rows, top_n=None))}
                 result[rid] = scores
                 records.append({"run_id": rid, "stamp": stamps[rid], "scores": scores})
             except Exception as exc:
@@ -885,6 +890,86 @@ def score_history(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
                        "signals": signals, "signals_added": added})
         prev = set(signals)
     return {"ticker": t, "points": points}
+
+
+def _pickups(runs: List[Dict[str, Any]], window: Dict[int, Dict[str, Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    """Ticker -> when HSF picked it up: the first scan of its current unbroken run of scans
+    (newest-first `runs`), with its price and rank in that scan. A run whose projection is
+    missing (unreadable) is skipped, not counted as a gap. open_ended is True when the ticker
+    is in every scan of the window, so the pickup was at or before `at`."""
+    readable = [r for r in runs if int(r["id"]) in window]
+    if not readable:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for t in window[int(readable[0]["id"])]:
+        first = readable[0]
+        for run in readable[1:]:
+            if t not in window[int(run["id"])]:
+                break
+            first = run
+        hit = window[int(first["id"])][t]
+        out[t] = {"at": _iso(first["created_at"]), "price": _num(hit.get("last")),
+                  "rank": hit.get("rank"), "open_ended": first is readable[-1] and len(readable) > 1}
+    return out
+
+
+def pickups() -> Dict[str, Dict[str, Any]]:
+    """When HSF picked up each ticker in the latest full-market scan (see _pickups).
+    Empty when there is no scan or the history can't be read."""
+    runs = market_runs()[:SCORE_HISTORY_RUNS]
+    if not runs:
+        return {}
+
+    def load():
+        window = _score_window(runs)
+        if int(runs[0]["id"]) not in window:
+            raise RuntimeError("latest scan projection unavailable")  # not cached; retried next call
+        return _pickups(runs, window)
+
+    stamps = tuple(f"{r['id']}|{r['created_at']}|{r.get('row_count')}" for r in runs)
+    try:
+        res = _cached(("pickups", stamps), load, ttl_s=RUN_TTL_S)
+    except Exception as exc:
+        swallowed("api.scans.pickups", exc)
+        return {}
+    return res if isinstance(res, dict) else {}
+
+
+def et_scan_label(stamp: Any, *, with_day: bool = True) -> Optional[str]:
+    """'9:35 AM ET Thu Nov 12' (or '9:35 AM ET') for a scan time; None when unreadable."""
+    from analytics.market_calendar import ET
+
+    try:
+        ts = stamp if isinstance(stamp, dt.datetime) else dt.datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+    et = ts.astimezone(ET)
+    label = f"{et.hour % 12 or 12}:{et.minute:02d} {'AM' if et.hour < 12 else 'PM'} ET"
+    return f"{label} {et:%a %b} {et.day}" if with_day else label
+
+
+def pickup_text(p: Optional[Dict[str, Any]]) -> Optional[str]:
+    """One plain fact for Ask HSF: when and where HSF picked the stock up."""
+    when = et_scan_label((p or {}).get("at"))
+    if not when:
+        return None
+    text = (f"in every HSF scan since at least the {when} scan" if p.get("open_ended")
+            else f"first picked up by HSF in the {when} scan")
+    if p.get("price") is not None:
+        text += f" at ${float(p['price']):.2f}"
+    if p.get("rank") is not None:
+        text += f" (rank #{int(p['rank'])} then)"
+    return text
+
+
+def pickup_for(ticker: Any) -> Optional[Dict[str, Any]]:
+    try:
+        return pickups().get(str(ticker or "").strip().upper())
+    except Exception as exc:
+        swallowed("api.scans.pickup_for", exc)
+        return None
 
 
 def daily_indicator_evidence(bars):

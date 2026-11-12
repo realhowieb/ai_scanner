@@ -65,14 +65,14 @@ class CustomView(StrictModel):
     score_all: bool = False
 
 
-Column = Literal["setup", "sector", "spark", "last", "change", "gap", "rvol", "prob"]
+Column = Literal["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"]
 
 
 class TablePreferences(StrictModel):
-    columns: list[Column] = Field(default_factory=lambda: ["setup", "sector", "spark", "last", "change", "gap", "rvol", "prob"], max_length=8)
+    columns: list[Column] = Field(default_factory=lambda: ["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"], max_length=9)
     # Columns the person turned off. A column in neither list was added after they saved,
     # so it shows (Sector, for one) until they turn it off.
-    hidden: list[Column] = Field(default_factory=list, max_length=8)
+    hidden: list[Column] = Field(default_factory=list, max_length=9)
     compact: bool = False
 
     @field_validator("columns", "hidden")

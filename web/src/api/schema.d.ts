@@ -8724,6 +8724,30 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** Pickup */
+        Pickup: {
+            /**
+             * At
+             * @description ISO time of the scan that picked the stock up: the first scan of its current unbroken run of full-market scans (as exact as the scan schedule, about hourly in market hours)
+             */
+            at: string;
+            /**
+             * Open Ended
+             * @description True when the stock is in every scan HSF keeps for this (about two sessions), so it was picked up at or before `at`
+             * @default false
+             */
+            open_ended: boolean;
+            /**
+             * Price
+             * @description Last price in that scan
+             */
+            price?: number | null;
+            /**
+             * Rank
+             * @description HSF rank in that scan (1 = best)
+             */
+            rank?: number | null;
+        };
         /** PlanRow */
         PlanRow: {
             /**
@@ -9937,6 +9961,8 @@ export interface components {
             market_cap?: number | null;
             /** N Signals */
             n_signals?: number | null;
+            /** @description When HSF picked this stock up; null when unknown */
+            pickup?: components["schemas"]["Pickup"] | null;
             /**
              * Previous Rank
              * @description Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)
@@ -10596,6 +10622,8 @@ export interface components {
             outcome_cohort?: {
                 [key: string]: unknown;
             } | null;
+            /** @description When HSF picked this stock up; null when it isn't in the latest scan or that's unknown */
+            pickup?: components["schemas"]["Pickup"] | null;
             /** Price */
             price?: number | null;
             /** Primary Setup */
@@ -10726,14 +10754,14 @@ export interface components {
         /** TablePreferences */
         TablePreferences: {
             /** Columns */
-            columns?: ("setup" | "sector" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
+            columns?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "prob")[];
             /**
              * Compact
              * @default false
              */
             compact: boolean;
             /** Hidden */
-            hidden?: ("setup" | "sector" | "spark" | "last" | "change" | "gap" | "rvol" | "prob")[];
+            hidden?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "prob")[];
         };
         /**
          * Tape
@@ -11561,6 +11589,8 @@ export interface components {
             market_cap?: number | null;
             /** N Signals */
             n_signals?: number | null;
+            /** @description When HSF picked this stock up; null when unknown */
+            pickup?: components["schemas"]["Pickup"] | null;
             /**
              * Previous Rank
              * @description Position in the scan before; null when the name wasn't ranked then (new) or there is no earlier scan (see LatestScan.previous_scan_at)

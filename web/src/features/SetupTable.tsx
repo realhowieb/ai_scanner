@@ -14,6 +14,7 @@ import { Hint } from "@/components/Hint";
 import { Pill, ScoreBadge, ScoreBar, TickerLink } from "@/components/ui";
 import { num, pct, price, setupLabel } from "@/lib/format";
 
+import { PickedCell } from "./Pickup";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
 import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks, useNewsFlags } from "./Sparks";
 
@@ -33,6 +34,7 @@ const upDown = (v: number | null | undefined) => (v ?? 0) > 0 ? "up" : (v ?? 0) 
 const HINTS: Record<string, [string, ReactNode]> = {
   score: ["HSF Score", "An opportunity ranking from 0 to 100 that blends trend, momentum, volume and setup quality. It is not a probability of profit."],
   rvol: ["Relative volume", "Today's volume compared with the stock's recent average. 2.0 means twice as much trading as usual; the bar turns amber from 1.5."],
+  picked: ["Picked up", "When HSF picked the stock up: the first scan of its current run in HSF's scans, with the price then and the move since. Exact to that scan (about hourly in market hours)."],
   prob: ["PreBreakout", "The model's calibrated chance of a breakout soon. The bar shows where the model ranks the name in this scan (full bar = top); names in the top 10% are labelled."],
 };
 
@@ -140,6 +142,7 @@ const COLUMNS = col.columns([
   col.display({ id: "score", header: "HSF Score", cell: ScoreCell }),
   col.display({ id: "spark", header: "20 sessions", cell: SparkCell }),
   col.display({ id: "last", header: "Last", cell: LastCell }),
+  col.display({ id: "picked", header: "Picked up", cell: (c) => <PickedCell pickup={c.row.original.pickup} last={c.row.original.last} /> }),
   col.display({ id: "change", header: "Chg %", cell: (c) => pct(c.row.original.chg_pct) }),
   col.display({ id: "gap", header: "Gap %", cell: (c) => pct(c.row.original.gap_pct) }),
   col.display({ id: "rsi", header: "RSI (14)", cell: (c) => num(c.row.original.rsi_14) }),
@@ -184,7 +187,9 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   const ctx = { scanId, numbered, offset, sparks, series, news, choose, ranks, auto, compared, onView };
   // The Sector column shows once the rows carry sectors (current scans only).
   const showSector = sparks && !ranks && rows.some((r) => r.sector);
-  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium) && (c !== "sector" || showSector)])), rsi: showRsi };
+  // Picked up shows on the latest market scan's rows (they carry a pickup), not saved runs or watchlists.
+  const showPicked = sparks && !ranks && rows.some((r) => r.pickup);
+  const columnVisibility = { ...Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c, visible(c) && (c !== "spark" || sparks) && (c !== "prob" || premium) && (c !== "sector" || showSector) && (c !== "picked" || showPicked)])), rsi: showRsi };
   const sorting: SortingState = sort ? [{ id: Object.keys(SERVER_SORT).find((k) => SERVER_SORT[k] === sort) ?? "score", desc: true }] : [];
   const t = useTable({
     features, columns: COLUMNS, data: rows,
@@ -273,6 +278,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
               {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
+              {showPicked && visible("picked") && <div className="sc-picked"><dt>Picked up</dt><dd><PickedCell pickup={r.pickup} last={r.last} /></dd></div>}
               {showSector && visible("sector") && <div className="sc-sector"><dt>Sector</dt><dd>{r.sector ?? "—"}</dd></div>}
             </dl>
             {((premium && visible("prob")) || (sparks && visible("spark"))) && <div className="sc-bottom">

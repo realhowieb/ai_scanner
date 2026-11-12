@@ -71,10 +71,27 @@ def view_line(v: Dict[str, Any], earnings: Optional[Dict[str, Any]] = None) -> s
         parts.append(f"price change {float(v['price_change_pct']):+.1f}%")
     if _fmt(v.get("rvol"), 1) is not None:
         parts.append(f"relative volume {float(v['rvol']):.1f}x")
+    if v.get("pickup"):
+        from api.scans import pickup_text
+
+        picked = pickup_text(v["pickup"])
+        if picked:
+            parts.append(picked)
     e = _earn_text(earnings)
     if e:
         parts.append(e)
     return f"- {t}: " + "; ".join(parts)
+
+
+def _view(obs, t: str, *, premium: bool) -> Dict[str, Any]:
+    """ticker_view plus when HSF picked the stock up (Ask HSF only), for a ranked name."""
+    from api import watchlist_intel
+    from api.scans import pickup_for
+
+    v = watchlist_intel.ticker_view(obs, t, premium=premium)
+    if v.get("present"):
+        v["pickup"] = _safe(lambda: pickup_for(t))
+    return v
 
 
 def mentioned_tickers(text: str, known: Iterable[str]) -> List[str]:
@@ -115,7 +132,7 @@ ASK_SYSTEM = (
 
 def _watchlists_block(username: str, entitlements: Dict[str, bool], obs, earnings_for) -> tuple:
     """(text, tickers): every list's name and symbols, and fact lines for the default list."""
-    from api import user_data, watchlist_intel
+    from api import user_data
 
     lists = user_data.list_watchlists(username)
     if not lists:
@@ -133,7 +150,7 @@ def _watchlists_block(username: str, entitlements: Dict[str, bool], obs, earning
                     user_data.get_watchlist(username, int(default["id"])).get("items") or []][:40]
     earn = earnings_for(all_tickers)
     premium = bool(entitlements.get("can_early_breakout"))
-    facts = [view_line(watchlist_intel.ticker_view(obs, t, premium=premium), earn.get(t)) for t in default_syms] if obs else []
+    facts = [view_line(_view(obs, t, premium=premium), earn.get(t)) for t in default_syms] if obs else []
     others = sorted({t for t in all_tickers if t in earn and t not in default_syms})
     extra = [f"- {t}: {_earn_text(earn[t])}" for t in others]
     text = "Watchlists:\n" + "\n".join(lines)
@@ -145,21 +162,20 @@ def _watchlists_block(username: str, entitlements: Dict[str, bool], obs, earning
 
 
 def _top_block(obs, entitlements: Dict[str, bool], earn: Dict[str, Dict[str, Any]]) -> str:
-    from api import watchlist_intel
 
     premium = bool(entitlements.get("can_early_breakout"))
     ranked = sorted(obs["ranked"].items(), key=lambda kv: int(kv[1].get("rank") or 10**6))[:TOP_SCAN_ROWS]
-    rows = [view_line(watchlist_intel.ticker_view(obs, t, premium=premium), earn.get(t)) for t, _ in ranked]
+    rows = [view_line(_view(obs, t, premium=premium), earn.get(t)) for t, _ in ranked]
     return f"Top {len(rows)} ranked setups in the latest market scan (HSF order):\n" + "\n".join(rows)
 
 
 def _ticker_block(t: str, obs, entitlements: Dict[str, bool], earn: Dict[str, Dict[str, Any]],
                   with_evidence: bool) -> str:
-    from api import news, watchlist_intel
+    from api import news
     from api.outcomes import ai_evidence
 
     premium = bool(entitlements.get("can_early_breakout"))
-    parts = [view_line(watchlist_intel.ticker_view(obs, t, premium=premium), earn.get(t)) if obs else f"- {t}"]
+    parts = [view_line(_view(obs, t, premium=premium), earn.get(t)) if obs else f"- {t}"]
     items = (_safe(lambda: news.stock_news(t, limit=3), {}) or {}).get("items") or []
     for n in items[:3]:
         parts.append(f"  news {str(n.get('published_at'))[:10]}: {n.get('headline')}")
@@ -185,7 +201,9 @@ def ask_context(username: str, entitlements: Dict[str, bool], question: str,
     obs = _safe(watchlist_intel.market_observation)
     blocks = [f"Now: {now.astimezone(dt.timezone.utc):%Y-%m-%d %H:%M} UTC."]
     if obs:
-        blocks.append(f"Latest market scan: {obs.get('scan_at')}.")
+        blocks.append(f"Latest market scan: {obs.get('scan_at')}. HSF scans the whole market about hourly in "
+                      "market hours; a stock's 'first picked up' time is the first scan of its current unbroken "
+                      "run of scans, so it is exact to that scan, not to the minute.")
     else:
         blocks.append("No market scan is available right now.")
     wl_text, wl_tickers = _safe(lambda: _watchlists_block(username, entitlements, obs, earnings_for),
