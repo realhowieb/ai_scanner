@@ -112,3 +112,58 @@ class MemoryMaintenanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeavyLoadTests(unittest.TestCase):
+    def test_heavy_loads_take_turns(self):
+        import threading
+        import time
+
+        from api import memory
+
+        running, peak = [0], [0]
+        guard = threading.Lock()
+
+        def work():
+            with memory.heavy_load("test"):
+                with guard:
+                    running[0] += 1
+                    peak[0] = max(peak[0], running[0])
+                time.sleep(0.05)
+                with guard:
+                    running[0] -= 1
+
+        threads = [threading.Thread(target=work) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(5)
+        self.assertEqual(peak[0], 1)
+
+    def test_heavy_load_is_reentrant_and_releases_on_error(self):
+        from api import memory
+
+        with self.assertRaises(RuntimeError):
+            with memory.heavy_load("outer"):
+                with memory.heavy_load("inner"):
+                    raise RuntimeError("boom")
+        self.assertTrue(memory._heavy_lock.acquire(blocking=False))
+        memory._heavy_lock.release()
+
+    def test_heavy_load_can_be_turned_off(self):
+        from api import memory
+
+        with mock.patch.dict(os.environ, {"HSF_HEAVY_LOAD_SERIAL": "0"}), \
+                mock.patch.object(memory, "release_memory") as release:
+            with memory.heavy_load("off"):
+                pass
+        release.assert_not_called()
+
+    def test_admin_loaders_use_heavy_load(self):
+        import inspect
+
+        from api import admin_analytics, ml_readiness
+
+        self.assertIn("heavy_load(", inspect.getsource(admin_analytics.scanner_research))
+        self.assertIn("heavy_load(", inspect.getsource(admin_analytics._stair))
+        self.assertIn("heavy_load(", inspect.getsource(ml_readiness.build))
