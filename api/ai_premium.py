@@ -132,7 +132,7 @@ ASK_SYSTEM = (
 
 def _watchlists_block(username: str, entitlements: Dict[str, bool], obs, earnings_for) -> tuple:
     """(text, tickers): every list's name and symbols, and fact lines for the default list."""
-    from api import user_data, watchlist_intel
+    from api import user_data
 
     lists = user_data.list_watchlists(username)
     if not lists:
@@ -162,7 +162,6 @@ def _watchlists_block(username: str, entitlements: Dict[str, bool], obs, earning
 
 
 def _top_block(obs, entitlements: Dict[str, bool], earn: Dict[str, Dict[str, Any]]) -> str:
-    from api import watchlist_intel
 
     premium = bool(entitlements.get("can_early_breakout"))
     ranked = sorted(obs["ranked"].items(), key=lambda kv: int(kv[1].get("rank") or 10**6))[:TOP_SCAN_ROWS]
@@ -172,7 +171,7 @@ def _top_block(obs, entitlements: Dict[str, bool], earn: Dict[str, Dict[str, Any
 
 def _ticker_block(t: str, obs, entitlements: Dict[str, bool], earn: Dict[str, Dict[str, Any]],
                   with_evidence: bool) -> str:
-    from api import news, watchlist_intel
+    from api import news
     from api.outcomes import ai_evidence
 
     premium = bool(entitlements.get("can_early_breakout"))
