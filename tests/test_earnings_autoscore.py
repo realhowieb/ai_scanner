@@ -23,13 +23,34 @@ def test_window_tickers_soonest_first_and_capped():
     assert rep.call_args.args == (TUE, TUE + dt.timedelta(days=7))
 
 
+def test_window_tickers_puts_tonight_and_next_day_before_a_busy_today():
+    # Thursday: a busy today must not crowd out Friday's reporters (Nov 12 2026: 517 today).
+    thu, fri, mon = dt.date(2026, 11, 12), dt.date(2026, 11, 13), dt.date(2026, 11, 16)
+    rows = [{"ticker": "AMOR", "date": thu, "time": "bmo"},
+            {"ticker": "ANON", "date": thu, "time": None},
+            {"ticker": "ZTON", "date": thu, "time": "amc"},
+            {"ticker": "ZFRI", "date": fri, "time": None},
+            {"ticker": "BFRI", "date": fri, "time": "bmo"},
+            {"ticker": "AMON", "date": mon, "time": "bmo"}]
+    after_open = dt.datetime(2026, 11, 12, 21, 0, tzinfo=dt.timezone.utc)    # 4 pm ET
+    before_open = dt.datetime(2026, 11, 12, 12, 0, tzinfo=dt.timezone.utc)   # 7 am ET
+    with mock.patch.object(ee, "reporters", return_value=rows):
+        assert ea.window_tickers(thu, thu + dt.timedelta(days=7), now=after_open) == \
+            ["ZTON", "BFRI", "ZFRI", "ANON", "AMON", "AMOR"]
+        assert ea.window_tickers(thu, thu + dt.timedelta(days=7), limit=3, now=after_open) == \
+            ["ZTON", "BFRI", "ZFRI"]
+        assert ea.window_tickers(thu, thu + dt.timedelta(days=7), now=before_open)[:4] == \
+            ["AMOR", "ZTON", "BFRI", "ZFRI"]
+
+
 def test_run_scores_the_week_and_saves_one_pass():
     setups = [{"ticker": "T0", "score": 70}]
     with mock.patch.object(ee, "reporters", return_value=_cal()), \
             mock.patch.object(ea, "scan_setups", return_value=setups) as scan, \
             mock.patch("db.earnings_autoscore.save", return_value=12) as save:
         assert ea.run_earnings_autoscore("premarket", now=NOW) == 12
-    assert scan.call_args.args == (["T0", "T1", "T2"],) and scan.call_args.kwargs == {"premarket": True}
+    # 10:35 ET: this morning's T0 already reported, so it goes last.
+    assert scan.call_args.args == (["T1", "T2", "T0"],) and scan.call_args.kwargs == {"premarket": True}
     kw = save.call_args.kwargs
     assert save.call_args.args == (setups,)
     assert (kw["session"], kw["window_start"], kw["window_end"], kw["symbols"]) == \
@@ -80,3 +101,16 @@ def test_premium_only_flag():
     assert FEATURE_MIN_TIER["can_earnings_autoscore"] == "premium"
     assert any("earnings reporter" in h for h in plan_highlights()["premium"])
     assert not any("earnings reporter" in h for h in plan_highlights()["pro"])
+
+
+def test_email_scores_names_the_pass_did_not_reach():
+    fresh = {"POOL": {"ticker": "POOL", "score": 80, "last": 190.0, "chg_pct": 1.0}}
+    with mock.patch.object(ea, "fresh_scores", return_value=fresh), \
+            mock.patch.object(ea, "scan_setups", return_value=[{"ticker": "EIC", "score": 61}]) as scan:
+        out = ee.score_tickers(["POOL", "EIC"])
+    assert scan.call_args.args == (["EIC"],)
+    assert out["POOL"]["score"] == 80 and out["EIC"]["score"] == 61
+    # A failed top-up keeps the pass's scores instead of blanking everything.
+    with mock.patch.object(ea, "fresh_scores", return_value=fresh), \
+            mock.patch.object(ea, "scan_setups", side_effect=RuntimeError("feed")):
+        assert set(ee.score_tickers(["POOL", "EIC"])) == {"POOL"}
