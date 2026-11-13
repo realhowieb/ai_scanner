@@ -61,6 +61,55 @@ def run_opportunities(run_id: int) -> List[Dict[str, Any]]:
     return _cached(("opps", int(run_id)), load, stale_s=RUN_TTL_S)
 
 
+# A candidates row belongs to the latest scan when it was scored within this window of it.
+PREBREAKOUT_CANDIDATE_MAX_AGE_S = 6 * 3600
+
+
+def prebreakout_candidates(run: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """The near-setup names the scan's PreBreakout model scored, as HSF opportunities,
+    strongest model score first. None when the scan has none stored (older scans, or
+    the kill switch), so callers fall back to the scan's own rows."""
+    created = run.get("created_at")
+
+    def load():
+        from db.prebreakout_candidates import load_latest
+        from ui.results_intelligence import consolidate_scanner_results
+
+        latest = load_latest("US_MARKET")
+        if not latest or not latest.get("rows"):
+            return None
+        try:
+            scanned = latest["scanned_at"]
+            ref = created if isinstance(created, dt.datetime) else dt.datetime.fromisoformat(str(created))
+            if ref.tzinfo is None:
+                ref = ref.replace(tzinfo=dt.timezone.utc)
+            if scanned.tzinfo is None:
+                scanned = scanned.replace(tzinfo=dt.timezone.utc)
+            if abs((ref - scanned).total_seconds()) > PREBREAKOUT_CANDIDATE_MAX_AGE_S:
+                return None
+        except Exception:
+            return None
+        opps = consolidate_scanner_results(list(latest["rows"]), top_n=None)
+        return sorted(opps, key=lambda o: -(_num(o.get("prob_raw")) if _num(o.get("prob_raw")) is not None else -1.0))
+
+    try:
+        return _cached(("prebreakout_candidates", str(run.get("id"))), load, stale_s=RUN_TTL_S)
+    except Exception as e:
+        swallowed("api.scans.prebreakout_candidates", e)
+        return None
+
+
+def prebreakout_tab(run: Dict[str, Any], opps: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], bool]:
+    """The PreBreakout tab's names: the model's top near-setup candidates when the scan
+    stored them (True), else its strongest names among the scan's own rows (False)."""
+    from ui.results_intelligence import prebreakout_picks
+
+    cands = prebreakout_candidates(run)
+    if cands:
+        return prebreakout_picks(cands), True
+    return prebreakout_picks(opps), False
+
+
 def max_results_for(tier: str) -> int:
     """Rows a plan sees in the Scanner (config.TIERS_CONFIG max_results)."""
     from config import TIERS_CONFIG
@@ -112,11 +161,26 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             return v is not None and (lo is None or v >= lo) and (hi is None or v <= hi)
         opps = [o for o in opps if keep(o)]
     if signal == "prebreakout":
-        # The model's strongest names this scan, kept in HSF order (see PREBREAKOUT_TOP_N).
-        from ui.results_intelligence import prebreakout_picks
+        # The model's top near-setup names (not yet setups, so not in the HSF list), strongest
+        # first; older scans fall back to its strongest names among the scan's own rows.
+        cands = prebreakout_candidates(runs[0]) if allowed else None
+        if cands:
+            from ui.results_intelligence import prebreakout_picks
 
-        picked = {id(o) for o in prebreakout_picks(opps)}
-        opps = [o for o in opps if id(o) in picked]
+            opps = prebreakout_picks(cands)
+            for o in opps:
+                sector_of[id(o)] = sector_for(o.get("ticker"))
+                cap_of[id(o)] = market_cap_for(o.get("ticker"))
+            for field, lo, hi in (("last", min_price, max_price), ("rvol", min_rvol, None)):
+                if lo is None and hi is None:
+                    continue
+                opps = [o for o in opps if _num(o.get(field)) is not None
+                        and (lo is None or _num(o.get(field)) >= lo) and (hi is None or _num(o.get(field)) <= hi)]
+        else:
+            from ui.results_intelligence import prebreakout_picks
+
+            picked = {id(o) for o in prebreakout_picks(opps)}
+            opps = [o for o in opps if id(o) in picked]
     elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
     if size:
@@ -142,7 +206,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             'freshness': run_freshness(runs[0]),
             "previous_scan_at": _iso(runs[1]["created_at"]) if prev_rank is not None else None,
             "sectors": [{"sector": k, "count": v} for k, v in sorted(sector_counts.items(), key=lambda kv: (-kv[1], kv[0]))],
-            "setups": [{**_scan_row(o), "rank": rank[id(o)], "sector": sector_of[id(o)], "market_cap": cap_of[id(o)],
+            "setups": [{**_scan_row(o), "rank": rank.get(id(o)), "sector": sector_of[id(o)], "market_cap": cap_of[id(o)],
                         "previous_rank": (prev_rank or {}).get(str(o.get("ticker") or "").upper()),
                         "pickup": pickup_of.get(str(o.get("ticker") or "").upper())}
                        for o in visible[offset:offset + limit]]}

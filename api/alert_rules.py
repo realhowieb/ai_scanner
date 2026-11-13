@@ -226,6 +226,37 @@ def _reporting(window: str) -> frozenset:
     return keys
 
 
+def _prebreakout_candidate_matches(f: Dict[str, Any], *, min_score: float,
+                                   reporting: Optional[set]) -> Optional[List[str]]:
+    """PreBreakout tab names passing a rule's filters, model order; None without candidates."""
+    from api.scans import _ticker_key, prebreakout_candidates
+    from api.today import _num, market_runs
+    from ui.results_intelligence import prebreakout_picks
+
+    try:
+        runs = market_runs()
+        cands = prebreakout_candidates(runs[0]) if runs else None
+    except Exception:
+        return None
+    if not cands:
+        return None
+    out = []
+    for o in prebreakout_picks(cands):
+        p, rvol = _num(o.get("last")), _num(o.get("rvol"))
+        if min_score and (o.get("score") is None or float(o.get("score")) < min_score):
+            continue
+        if "min_price" in f and (p is None or p < f["min_price"]):
+            continue
+        if "max_price" in f and (p is None or p > f["max_price"]):
+            continue
+        if "min_rvol" in f and (rvol is None or rvol < f["min_rvol"]):
+            continue
+        if reporting is not None and _ticker_key(o.get("ticker")) not in reporting:
+            continue
+        out.append(str(o.get("ticker") or "").upper())
+    return out
+
+
 def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) -> List[str]:
     """Tickers in the latest scan's ranked setups that pass a SCAN_MATCH rule, best
     rank first. Uses the same canonical per-ticker view as every other rule."""
@@ -236,8 +267,13 @@ def scan_matches(obs: Dict[str, Any], rule: Dict[str, Any], *, premium: bool) ->
     hits: List[Tuple[int, str]] = []
     reporting = _reporting(f["earnings"]) if f.get("earnings") else None
     picks = None
+    if f.get("setup") == "prebreakout" and premium:
+        # Same names as the Scanner's PreBreakout tab: the model's top near-setup candidates.
+        cands = _prebreakout_candidate_matches(f, min_score=min_score, reporting=reporting)
+        if cands is not None:
+            return cands
     if f.get("setup") == "prebreakout":
-        # Same names as the Scanner's PreBreakout tab: the model's strongest this scan.
+        # Older scans without stored candidates: the model's strongest names in the scan.
         from ui.results_intelligence import prebreakout_picks
 
         ranked = obs.get("ranked") or {}
