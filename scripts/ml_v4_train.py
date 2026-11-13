@@ -98,7 +98,12 @@ def load_audit_rows(dataset_version: str | None) -> dict:
     members = _as_list(entry.get("observation_ids"))
     frozen_at = rd.to_dt(entry.get("created_at"))
     _log(f"dataset {entry['dataset_version']} frozen_at={frozen_at} members={len(members)}")
-    window = load_window(EARLIEST, dt.datetime.now(dt.timezone.utc).date())
+    # Reject reserved membership before any outcome read, and read only this
+    # dataset's members rather than every newer observation in the database.
+    from db.ml_forward_cohorts import assert_development_allowed
+
+    assert_development_allowed(members)
+    window = load_window(EARLIEST, dt.datetime.now(dt.timezone.utc).date(), ids=members)
     bca = _benchmark_computed_at([r["id"] for r in window["rows"]])
     rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
     rows_asof = V3.as_of(rows, frozen_at)

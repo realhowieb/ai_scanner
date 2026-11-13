@@ -1,0 +1,17 @@
+{
+  "cohort_id": "hsf-forward-2026-11-16-v1",
+  "observation_start": "2026-11-16T00:00:00+00:00",
+  "observation_end_exclusive": "2026-12-15T00:00:00+00:00",
+  "evaluation_not_before": "2026-12-23T14:30:00+00:00",
+  "session_count": 20,
+  "minimum_matured_signal_days_at_evaluation": 300,
+  "source": "opportunity",
+  "signal_type": "hsf_scanner",
+  "unit": "first observation per ticker and UTC observation day",
+  "target": "F_clean_path_5d",
+  "target_definition": "MFE_5d >= 0.04 and MAE_5d > -0.02; no first-hit ordering claim",
+  "selection": "All saved public Scanner picks in the fixed trading-day window; no outcome or score threshold filter",
+  "stopping_rule": "Fixed end, never extend or shrink based on results. If sample is insufficient, report inconclusive.",
+  "outcome_access": "Collector never reads outcomes. Development loaders exclude the entire reserved time interval before reading outcomes. Future evaluation requires a separate locked recipe and explicit release implementation.",
+  "model_policy": "No production model changes or automatic evaluation. Candidate selection and all settings must be locked before outcome access."
+}

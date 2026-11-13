@@ -283,7 +283,8 @@ def test_training_script_dry_run_writes_artifacts_only(monkeypatch, tmp_path: Pa
     entry = loaded["entry"]
     monkeypatch.setattr(mod, "_pick_version", lambda requested: entry)
     monkeypatch.setattr(mod, "_benchmark_computed_at", lambda ids: {})
-    monkeypatch.setattr(api.research, "load_window", lambda a, b: {"rows": raw, "scans": scans})
+    monkeypatch.setattr("db.ml_forward_cohorts.assert_development_allowed", lambda ids: None)
+    monkeypatch.setattr(api.research, "load_window", lambda a, b, **kw: {"rows": raw, "scans": scans})
     monkeypatch.setattr(P, "DEFAULT_PARAMS", {p: _small(p) for p in P.PROVIDERS})
     out = tmp_path / "run"
     assert mod.main(["--out", str(out), "--git-sha", "test-code"]) == 0
