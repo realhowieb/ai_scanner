@@ -35,6 +35,7 @@ MATURITY_DAYS = 10
 HOLDOUT_FRACTION = float(os.environ.get("CHALLENGER_HOLDOUT", "0.3"))
 PURGE_BDAYS = mp.PREBREAKOUT_LEAD_DAYS + mp.RETURN_HORIZON_DAYS
 MIN_HOLDOUT_ROWS, MIN_HOLDOUT_POS, MIN_AUC_GAIN = 300, 30, 0.02
+MIN_TRAIN_ROWS, MIN_TRAIN_POS = 500, 50
 
 
 def _auc(y, s):
@@ -152,15 +153,21 @@ def main() -> None:
         M = model_matrix(X)
         scored = labeled.loc[hold].copy()
         scored["champion"] = bundle["model"].predict_proba(M.loc[hold])[:, 1]
-        challenger = mp._new_prebreakout_classifier()
-        challenger.fit(M.loc[train], labeled.loc[train, "y"].astype(int))
-        scored["challenger"] = challenger.predict_proba(M.loc[hold])[:, 1]
-        report["results"][name] = {"champion": _metrics(scored, "champion"),
-                                   "challenger": _metrics(scored, "challenger")}
-        imp = sorted(zip(feats, challenger.feature_importances_), key=lambda kv: -kv[1])[:10]
-        report["results"][name]["challenger_top_features"] = [[k, round(float(v), 4)] for k, v in imp]
+        report["results"][name] = {"champion": _metrics(scored, "champion")}
+        y_train = labeled.loc[train, "y"].astype(int)
+        if len(train) < MIN_TRAIN_ROWS or y_train.sum() < MIN_TRAIN_POS or y_train.nunique() < 2:
+            report["results"][name]["challenger"] = {
+                "skipped": f"only {len(train)} training rows / {int(y_train.sum())} hits before the holdout "
+                           f"(need {MIN_TRAIN_ROWS} / {MIN_TRAIN_POS})"}
+        else:
+            challenger = mp._new_prebreakout_classifier()
+            challenger.fit(M.loc[train], y_train)
+            scored["challenger"] = challenger.predict_proba(M.loc[hold])[:, 1]
+            report["results"][name]["challenger"] = _metrics(scored, "challenger")
+            imp = sorted(zip(feats, challenger.feature_importances_), key=lambda kv: -kv[1])[:10]
+            report["results"][name]["challenger_top_features"] = [[k, round(float(v), 4)] for k, v in imp]
         for who in ("champion", "challenger"):
-            auc = report["results"][name][who]["auc"]
+            auc = report["results"][name][who].get("auc")
             if auc is not None and (best is None or auc > best[2]):
                 best = (who, name, auc)
 
