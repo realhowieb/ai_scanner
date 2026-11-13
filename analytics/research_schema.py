@@ -154,12 +154,12 @@ _FEATURES_V1: Tuple[FeatureSpec, ...] = (
 
 FEATURE_SCHEMAS: Mapping[int, Tuple[FeatureSpec, ...]] = MappingProxyType({1: _FEATURES_V1})
 
-# Features research would want that HSF never persisted. They are NOT schema
-# columns (an all-null column is not a feature); coverage reports them at 0.
+# Features not exposed by schema v1. Some newer observations preserve inputs
+# in research metadata, but they require an explicit versioned reader before use.
 UNAVAILABLE_FEATURES: Tuple[Dict[str, str], ...] = (
     {"name": "rsi_14", "pit": MISSING,
-     "reason": "Scheduled scans never compute RSI; Day Trader computes it at render time and doesn't store it. "
-               "Reconstructable from raw daily bars, but no historical bars are persisted."},
+     "reason": "RSI is captured in scheduled research_metadata.rsi_14 from November 2, 2026, "
+               "but schema v1 does not read it. A versioned feature reader and coverage checks are required; no historical backfill."},
     {"name": "ema9 / ema21 values", "pit": MISSING,
      "reason": "Only the EMA cross tag is stored. Values are reconstructable from raw bars, which aren't persisted."},
     {"name": "adx / vwap / supertrend / ewo / day_trader_tier", "pit": MISSING,
@@ -174,7 +174,8 @@ UNAVAILABLE_FEATURES: Tuple[Dict[str, str], ...] = (
     {"name": "sector / industry / market_cap / fundamentals", "pit": UNSAFE_CURRENT_VALUE,
      "reason": "Only current metadata exists. Joining it to history would leak today's values."},
     {"name": "market_regime / breadth", "pit": MISSING,
-     "reason": "Regime is computed only in the Market Brief UI and never frozen (REGIME_CAPTURE_UNAVAILABLE)."},
+     "reason": "SPY/SMA20 regime is captured in scheduled research metadata from November 2, 2026, "
+               "but schema v1 does not read it. This is not the Brief regime or breadth/VIX history."},
     {"name": "universe membership list", "pit": UNSAFE_CURRENT_VALUE,
      "reason": "Universe files are overwritten by refresh jobs; only the universe name is frozen."},
 )
