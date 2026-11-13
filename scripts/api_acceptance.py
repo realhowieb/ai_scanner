@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import statistics
 import sys
@@ -176,6 +177,24 @@ def auth_rejections(run: Run, expired_token: Optional[str]) -> None:
 
 
 # ---- per-account journey -----------------------------------------------------------------------
+def _prebreakout_display_ok(rows, *, premium):
+    """Contract: paid access does not imply every setup has a model percentage."""
+    for row in rows:
+        probability = row.get("prob")
+        if probability is not None:
+            if not isinstance(probability, (int, float)) or not math.isfinite(probability) or not 0 <= probability <= 100:
+                return False
+        if not premium:
+            if probability is not None or row.get("prob_rank") is not None or "prebreakout" in row.get("signals", []):
+                return False
+        else:
+            score = row.get("breakout_score")
+            if isinstance(score, (int, float)) and score >= 8:
+                if probability is not None or row.get("prob_rank") is not None:
+                    return False
+    return True
+
+
 def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     role = s["role"]
     tier, cap, alert_limit = ROLES[role]
@@ -207,11 +226,17 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
     scores = [x["score"] for x in setups]
     run.check(A, "scan: ranked by score", scores == sorted(scores, reverse=True), f"{len(scores)} rows")
     premium = tier in ("premium", "admin")
-    hidden = all(x.get("prob") is None and "prebreakout" not in x.get("signals", []) for x in setups)
-    run.check(A, "scan: PreBreakout visibility", hidden != premium or not setups,
-              f"{'visible' if not hidden else 'hidden'} for {tier}")
-    c = run.req("GET", "/v1/scans/latest?signal=prebreakout", headers=h).status_code
+    run.check(A, "scan: PreBreakout display contract", _prebreakout_display_ok(setups, premium=premium),
+              f"{tier}: percentages hidden on existing setups; paid evidence refused below Premium")
+    candidates = run.req("GET", "/v1/scans/latest?signal=prebreakout", headers=h)
+    c = candidates.status_code
     run.check(A, "scan: signal=prebreakout gated", c == (200 if premium else 403), f"HTTP {c}")
+    if premium and c == 200:
+        rows = candidates.json().get("setups")
+        valid = isinstance(rows, list) and _prebreakout_display_ok(rows, premium=True) and all(
+            isinstance(x.get("prob"), (int, float)) and math.isfinite(x["prob"]) and 0 <= x["prob"] <= 100 for x in rows)
+        run.check(A, "scan: PreBreakout candidate probabilities", valid,
+                  f"{len(rows) if isinstance(rows, list) else 'invalid'} candidates (empty is valid when no captured candidates exist)")
     p1 = run.req("GET", "/v1/scans/latest?limit=5&offset=0", headers=h).json()["setups"]
     p2 = run.req("GET", "/v1/scans/latest?limit=5&offset=5", headers=h).json()["setups"]
     run.check(A, "scan: pagination consistent", [x["ticker"] for x in p1 + p2] == [x["ticker"] for x in setups[:10]],
