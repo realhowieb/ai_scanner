@@ -84,5 +84,35 @@ def report(rows, raw_rows, *, numeric_features, categorical_features):
                         field['recorded']+=1
                         field['defaulted']+=int(defaulted)
         out['provenance'][role]={'status_counts':dict(counts), 'features': {n:dict(v) for n,v in fields.items()}}
+    # Point-in-time vectors may preserve inputs missing from the as-of join.
+    # Report that evidence only; never silently fill or refit on it.
+    audit_by_id={r.observation_id:r for r in rows}
+    recovery={name:{'missing_with_recorded_observed_value':0,'overlap':0,'disagreements':0}
+              for name in A.AI_CONFIDENCE_FEATURE_MAP.values()}
+    for raw in raw_rows:
+        row=audit_by_id.get(int(raw['id']))
+        if row is None:
+            continue
+        signal=raw.get('raw_signal') or {}
+        if isinstance(signal,str):
+            import json
+            signal=json.loads(signal)
+        pred=(signal.get('models') or {}).get('prebreakout') or {}
+        names,values,mask=(pred.get(k) for k in ('feature_names','feature_values','default_mask'))
+        if pred.get('status')!='captured' or not all(isinstance(x,list) for x in (names,values,mask)) or not len(names)==len(values)==len(mask):
+            continue
+        recorded={n:A.Encoder._num(v) for n,v,m in zip(names,values,mask) if m is False}
+        for original,name in A.AI_CONFIDENCE_FEATURE_MAP.items():
+            value=recorded.get(original,float('nan'))
+            if not math.isfinite(value):
+                continue
+            current=A.Encoder._num(row.features.get(name))
+            field=recovery[name]
+            if not math.isfinite(current):
+                field['missing_with_recorded_observed_value']+=1
+            else:
+                field['overlap']+=1
+                field['disagreements']+=int(not math.isclose(value,current,rel_tol=1e-4,abs_tol=1e-6))
+    out['recorded_input_crosscheck']=recovery
     out['note']='Development diagnostics only. PSI is descriptive, not a significance test. Zero values are not assumed to be defaults; provenance masks are reported separately.'
     return out

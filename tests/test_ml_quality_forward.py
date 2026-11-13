@@ -38,6 +38,16 @@ class QualityTests(unittest.TestCase):
         self.assertNotIn('unrecorded',report['provenance']['prebreakout']['status_counts'])
         self.assertEqual(report['provenance']['prebreakout']['features']['x']['defaulted'],1)
 
+    def test_recorded_values_are_crosschecked_without_filling_missing_features(self):
+        rows=[SimpleNamespace(observation_id=i,entry_day=dt.date(2026,9,14)+dt.timedelta(days=i),
+              features={'trend_10d_pct':None},labels={'mfe_5d':0,'mae_5d':0}) for i in range(4)]
+        def raw(i,mask):
+            return {'id':i,'raw_signal':{'models':{'prebreakout':{'status':'captured',
+                   'feature_names':['Trend10D%'],'feature_values':[0],'default_mask':[mask]}}}}
+        result=Q.report(rows,[raw(0,False),raw(1,True),raw(2,None)],numeric_features=['trend_10d_pct'],categorical_features=[])
+        self.assertEqual(result['recorded_input_crosscheck']['trend_10d_pct']['missing_with_recorded_observed_value'],1)
+        self.assertTrue(all(r.features['trend_10d_pct'] is None for r in rows))
+
     def test_fixed_protocol_has_twenty_sessions(self):
         protocol=json.loads((ROOT/'docs/ml_forward_cohort_2026-12-23.json').read_text())
         start,end,sessions=F.validate(protocol)
