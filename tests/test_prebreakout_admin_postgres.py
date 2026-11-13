@@ -38,7 +38,7 @@ class PrebreakoutPostgresTests(unittest.TestCase):
                        "feature_names": ["rsi", "vol"], "feature_values": [32, 0], "default_mask": [False, True]}}}
                 cur.execute("INSERT INTO signal_outcomes VALUES (1,'TEST',NOW(),'opportunity','hsf_scanner',"
                             "45,12,%s,'{}'),(2,'MISSING',NOW(),'opportunity','hsf_scanner',0,'0','{}','{}')", (json.dumps(raw),))
-            with patch.object(store, "get_neon_conn", side_effect=connect):
+            with patch.object(store, "_conn", side_effect=connect):
                 result = store.summary()
                 self.assertEqual(result["model"]["target_rule"], meta["target_rule"])
                 self.assertEqual(result["model"]["calibration_method"], "isotonic")
