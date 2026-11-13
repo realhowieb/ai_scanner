@@ -507,9 +507,18 @@ class ScanAndStockApiTests(DataApiBase):
         self.accounts["prem@example.com"] = {**self.accounts["pro@example.com"], "username": "prem@example.com",
                                              "tier": "premium"}
         h = self.auth(self.login("prem@example.com").json()["access_token"])
-        top = self.client.get("/v1/scans/latest?signal=prebreakout", headers=h).json()["setups"]
-        self.assertEqual(top[0]["ticker"], "MXL")
-        self.assertEqual(top[0]["prob"], 77.0)
+        # MXL already is a setup (BreakoutScore 95): outside the model's population, so no %.
+        rows = self.client.get("/v1/scans/latest", headers=h).json()["setups"]
+        self.assertEqual(rows[0]["ticker"], "MXL")
+        self.assertIsNone(rows[0]["prob"])
+        # The PreBreakout tab lists the scan's stored near-setup candidates instead.
+        latest = {"scan_id": "s", "scanned_at": dt.datetime(2026, 9, 28, 19, 30, tzinfo=dt.timezone.utc),
+                  "model_version": "v9",
+                  "rows": [{"Ticker": "NEAR", "BreakoutScore": 5.0, "Last": 12.0, "PctChange": 0.4,
+                            "PreBreakoutProbRaw": 0.3, "PreBreakoutProb": 0.31, "PreBreakoutProb%": 31.0}]}
+        with mock.patch("db.prebreakout_candidates.load_latest", return_value=latest):
+            top = self.client.get("/v1/scans/latest?signal=prebreakout", headers=h).json()["setups"]
+        self.assertEqual([(s["ticker"], s["prob"]) for s in top], [("NEAR", 31.0)])
 
     def test_watchlist_items_carry_their_latest_scan_row(self):
         wid = self.client.post("/v1/watchlists", json={"name": "Mine"}, headers=self.h).json()["id"]
