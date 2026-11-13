@@ -28,19 +28,19 @@ _NOT_SUPERSEDED = (
 )
 
 _MODEL_SQL = (
-    "SELECT model_version, trained_at, created_at, metadata->>'dataset_version', "
-    "COALESCE(metadata->>'target_rule', metadata->>'target'), metadata->'calibration', "
-    "metadata->'calibration_map'->>'method', "
-    "COALESCE(jsonb_array_length(metadata->'calibration_map'->'x'), 0), "
-    "jsonb_array_length(feature_names) "
+    "SELECT model_version, trained_at, created_at, metadata->>'dataset_version' AS dataset_version, "
+    "COALESCE(metadata->>'target_rule', metadata->>'target') AS target_rule, metadata->'calibration' AS calibration, "
+    "metadata->'calibration_map'->>'method' AS calibration_method, "
+    "COALESCE(jsonb_array_length(metadata->'calibration_map'->'x'), 0) AS calibration_points, "
+    "jsonb_array_length(feature_names) AS feature_count "
     "FROM ai_confidence_models WHERE is_active = TRUE ORDER BY created_at DESC, id DESC LIMIT 1"
 )
 
 _LATEST_SQL = (
-    "SELECT s.ticker, s.ai_confidence, s.setup_score, s.raw_signal->>'hsf_score', "
-    "s.indicators->>'primary_setup', s.indicators->>'chg_pct', "
+    "SELECT s.ticker, s.ai_confidence, s.setup_score, s.raw_signal->>'hsf_score' AS hsf_score, "
+    "s.indicators->>'primary_setup' AS primary_setup, s.indicators->>'chg_pct' AS chg_pct, "
     "COALESCE(s.raw_signal->'models'->'ai_confidence'->'loaded_artifact'->>'version', "
-    "s.raw_signal->>'ai_confidence_model_version') "
+    "s.raw_signal->>'ai_confidence_model_version') AS model_version "
     "FROM signal_outcomes s WHERE s.source = 'opportunity' AND s.ai_confidence IS NOT NULL "
     "AND s.fired_at = (SELECT MAX(fired_at) FROM signal_outcomes "
     "WHERE source = 'opportunity' AND ai_confidence IS NOT NULL) "
@@ -53,9 +53,9 @@ _LATEST_AT_SQL = (
 )
 
 _LIVE_SQL = (
-    "SELECT LEAST(FLOOR(s.ai_confidence / 10.0), 9)::int AS b, COUNT(*), AVG(s.ai_confidence), "
-    "SUM(CASE WHEN s.mfe_5d >= %s AND s.mae_5d > %s THEN 1 ELSE 0 END), "
-    "SUM(CASE WHEN s.mfe_5d < %s THEN 1 ELSE 0 END) "
+    "SELECT LEAST(FLOOR(s.ai_confidence / 10.0), 9)::int AS b, COUNT(*) AS signals, AVG(s.ai_confidence) AS mean_confidence, "
+    "SUM(CASE WHEN s.mfe_5d >= %s AND s.mae_5d > %s THEN 1 ELSE 0 END) AS hits, "
+    "SUM(CASE WHEN s.mfe_5d < %s THEN 1 ELSE 0 END) AS misses "
     "FROM signal_outcomes s WHERE s.source = 'opportunity' AND s.ai_confidence IS NOT NULL "
     "AND s.fired_at >= NOW() - make_interval(days => %s) "
     "AND s.mfe_5d IS NOT NULL AND s.mae_5d IS NOT NULL "
@@ -71,8 +71,8 @@ _PENDING_SQL = (
 
 _TICKER_SQL = (
     "SELECT s.ticker, s.fired_at, s.ai_confidence, "
-    "s.raw_signal->'models'->'ai_confidence'->'feature_names', "
-    "s.raw_signal->'models'->'ai_confidence'->'feature_values' "
+    "s.raw_signal->'models'->'ai_confidence'->'feature_names' AS feature_names, "
+    "s.raw_signal->'models'->'ai_confidence'->'feature_values' AS feature_values "
     "FROM signal_outcomes s WHERE s.source = 'opportunity' AND s.ai_confidence IS NOT NULL "
     "AND UPPER(s.ticker) = %s AND s.fired_at >= NOW() - make_interval(days => 14) "
     "ORDER BY s.fired_at DESC, s.id DESC LIMIT 1"
@@ -165,7 +165,7 @@ def _conn():
 
 
 def _tables(cur) -> tuple:
-    cur.execute("SELECT to_regclass('ai_confidence_models'), to_regclass('signal_outcomes')")
+    cur.execute("SELECT to_regclass('ai_confidence_models') AS models, to_regclass('signal_outcomes') AS signals")
     row = cur.fetchone()
     return tuple(row.values()) if isinstance(row, dict) else tuple(row)
 

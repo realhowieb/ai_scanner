@@ -41,7 +41,7 @@ class MlModelsApiTests(ApiTestCase):
 
     def test_admin_only(self):
         pro = self.auth(self.login().json()["access_token"])
-        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow", "/v1/admin/ml/production", "/v1/admin/ml/production/prebreakout", "/v1/admin/ml/ai-confidence"):
+        for path in ("/v1/admin/ml/models", "/v1/admin/ml/models/1", "/v1/admin/ml/shadow", "/v1/admin/ml/production", "/v1/admin/ml/production/prebreakout", "/v1/admin/ml/ai-confidence", "/v1/admin/ml/prebreakout", "/v1/admin/ml/prebreakout/inputs/TEST"):
             self.assertEqual(self.client.get(path, headers=pro).status_code, 403, path)
             self.assertEqual(self.client.get(path).status_code, 401, path)
         r = self.client.post("/v1/admin/ml/models/1/transition", headers=pro,
@@ -57,6 +57,24 @@ class MlModelsApiTests(ApiTestCase):
         from db.ml_model_registry import RegistryUnavailable
         with mock.patch("db.ml_operations.production_confidence", side_effect=RegistryUnavailable("down")):
             self.assertEqual(self.client.get("/v1/admin/ml/production", headers=self.boss).status_code, 503)
+
+    def test_prebreakout_summary_inputs_and_failures(self):
+        value = {"model": None, "latest": {"scanned_at": None, "rows": []}, "warnings": []}
+        with mock.patch("db.prebreakout_admin.summary", return_value=value):
+            r = self.client.get("/v1/admin/ml/prebreakout", headers=self.boss)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), value)
+        from db.ml_model_registry import RegistryUnavailable
+        with mock.patch("db.prebreakout_admin.summary", side_effect=RegistryUnavailable("down")):
+            self.assertEqual(self.client.get("/v1/admin/ml/prebreakout", headers=self.boss).status_code, 503)
+        with mock.patch("db.prebreakout_admin.inputs", return_value=None):
+            self.assertEqual(self.client.get("/v1/admin/ml/prebreakout/inputs/TEST", headers=self.boss).status_code, 404)
+        with mock.patch("db.prebreakout_admin.inputs", return_value={"inputs": []}) as load:
+            r = self.client.get("/v1/admin/ml/prebreakout/inputs/TEST?scanned_at=2026-11-12T20:00:00Z", headers=self.boss)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(load.call_args.args[0], "TEST")
+        self.assertEqual(load.call_args.args[1].hour, 20)
+        self.assertEqual(self.client.get("/v1/admin/ml/prebreakout/inputs/NOT_VALID!", headers=self.boss).status_code, 422)
 
     def test_ai_confidence_summary_and_explicit_failure(self):
         value = {"model": None, "warnings": ["No active AI Confidence model in the database."],
