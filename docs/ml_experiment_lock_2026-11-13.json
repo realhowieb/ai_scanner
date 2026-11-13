@@ -1,0 +1,266 @@
+{
+  "blocking_conditions": [],
+  "code_sha": "c9768f54e077cfb3e9150e23d599cc762fcf67a9",
+  "cohort_end": "actual freeze date",
+  "cost_bps_round_trip": 20,
+  "dataset_fingerprint": "sha256:9e0d5c83aee4512c5080be858b4d0a54f4de4e5156f50fccc5477afca8d073fa",
+  "dataset_version": "hsf-ml-2026-11-13-v1",
+  "development_comparison": "Only after preflight passes; mode=evaluate, final_holdout=false, register=false",
+  "feature_sets": [
+    "production",
+    "leakage_safe"
+  ],
+  "final_holdout": false,
+  "folds": {
+    "embargo": 1,
+    "min_train": 60,
+    "min_val": 30,
+    "min_val_class": 5
+  },
+  "holdout": {
+    "min_days": 5,
+    "min_remaining_folds": 3,
+    "min_rows": 100
+  },
+  "next_workflow_mode": "preflight",
+  "parameters": {
+    "catboost": {
+      "allow_writing_files": false,
+      "depth": 5,
+      "iterations": 400,
+      "learning_rate": 0.05,
+      "loss_function": "Logloss",
+      "random_seed": 20261103,
+      "thread_count": 1,
+      "verbose": false
+    },
+    "lightgbm": {
+      "colsample_bytree": 0.9,
+      "deterministic": true,
+      "force_col_wise": true,
+      "learning_rate": 0.05,
+      "max_depth": 5,
+      "min_child_samples": 20,
+      "n_estimators": 400,
+      "n_jobs": 1,
+      "num_leaves": 15,
+      "objective": "binary",
+      "random_state": 20261103,
+      "subsample": 0.9,
+      "subsample_freq": 1,
+      "verbose": -1
+    },
+    "xgboost": {
+      "colsample_bytree": 0.9,
+      "eval_metric": "auc",
+      "learning_rate": 0.05,
+      "max_depth": 5,
+      "n_estimators": 400,
+      "n_jobs": 1,
+      "objective": "binary:logistic",
+      "random_state": 20261103,
+      "subsample": 0.9,
+      "tree_method": "hist"
+    }
+  },
+  "primary_target": {
+    "definition": "Reaches +4% and never touches -2% over five trading days (MFE_5d >= +4%, MAE_5d > -2%). This is an order-free proxy for '+4% before -2%', not a measurement of which price was reached first.",
+    "horizon_days": 5,
+    "label": "F_clean_path_5d"
+  },
+  "proposed_cohort_start": "2026-09-14",
+  "providers": [
+    "xgboost",
+    "lightgbm",
+    "catboost"
+  ],
+  "register": false,
+  "status": "CANDIDATE_LOCKED_FINAL_TEST_UNOPENED",
+  "selection_rule": {
+    "primary": "pooled out-of-fold raw ROC-AUC descending",
+    "tie_breakers": [
+      "raw Brier ascending",
+      "provider xgboost, lightgbm, catboost",
+      "feature_set leakage_safe, production"
+    ],
+    "invalid_folds": "reject recipe",
+    "automatic_promotion": false
+  },
+  "code_sha_note": "Pin actual reviewed run revision after merge; parameters predeclared November 6",
+  "freeze_run": 43460876949,
+  "freeze_created_at": "2026-11-13T16:16:00.876473Z",
+  "observation_count": 3204,
+  "locked_at": "2026-11-13T16:25:03.626787+00:00",
+  "binding": {
+    "cost_bps": 20.0,
+    "dataset_fingerprint": "sha256:9e0d5c83aee4512c5080be858b4d0a54f4de4e5156f50fccc5477afca8d073fa",
+    "dataset_version": "hsf-ml-2026-11-13-v1",
+    "engine_version": "hsf-ml-v4-1",
+    "evaluation_version": "hsf-ml-v4-eval-2",
+    "feature_sets": [
+      "leakage_safe",
+      "production"
+    ],
+    "fold_spec": {
+      "embargo": 1,
+      "min_train": 60,
+      "min_val": 30,
+      "min_val_class": 5
+    },
+    "git_sha": "c9768f54e077cfb3e9150e23d599cc762fcf67a9",
+    "holdout_spec": {
+      "min_days": 5,
+      "min_remaining_folds": 3,
+      "min_rows": 100
+    },
+    "library_versions": {
+      "catboost": "1.2.10",
+      "lightgbm": "4.7.0",
+      "numpy": "2.5.1",
+      "scikit-learn": "1.9.0",
+      "xgboost": "3.3.0"
+    },
+    "providers": {
+      "catboost": {
+        "allow_writing_files": false,
+        "depth": 5,
+        "iterations": 400,
+        "learning_rate": 0.05,
+        "loss_function": "Logloss",
+        "random_seed": 20261103,
+        "thread_count": 1,
+        "verbose": false
+      },
+      "lightgbm": {
+        "colsample_bytree": 0.9,
+        "deterministic": true,
+        "force_col_wise": true,
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "min_child_samples": 20,
+        "n_estimators": 400,
+        "n_jobs": 1,
+        "num_leaves": 15,
+        "objective": "binary",
+        "random_state": 20261103,
+        "subsample": 0.9,
+        "subsample_freq": 1,
+        "verbose": -1
+      },
+      "xgboost": {
+        "colsample_bytree": 0.9,
+        "eval_metric": "auc",
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "n_estimators": 400,
+        "n_jobs": 1,
+        "objective": "binary:logistic",
+        "random_state": 20261103,
+        "subsample": 0.9,
+        "tree_method": "hist"
+      }
+    },
+    "served_ai_sha256": "sha256:99410660eeea131c70dd775c7da27d960d72670659c11a72fa7c7615f24aefb0",
+    "target": {
+      "horizon_days": 5,
+      "label": "F_clean_path_5d"
+    },
+    "train_ids_sha256": "9a953531ba96387c42474a089b59b4c91232a0c80f363662542d4fbfe48c2caf",
+    "training_slice_fingerprint": "sha256:78a1c6a444ef4a0e984fd0e248eb2c85d4abaf0bf418f5313af0aad8d5227187"
+  },
+  "preflight_run": 43461299881,
+  "training_run": 43461579653,
+  "development_run": 43461865127,
+  "development_report_sha256": "d4dde26f6842101dcbee8e0e53cd064b2b5708dd76913b105c9f3cfb0b75bd5c",
+  "ranking": [
+    {
+      "name": "lightgbm_production",
+      "provider": "lightgbm",
+      "feature_set": "production",
+      "auc": 0.566,
+      "brier": 0.2041,
+      "ci95": {
+        "high": 0.6259,
+        "low": 0.494,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    },
+    {
+      "name": "catboost_production",
+      "provider": "catboost",
+      "feature_set": "production",
+      "auc": 0.5207,
+      "brier": 0.2065,
+      "ci95": {
+        "high": 0.5957,
+        "low": 0.4436,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    },
+    {
+      "name": "xgboost_production",
+      "provider": "xgboost",
+      "feature_set": "production",
+      "auc": 0.5106,
+      "brier": 0.2105,
+      "ci95": {
+        "high": 0.5781,
+        "low": 0.44,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    },
+    {
+      "name": "lightgbm_leakage_safe",
+      "provider": "lightgbm",
+      "feature_set": "leakage_safe",
+      "auc": 0.4676,
+      "brier": 0.2565,
+      "ci95": {
+        "high": 0.5424,
+        "low": 0.3834,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    },
+    {
+      "name": "catboost_leakage_safe",
+      "provider": "catboost",
+      "feature_set": "leakage_safe",
+      "auc": 0.464,
+      "brier": 0.2481,
+      "ci95": {
+        "high": 0.5397,
+        "low": 0.3889,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    },
+    {
+      "name": "xgboost_leakage_safe",
+      "provider": "xgboost",
+      "feature_set": "leakage_safe",
+      "auc": 0.4452,
+      "brier": 0.263,
+      "ci95": {
+        "high": 0.5248,
+        "low": 0.3662,
+        "method": "entry-day block bootstrap, 1000 resamples"
+      }
+    }
+  ],
+  "selected_model": {
+    "artifact_bytes": 454790,
+    "artifact_file": "ml-v4-lightgbm-production-f5d-a3c03ded9b72.joblib",
+    "artifact_sha256": "6d7223e8f8bbd8946490b96b06504058a1a267a6cfa0ee5b0b74365beeb0900b",
+    "feature_set": "production",
+    "model_version": "ml-v4-lightgbm-production-f5d-a3c03ded9b72",
+    "provider": "lightgbm",
+    "training_seconds": 0.095
+  },
+  "final_test_status": "UNOPENED",
+  "selection_note": "Selected solely by the November 6 predeclared single-model ranking. No recipe changes or final-test selection.",
+  "limitations": [
+    "Development AUC confidence interval includes chance.",
+    "Development top-third net returns are negative.",
+    "No usable development folds for AI Confidence as-served comparison.",
+    "Target is a clean-path extrema proxy, not first-hit order."
+  ]
+}
