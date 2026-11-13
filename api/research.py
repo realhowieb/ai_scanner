@@ -23,14 +23,14 @@ def _bounds(start: dt.date, end: dt.date) -> tuple:
             dt.datetime(end.year, end.month, end.day, tzinfo=utc) + dt.timedelta(days=1))
 
 
-def load_window(start: dt.date, end: dt.date) -> Dict[str, Any]:
+def load_window(start: dt.date, end: dt.date, *, ids=None) -> Dict[str, Any]:
     """Rows, scan records and built records for one date window (uncached)."""
     from db.research_datasets import ResearchDataUnavailable, fetch_opportunity_rows, fetch_scan_records
 
     t0 = time.perf_counter()
     lo, hi = _bounds(start, end)
     try:
-        rows = fetch_opportunity_rows(lo, hi)
+        rows = fetch_opportunity_rows(lo, hi, ids=ids) if ids is not None else fetch_opportunity_rows(lo, hi)
         t1 = time.perf_counter()
         scans = fetch_scan_records({r.get("ticker") for r in rows}, lo - rd.MAX_SCAN_LAG - dt.timedelta(hours=1), hi)
     except ResearchDataUnavailable as e:

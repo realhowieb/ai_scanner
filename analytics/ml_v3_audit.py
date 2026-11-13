@@ -86,10 +86,10 @@ FEATURE_GROUPS: Dict[str, Tuple[str, ...]] = {
     "market_context": ("rs_vs_spy",),
     "price_level": ("price",),
 }
-# Categories the run spec names that HSF never stored (reported, not run).
+# Categories not exposed in the current versioned feature matrix (reported, not run).
 MISSING_GROUPS = {
-    "rsi": "RSI-14 is never computed by scheduled scans or persisted (research_schema.UNAVAILABLE_FEATURES).",
-    "market_regime": "No regime/breadth/VIX value is frozen at observation time.",
+    "rsi": "RSI-14 is captured in newer scheduled research metadata but not exposed by schema v1.",
+    "market_regime": "SPY/SMA20 regime is captured in newer research metadata but not exposed by schema v1; breadth/VIX history is unavailable.",
 }
 
 # Features the production AI Confidence model uses, mapped to research columns.

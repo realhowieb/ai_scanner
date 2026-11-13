@@ -1,0 +1,12 @@
+{
+  "dataset_version": "hsf-ml-2026-11-13-v1",
+  "frozen_at": "2026-11-13 16:16:00.876473+00:00",
+  "development_start": "2026-09-14",
+  "development_end_exclusive": "2026-10-22",
+  "expected_rows": 1003,
+  "expected_train_ids_sha256": "9a953531ba96387c42474a089b59b4c91232a0c80f363662542d4fbfe48c2caf",
+  "expected_slice_fingerprint": "sha256:78a1c6a444ef4a0e984fd0e248eb2c85d4abaf0bf418f5313af0aad8d5227187",
+  "original_training_run": 43461579653,
+  "original_development_run": 43461865127,
+  "rule": "Use original development/training population only. Never load final-test rows or future reserved outcomes."
+}

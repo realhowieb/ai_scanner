@@ -1,0 +1,21 @@
+{
+  "cohort_id": "hsf-forward-2026-12-23-v1",
+  "observation_start": "2026-12-23T00:00:00+00:00",
+  "observation_end_exclusive": "2027-01-23T00:00:00+00:00",
+  "evaluation_not_before": "2027-02-02T14:30:00+00:00",
+  "session_count": 20,
+  "minimum_matured_signal_days_at_evaluation": 300,
+  "source": "opportunity",
+  "signal_type": "hsf_scanner",
+  "unit": "first observation per ticker and UTC observation day",
+  "target": "PENDING_DEVELOPMENT_LOCK",
+  "target_definition": "One primary target and recipe must be locked on development data before the test starts; no outcome-based switching.",
+  "selection": "All saved public Scanner picks in the fixed trading-day window; no outcome or score threshold filter",
+  "stopping_rule": "Fixed end, never extend or shrink based on results. If sample is insufficient, report inconclusive.",
+  "outcome_access": "Collector never reads outcomes. Development loaders exclude the entire reserved time interval before reading outcomes. Future evaluation requires a separate locked recipe and explicit release implementation.",
+  "model_policy": "Keep production AI Confidence unchanged. Lock target, feature schema, model, parameters and evaluation settings by December 22 before test starts; no automatic evaluation.",
+  "development_collection_start": "2026-11-16",
+  "development_collection_end_inclusive": "2026-12-14",
+  "collector_contract": "prediction-fields-v1",
+  "amendment": "Before registration or collection: November 13 capture audit found only 10 RSI/regime days from November 2. User prioritized new inputs. First 20 fresh sessions are development, followed by a separate future test after label maturity and embargo. No forward outcomes were inspected."
+}

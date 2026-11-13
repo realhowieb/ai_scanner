@@ -46,10 +46,13 @@ def _now() -> dt.datetime:
 
 def load_rows():
     """SELECT only: the same window + benchmark times the trainer reads."""
-    from api.research import load_window
+    from api.research import _bounds, load_window
+    from db.ml_forward_cohorts import development_ids
     from scripts.ml_v4_train import EARLIEST, _benchmark_computed_at
 
-    window = load_window(EARLIEST, _now().date())
+    lo, hi = _bounds(EARLIEST, _now().date())
+    allowed = development_ids(lo, hi)  # identities only; never read reserved outcomes
+    window = load_window(EARLIEST, _now().date(), ids=allowed)
     bca = _benchmark_computed_at([r["id"] for r in window["rows"]])
     rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
     return rows, window["scans"]

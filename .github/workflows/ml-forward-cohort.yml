@@ -1,0 +1,41 @@
+name: ML Forward Cohort Collection
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Register the prospective protocol once, or collect prediction-only members
+        type: choice
+        default: collect
+        options: [collect, register]
+  schedule:
+    - cron: '50 23 * * 1-5'
+permissions:
+  contents: read
+concurrency:
+  group: ml-forward-cohort
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: python -m pip install --prefer-binary -r requirements-core.txt -c requirements.lock
+      - name: Collect identities and prediction inputs only
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: 'false'
+          MODE: ${{ inputs.mode || 'collect' }}
+        run: |
+          if [ "$MODE" = register ]; then
+            python scripts/ml_forward_cohort.py --register
+          else
+            python scripts/ml_forward_cohort.py
+          fi
