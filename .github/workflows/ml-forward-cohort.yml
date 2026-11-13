@@ -8,7 +8,7 @@ on:
         default: collect
         options: [collect, register]
   schedule:
-    - cron: '50 13-23 * * 1-5'
+    - cron: '50 23 * * 1-5'
 permissions:
   contents: read
 concurrency:

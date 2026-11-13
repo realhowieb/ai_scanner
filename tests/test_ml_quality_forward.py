@@ -39,12 +39,12 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(report['provenance']['prebreakout']['features']['x']['defaulted'],1)
 
     def test_fixed_protocol_has_twenty_sessions(self):
-        protocol=json.loads((ROOT/'docs/ml_forward_cohort_2026-11-16.json').read_text())
+        protocol=json.loads((ROOT/'docs/ml_forward_cohort_2026-12-23.json').read_text())
         start,end,sessions=F.validate(protocol)
         self.assertEqual(len(sessions),20)
-        self.assertNotIn('2026-11-26',sessions)
-        self.assertEqual(sessions[0],'2026-11-16')
-        self.assertEqual(sessions[-1],'2026-12-14')
+        self.assertNotIn('2026-12-25',sessions)
+        self.assertEqual(sessions[0],'2026-12-23')
+        self.assertEqual(sessions[-1],'2027-01-22')
         self.assertLess(start,end)
 
     def test_scope_rejects_outside_boundary_before_building_features(self):

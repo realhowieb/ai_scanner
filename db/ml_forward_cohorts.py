@@ -13,14 +13,21 @@ def canonical(protocol):
 
 
 def validate(protocol):
-    from analytics.market_calendar import is_trading_day
+    from analytics.market_calendar import calendar_covered, is_trading_day
+
+    if protocol.get("collector_contract") != "prediction-fields-v1":
+        raise ValueError("Unknown collector contract")
 
     start, end, release = (dt.datetime.fromisoformat(protocol[k]) for k in
                           ("observation_start", "observation_end_exclusive", "evaluation_not_before"))
     if any(d.tzinfo is None for d in (start, end, release)) or not start < end < release:
         raise ValueError("Cohort needs ordered timezone-aware start, end and earliest evaluation times")
+    if any(d.utcoffset() != dt.timedelta(0) or d.time() != dt.time(0) for d in (start,end)):
+        raise ValueError("Collection boundaries must be full UTC days")
     sessions, day = [], start.date()
     while day < end.date():
+        if not calendar_covered(day):
+            raise ValueError("Cohort extends beyond the reviewed exchange calendar")
         if is_trading_day(day):
             sessions.append(day.isoformat())
         day += dt.timedelta(days=1)

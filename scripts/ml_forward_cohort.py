@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--register", action="store_true", help="Explicitly write the prospective protocol before its start")
-    parser.add_argument("--protocol", default=str(ROOT / "docs/ml_forward_cohort_2026-11-16.json"))
+    parser.add_argument("--protocol", default=str(ROOT / "docs/ml_forward_cohort_2026-12-23.json"))
     args = parser.parse_args()
     from db import ml_forward_cohorts as store
 

@@ -25,7 +25,13 @@ def main():
                         "GROUP BY 1,2 ORDER BY 1,2",('2026-09-14T00:00:00Z','2026-11-16T00:00:00Z'))
             names=[c[0] for c in cur.description]
             rows=[dict(r) if isinstance(r,dict) else dict(zip(names,r)) for r in cur.fetchall()]
-        print(json.dumps({'outcomes_read':False,'coverage':rows},indent=2,default=str))
+            cur.execute("SELECT record->'research_metadata'->>'market_regime_at_observation' AS regime,COUNT(*) AS observations "
+                        "FROM hsf_observations WHERE context LIKE 'scheduled:%%' AND timestamp>=%s AND timestamp<%s "
+                        "AND record->'research_metadata'->>'market_regime_at_observation' IS NOT NULL GROUP BY 1 ORDER BY 1",
+                        ('2026-09-14T00:00:00Z','2026-11-16T00:00:00Z'))
+            names=[c[0] for c in cur.description]
+            regimes=[dict(r) if isinstance(r,dict) else dict(zip(names,r)) for r in cur.fetchall()]
+        print(json.dumps({'outcomes_read':False,'coverage':rows,'regimes':regimes},indent=2,default=str))
     finally:
         conn.close()
 
