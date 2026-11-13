@@ -57,7 +57,7 @@ scipy==1.18.0
 sentry-sdk==2.65.0
 six==1.17.0
 sniffio==1.3.1
-soupsieve==2.9
+soupsieve==4.0.0
 SQLAlchemy==2.0.51
 sseclient-py==1.9.0
 tenacity==9.1.4

@@ -17,6 +17,8 @@ requests>=2.31,<3
 lxml>=5.0
 html5lib>=1.1,<2
 beautifulsoup4>=4.12,<5
+# Fix selector denial-of-service advisories CVE-2026-126190 / CVE-2026-126192.
+soupsieve>=4.0,<5
 
 # Password hashing (API sign-in, account seeding).
 bcrypt>=4.0,<5
