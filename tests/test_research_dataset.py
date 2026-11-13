@@ -190,11 +190,11 @@ class SchemaVersionTest(unittest.TestCase):
         self.assertEqual(rs.FEATURE_SCHEMA_VERSION, 1)
         self.assertEqual(rs.LABEL_SCHEMA_VERSION, 1)
         with self.assertRaises(ValueError):
-            rs.feature_schema(2)
+            rs.feature_schema(3)
         with self.assertRaises(ValueError):
             rs.label_schema(99)
         with self.assertRaises(ValueError):
-            rd.build_dataset([], [], feature_schema_version=2)
+            rd.build_dataset([], [], feature_schema_version=3)
 
     def test_v1_feature_set_is_frozen(self):
         """Changing schema v1 must be deliberate: bump the version instead."""

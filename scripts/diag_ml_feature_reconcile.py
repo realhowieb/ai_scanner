@@ -22,7 +22,6 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
-import statistics
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path

@@ -1,0 +1,36 @@
+{
+  "protocol_id": "hsf-feature-comparison-2026-12-v1",
+  "registered": "2026-11-13",
+  "question": "On development data, do RSI-14 and/or the SPY/SMA20 regime improve on the six repaired core inputs consistently across weeks?",
+  "status": "PREDECLARED_NOT_RUN",
+  "dataset": "A new frozen research dataset with feature_schema_version 2, observations 2026-09-14 to 2026-12-14 (UTC days), frozen on 2026-12-22 once the last 5-day window (Dec 14 entries, closing Dec 21) has matured; the comparison runs and the recipe is locked the same day. Name recorded here when frozen.",
+  "dataset_version": null,
+  "development_start": "2026-09-14",
+  "development_end_inclusive": "2026-12-14",
+  "reserved_start": "2026-12-23",
+  "unit": "signal_day",
+  "target": "F_clean_path_5d",
+  "horizon": 5,
+  "feature_schema_version": 2,
+  "model": {"provider": "lightgbm", "params": "analytics.ml_v4_providers.DEFAULT_PARAMS['lightgbm'], unchanged, no tuning"},
+  "arms": {
+    "core_v2": "6 core inputs; an input empty after the scan join is filled from the pick's own prediction record (verified 2026-11-13, Diagnostics run 43525855904)",
+    "core_rsi_v2": "core_v2 + rsi_14",
+    "core_regime_v2": "core_v2 + spy_vs_sma20_pct + spy_above_sma20",
+    "core_rsi_regime_v2": "core_v2 + rsi_14 + spy_vs_sma20_pct + spy_above_sma20"
+  },
+  "periods": {
+    "validation_block": "ISO week (entry days)",
+    "first_validation_day": "2026-11-09",
+    "training": "every earlier signal-day row whose 5-day window closed before the week, with a 1 trading-day embargo; identical rows for all arms",
+    "embargo_trading_days": 1,
+    "min_validation_rows": 30,
+    "min_validation_per_class": 5,
+    "min_training_rows": 60
+  },
+  "check_run": {"train_from": "2026-11-02", "purpose": "RSI/regime are empty before 2026-11-02. An addition's mean gain must stay above zero when training starts on that day, so 'missing = older data' cannot pass as signal."},
+  "metric": "AUC per validation week (primary). Within-day AUC is reported, not decisive.",
+  "keep_rule": {"min_weeks": 4, "min_share_of_weeks_better": 0.667, "min_mean_auc_gain": 0.01},
+  "selection": "Additions failing the rule are dropped. If RSI+regime passes and a single addition passes, the combination must also pass against the better single addition, otherwise the single addition with the larger mean gain is kept. If nothing passes, the recipe is core_v2.",
+  "not_decided_here": "Whether the locked recipe beats production. That is the separate untouched test from 2026-12-23 (hsf-forward-2026-12-23-v1)."
+}

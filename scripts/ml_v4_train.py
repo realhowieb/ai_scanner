@@ -107,7 +107,8 @@ def load_audit_rows(dataset_version: str | None) -> dict:
     bca = _benchmark_computed_at([r["id"] for r in window["rows"]])
     rows = [{**r, "benchmark_computed_at": bca.get(int(r["id"]))} for r in window["rows"]]
     rows_asof = V3.as_of(rows, frozen_at)
-    built = rd.build_dataset(rows_asof, window["scans"], filters=meta.get("filters") or {}, members=members)
+    built = rd.build_dataset(rows_asof, window["scans"], filters=meta.get("filters") or {}, members=members,
+                             feature_schema_version=int(entry.get("feature_schema_version") or 1))
     from analytics.ml_v4_preflight import verify_dataset
 
     verify_dataset(entry, built)

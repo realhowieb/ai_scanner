@@ -23,6 +23,22 @@ on:
         description: "Type FREEZE to allow mode=freeze"
         required: false
         default: ""
+      feature_schema_version:
+        description: "Research feature schema: 1 (original) or 2 (repaired core inputs + RSI/regime)"
+        required: false
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+      start:
+        description: "First UTC observation day (YYYY-MM-DD, blank = 2026-09-14)"
+        required: false
+        default: ""
+      end:
+        description: "Last UTC observation day (YYYY-MM-DD, blank = today)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -53,13 +69,19 @@ jobs:
           AI_SCANNER_SQLITE_FALLBACK: "false"
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm }}
+          FSV: ${{ inputs.feature_schema_version }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
         run: |
+          args=(--feature-schema-version "${FSV:-1}")
+          if [ -n "$START" ]; then args+=(--start "$START"); fi
+          if [ -n "$END" ]; then args+=(--end "$END"); fi
           if [ "$MODE" = "freeze" ]; then
             if [ "$CONFIRM" != "FREEZE" ]; then
               echo 'mode=freeze needs confirm=FREEZE; nothing written.'
               exit 1
             fi
-            python scripts/ml_freeze_dataset.py --freeze FREEZE
+            python scripts/ml_freeze_dataset.py "${args[@]}" --freeze FREEZE
           else
-            python scripts/ml_freeze_dataset.py
+            python scripts/ml_freeze_dataset.py "${args[@]}"
           fi
