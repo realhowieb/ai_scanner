@@ -23,11 +23,17 @@ For the 407 development rows carrying captured PreBreakout provenance, many hist
 
 The correct conclusion is that the evaluated recipe did not validate on this dataset. These results do not establish that the underlying inputs can never predict the target. Historical gaps must not be filled with present-day information.
 
+## Prediction-time input cross-check
+
+The [follow-up development-only audit](https://github.com/realhowieb/ai_scanner/actions/runs/43496346130) found, **for each of the six core inputs**, 169 rows where the canonical feature is missing but an observed, non-defaulted value exists in the captured PreBreakout input vector. Another 238 rows overlap. Five fields have two disagreements in that overlap; scan gap has none.
+
+This identifies a reader/source-contract issue worth investigating before adding more estimators. It does not authorize blind filling: establish exact source, scan identity, timing and units, resolve the disagreements, then define a separate versioned development feature recipe. No values were filled and no model was refitted for this cross-check.
+
 ## New inputs
 
 An [observation-only capture audit](https://github.com/realhowieb/ai_scanner/actions/runs/43494616299) found RSI and SPY/SMA20 regime capture beginning November 2, across 10 trading days as of November 13. All 2,800 CANDIDATE observations in that period contain both fields. Across CANDIDATE, CONTROL and NEAR_MISS, RSI exists on 6,998 of 7,000 observations and regime on all 7,000.
 
-These fields live in immutable scheduled research metadata. They are **not** currently in the ML v4 feature schema/Encoder. A versioned reader/feature-set change and development-only ablation are needed before a challenger can use them. Their existence or 20 days of coverage is not evidence of predictive value. Existing research-schema comments that RSI/regime are never persisted predate this capture path.
+These fields live in immutable scheduled research metadata. They are **not** currently in the ML v4 feature schema/Encoder. A versioned reader/feature-set change and development-only ablation are needed before a challenger can use them. Their existence or 20 days of coverage is not evidence of predictive value. The stale schema/audit descriptions have been corrected. The feature schema itself remains v1 and no new training input is silently added.
 
 ## Agreed prospective protocol
 
@@ -48,3 +54,10 @@ Registration is insert-once and must precede the window. The collector stores al
 The entire reserved time interval is quarantined from development before outcome reads, even if the collector has not run yet. The ML v4 loader reads only frozen membership instead of the entire database window; new development freezes exclude reserved IDs using identities and timestamps only. No automatic release or evaluation path is implemented. A future explicit release must verify a pre-test candidate/target lock, adequate maturity and the durable final-test ledger before outcome access. Do not use unrelated admin/outcome tools to peek at this cohort for model selection.
 
 `ML Forward Cohort Collection` runs daily at 23:50 UTC on weekdays once deployed to main; fixed membership boundaries are enforced in the database code. Registration is a separate explicit manual action. It does not change scores, alerts, plans or production models.
+
+## Prioritized development work
+
+1. Reconcile canonical scan joins with genuinely captured model inputs, including the two overlap disagreements. Keep unknown/defaulted values distinct and never substitute present-day data.
+2. Add RSI and versioned SPY/SMA20 context through an explicit research schema/feature set, with coverage and as-of tests. Do not change production scoring.
+3. Compare predeclared feature groups on the fresh development period, including within-day ranking and a time/base-rate baseline. Changing capture completeness can otherwise masquerade as predictive signal in pooled metrics.
+4. Lock one target and recipe before December 23. Only after the untouched period matures and access is explicitly reviewed should the final-test ledger be used again, on the new cohort only.
