@@ -53,8 +53,6 @@ class CronSaveTests(unittest.TestCase):
     def test_scores_and_saves_candidates_model_order(self):
         import datetime as dt
 
-        import pandas as pd
-
         from scheduler import cron_runner
 
         def fake_score(df):

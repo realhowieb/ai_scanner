@@ -25,7 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import ml_prebreakout as mp  # noqa: E402
