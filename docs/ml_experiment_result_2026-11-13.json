@@ -1,0 +1,126 @@
+{
+  "status": "FINAL_EVALUATION_COMPLETED_NO_ADVANCEMENT",
+  "completed_at": "2026-11-13T16:29:41.252371+00:00",
+  "lock_commit": "625aee8e",
+  "candidate": "lightgbm_production",
+  "dataset_version": "hsf-ml-2026-11-13-v1",
+  "final_run": 43462622239,
+  "holdout_claim": "b58e4a0cdf5563bebf5273f6813c51aeb1e8ed8f5702485d1be7663adcf30946",
+  "evaluation_binding": {
+    "cost_bps": 20.0,
+    "dataset_fingerprint": "sha256:9e0d5c83aee4512c5080be858b4d0a54f4de4e5156f50fccc5477afca8d073fa",
+    "dataset_version": "hsf-ml-2026-11-13-v1",
+    "engine_version": "hsf-ml-v4-1",
+    "evaluation_version": "hsf-ml-v4-eval-2",
+    "feature_sets": [
+      "leakage_safe",
+      "production"
+    ],
+    "fold_spec": {
+      "embargo": 1,
+      "min_train": 60,
+      "min_val": 30,
+      "min_val_class": 5
+    },
+    "git_sha": "c9768f54e077cfb3e9150e23d599cc762fcf67a9",
+    "holdout_spec": {
+      "min_days": 5,
+      "min_remaining_folds": 3,
+      "min_rows": 100
+    },
+    "library_versions": {
+      "catboost": "1.2.10",
+      "lightgbm": "4.7.0",
+      "numpy": "2.5.1",
+      "scikit-learn": "1.9.0",
+      "xgboost": "3.3.0"
+    },
+    "providers": {
+      "catboost": {
+        "allow_writing_files": false,
+        "depth": 5,
+        "iterations": 400,
+        "learning_rate": 0.05,
+        "loss_function": "Logloss",
+        "random_seed": 20261103,
+        "thread_count": 1,
+        "verbose": false
+      },
+      "lightgbm": {
+        "colsample_bytree": 0.9,
+        "deterministic": true,
+        "force_col_wise": true,
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "min_child_samples": 20,
+        "n_estimators": 400,
+        "n_jobs": 1,
+        "num_leaves": 15,
+        "objective": "binary",
+        "random_state": 20261103,
+        "subsample": 0.9,
+        "subsample_freq": 1,
+        "verbose": -1
+      },
+      "xgboost": {
+        "colsample_bytree": 0.9,
+        "eval_metric": "auc",
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "n_estimators": 400,
+        "n_jobs": 1,
+        "objective": "binary:logistic",
+        "random_state": 20261103,
+        "subsample": 0.9,
+        "tree_method": "hist"
+      }
+    },
+    "served_ai_sha256": "sha256:99410660eeea131c70dd775c7da27d960d72670659c11a72fa7c7615f24aefb0",
+    "target": {
+      "horizon_days": 5,
+      "label": "F_clean_path_5d"
+    },
+    "train_ids_sha256": "9a953531ba96387c42474a089b59b4c91232a0c80f363662542d4fbfe48c2caf",
+    "training_slice_fingerprint": "sha256:78a1c6a444ef4a0e984fd0e248eb2c85d4abaf0bf418f5313af0aad8d5227187"
+  },
+  "final_report_sha256": "720a71c32b6e359d7925a32a553eddb0ac40c3afbaf63b7b21413e8f92e88871",
+  "development_auc": 0.566,
+  "holdout": {
+    "evaluated": true,
+    "reason": null,
+    "rows": 186,
+    "start": "2026-10-30",
+    "valid": true
+  },
+  "candidate_raw": {
+    "n": 186,
+    "positive_rate": 0.1882,
+    "roc_auc": 0.5323,
+    "roc_auc_ci95": {
+      "high": 0.6098,
+      "low": 0.4603,
+      "method": "entry-day block bootstrap, 1000 resamples"
+    },
+    "pr_auc": 0.2174,
+    "brier": 0.2463,
+    "ece": 0.2417
+  },
+  "candidate_calibrated": {
+    "roc_auc": 0.5314,
+    "brier": 0.1813,
+    "ece": 0.1117
+  },
+  "baseline_raw": {
+    "roc_auc": 0.5,
+    "brier": 0.1581,
+    "ece": 0.073
+  },
+  "decision": "Do not register, shadow, or promote this candidate on the current evidence. Production unchanged.",
+  "limitations": [
+    "Candidate AUC interval includes 0.5.",
+    "Calibrated Brier remains worse than the simple baseline.",
+    "Development net returns were negative; the report does not provide final-test strategy returns.",
+    "Served-confidence development comparison has zero folds. Its final comparison retrains challengers on 147 recent matched training rows, not the locked artifact's 1003 rows.",
+    "Final test is consumed: do not retune recipes on it or choose an alternative using these final results."
+  ]
+}
