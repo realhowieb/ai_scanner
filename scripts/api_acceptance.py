@@ -194,6 +194,10 @@ def journey(run: Run, s: Dict[str, Any], allow_writes: bool) -> None:
         run.check(A, "AI Confidence evidence shape", isinstance(evidence.get("latest", {}).get("rows"), list)
                   and isinstance(evidence.get("live", {}).get("buckets"), list), "latest rows and live calibration")
 
+    prebreakout = run.req("GET", "/v1/admin/ml/prebreakout", headers=h)
+    run.check(A, "PreBreakout admin evidence", prebreakout.status_code == (200 if tier == "admin" else 403),
+              f"HTTP {prebreakout.status_code}")
+
     r = run.req("GET", "/v1/scans/latest?limit=200", headers=h)
     scan = _strict_json(r.text)
     setups = scan.get("setups", [])

@@ -10,6 +10,7 @@ import type { FormEvent, ReactNode } from "react";
 import { api, unwrap } from "@/api/client";
 import { Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton } from "@/components/ui";
+import { PrebreakoutCard } from "@/features/AdminPrebreakout";
 import { frac } from "@/features/AdminAnalytics";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
@@ -379,6 +380,7 @@ export function ModelsTab() {
     <div className="stack">
       <p className="notice">PreBreakout and AI Confidence are separate production scorers. ML v4 challengers (XGBoost, LightGBM, CatBoost and ensembles) are tested here first. AI Confidence keeps using the production model until a separate, explicit decision wires a champion in.</p>
       <AiConfidenceCard />
+      <PrebreakoutCard />
       <ModelSummary />
       <ProductionCaptureHealth />
       <MlNextSteps />
