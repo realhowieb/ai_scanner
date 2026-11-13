@@ -90,5 +90,20 @@ class PlanLimitInputs(unittest.TestCase):
                 run.http.close()
 
 
+@unittest.skipUnless(HAS_HTTPX, "needs httpx")
+class PrebreakoutDisplayContract(unittest.TestCase):
+    def test_paid_setups_hide_percentages_while_candidates_can_show_them(self):
+        from api_acceptance import _prebreakout_display_ok as valid
+        setup = {"breakout_score": 12, "prob": None, "prob_rank": None, "signals": ["prebreakout"]}
+        candidate = {"breakout_score": 5, "prob": 31, "prob_rank": 90, "signals": ["prebreakout"]}
+        self.assertTrue(valid([setup, candidate], premium=True))
+        self.assertTrue(valid([{**setup, "signals": []}], premium=False))
+        self.assertFalse(valid([{**setup, "prob": 31}], premium=True))
+        self.assertFalse(valid([candidate], premium=False))
+        self.assertFalse(valid([setup], premium=False))
+        self.assertFalse(valid([{**candidate, "prob": float("nan")}], premium=True))
+        self.assertTrue(valid([], premium=True))
+
+
 if __name__ == "__main__":
     unittest.main()
