@@ -98,7 +98,7 @@ def test_prebreakout_redaction_preserves_hsf_score_and_nonpremium_evidence():
         "signals": ["prebreakout", "gapper"], "n_signals": 2,
         "primary_setup": "PreBreakout", "prob": 72.0, "prob_raw": 0.4, "prob_rank": 3,
         "reasons": ["PreBreakout setup probability 72%", "Gap +3%"],
-        "model": {"breakout_score": 12.0, "prebreakout_prob": 72.0},
+        "model": {"breakout_score": 6.0, "prebreakout_prob": 72.0},
     }
     hidden = redact_prebreakout_opportunity(opportunity, allowed=False)
     shown = redact_prebreakout_opportunity(opportunity, allowed=True)
@@ -107,7 +107,7 @@ def test_prebreakout_redaction_preserves_hsf_score_and_nonpremium_evidence():
     assert hidden["primary_setup"] == "Gapper"
     assert hidden["prob"] is None
     assert hidden["prob_raw"] is None and hidden["prob_rank"] is None
-    assert hidden["model"] == {"breakout_score": 12.0, "prebreakout_prob": None}
+    assert hidden["model"] == {"breakout_score": 6.0, "prebreakout_prob": None}
     assert hidden["reasons"] == ["Gap +3%"]
     assert shown == opportunity
 
@@ -150,3 +150,18 @@ def test_frozen_scoring_and_research_core_not_part_of_run85f_surface_changes():
         "billing_service/realtime_alerts.py",
     }
     assert guarded.isdisjoint(touched)
+
+
+def test_prebreakout_percent_hidden_on_names_that_are_already_setups():
+    """The model only learns from not-yet-setups (BreakoutScore < 8); on a setup its % is hidden."""
+    from ui.entitlement_view import redact_prebreakout_opportunity
+
+    setup = {"ticker": "ABC", "score": 70, "breakout_score": 15.0, "prob": 30.0, "prob_raw": 0.2,
+             "prob_rank": 5, "model": {"breakout_score": 15.0, "prebreakout_prob": 30.0}}
+    near = {**setup, "ticker": "DEF", "breakout_score": 5.0, "model": {"breakout_score": 5.0, "prebreakout_prob": 30.0}}
+    shown = redact_prebreakout_opportunity(setup, allowed=True)
+    assert shown["prob"] is None and shown["prob_raw"] is None and shown["prob_rank"] is None
+    assert shown["model"]["prebreakout_prob"] is None and shown["score"] == 70
+    assert setup["prob"] == 30.0  # caller data untouched
+    kept = redact_prebreakout_opportunity(near, allowed=True)
+    assert kept["prob"] == 30.0 and kept["model"]["prebreakout_prob"] == 30.0

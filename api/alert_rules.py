@@ -233,8 +233,11 @@ def _prebreakout_candidate_matches(f: Dict[str, Any], *, min_score: float,
     from api.today import _num, market_runs
     from ui.results_intelligence import prebreakout_picks
 
-    runs = market_runs()
-    cands = prebreakout_candidates(runs[0]) if runs else None
+    try:
+        runs = market_runs()
+        cands = prebreakout_candidates(runs[0]) if runs else None
+    except Exception:
+        return None
     if not cands:
         return None
     out = []
