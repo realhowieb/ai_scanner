@@ -125,6 +125,24 @@ def register(app: FastAPI) -> None:
                           "features": found["features"], "earnings_in_days": days,
                           "explanation": text, "error": None if text else (error or "No explanation returned.")})
 
+    @get("/v1/admin/ml/prebreakout", "PreBreakout: model status, saved probabilities and training calibration")
+    def ml_prebreakout_summary(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.prebreakout_admin import summary
+
+        return json_safe(_call(summary))
+
+    @get("/v1/admin/ml/prebreakout/inputs/{ticker}", "PreBreakout: captured prediction inputs",
+         {404: {"description": "No recent saved prediction"}})
+    def ml_prebreakout_inputs(ticker: str = Path(pattern=r"^[A-Za-z0-9.\-]{1,12}$"),
+                             scanned_at: Optional[dt.datetime] = Query(None),
+                             _a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
+        from db.prebreakout_admin import inputs
+
+        found = _call(lambda: inputs(ticker, scanned_at))
+        if found is None:
+            raise HTTPException(404, "No captured PreBreakout prediction in the last 14 days.")
+        return json_safe(found)
+
     @get("/v1/admin/ml/production/prebreakout", "Production PreBreakout: configured model and latest capture")
     def ml_prebreakout_production(_a: Dict[str, Any] = Depends(_admin)) -> Dict[str, Any]:
         from db.ml_operations import production_prebreakout

@@ -23110,6 +23110,122 @@
     "x-internal": true
    }
   },
+  "/v1/admin/ml/prebreakout": {
+   "get": {
+    "operationId": "ml_prebreakout_summary_v1_admin_ml_prebreakout_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Prebreakout Summary V1 Admin Ml Prebreakout Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] PreBreakout: model status, saved probabilities and training calibration",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
+  "/v1/admin/ml/prebreakout/inputs/{ticker}": {
+   "get": {
+    "operationId": "ml_prebreakout_inputs_v1_admin_ml_prebreakout_inputs__ticker__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "pattern": "^[A-Za-z0-9.\\-]{1,12}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "scanned_at",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "format": "date-time",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Scanned At"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Ml Prebreakout Inputs V1 Admin Ml Prebreakout Inputs  Ticker  Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Admins only"
+     },
+     "404": {
+      "description": "No recent saved prediction"
+     },
+     "422": {
+      "description": "Refused by the lifecycle rules (the detail says why)"
+     },
+     "503": {
+      "description": "Registry unavailable"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "[Internal \u00b7 admin] PreBreakout: captured prediction inputs",
+    "tags": [
+     "ml models (internal, admin only)"
+    ],
+    "x-audience": "admin ml-only",
+    "x-internal": true
+   }
+  },
   "/v1/admin/ml/production": {
    "get": {
     "operationId": "ml_production_v1_admin_ml_production_get",
