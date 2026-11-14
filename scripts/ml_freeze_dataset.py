@@ -58,12 +58,13 @@ def load_rows():
     return rows, window["scans"]
 
 
-def build_as_of(rows, scans, at: dt.datetime, filters: dict, members=None):
+def build_as_of(rows, scans, at: dt.datetime, filters: dict, members=None, feature_schema_version: int = 1):
     from analytics import ml_v3_pipeline as V3
     from analytics import research_dataset as rd
 
     rows_asof = V3.as_of(rows, at)
     built = rd.build_dataset(rows_asof, scans, filters=filters, members=members,
+                             feature_schema_version=feature_schema_version,
                              code_revision=os.getenv("GITHUB_SHA"))
     return built, rows_asof
 
@@ -86,6 +87,10 @@ def _summary(built: dict) -> dict:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--start", type=dt.date.fromisoformat, default=DEFAULT_START)
+    p.add_argument("--end", type=dt.date.fromisoformat, default=None,
+                   help="last UTC observation day to include (default: today)")
+    p.add_argument("--feature-schema-version", type=int, default=1, choices=(1, 2),
+                   help="research feature schema (2 = repaired core inputs + RSI/regime)")
     p.add_argument("--freeze", default="", help=f"type {CONFIRM} to write the registry row")
     a = p.parse_args(argv)
     if a.start < DEFAULT_START:
@@ -95,12 +100,17 @@ def main(argv=None) -> int:
         raise SystemExit(f"--freeze must be exactly {CONFIRM}; nothing written.")
 
     at = _now()
-    filters = {"start_date": a.start, "end_date": at.date()}
-    _log(f"mode={'FREEZE' if freeze else 'preview'} start={a.start} end={at.date()} as_of={at.isoformat()}")
+    end = a.end or at.date()
+    if end > at.date() or end < a.start:
+        raise SystemExit(f"End {end} must be between start {a.start} and today {at.date()}.")
+    fsv = a.feature_schema_version
+    filters = {"start_date": a.start, "end_date": end}
+    _log(f"mode={'FREEZE' if freeze else 'preview'} start={a.start} end={end} feature_schema=v{fsv} "
+         f"as_of={at.isoformat()}")
 
     rows, scans = load_rows()
-    first, rows_asof = build_as_of(rows, scans, at, filters)
-    second, _ = build_as_of(*load_rows(), at, filters)
+    first, rows_asof = build_as_of(rows, scans, at, filters, feature_schema_version=fsv)
+    second, _ = build_as_of(*load_rows(), at, filters, feature_schema_version=fsv)
     blockers = []
     if first["observation_ids"] != second["observation_ids"]:
         blockers.append("Twin builds differ in membership.")
@@ -127,7 +137,7 @@ def main(argv=None) -> int:
     from analytics import research_dataset as rd
     from db.research_datasets import list_dataset_versions, save_dataset_version
 
-    last, _ = build_as_of(*load_rows(), _now(), filters, members=first["observation_ids"])
+    last, _ = build_as_of(*load_rows(), _now(), filters, members=first["observation_ids"], feature_schema_version=fsv)
     if last["metadata"]["fingerprint"] != first["metadata"]["fingerprint"]:
         _log("BLOCKED: data changed during the freeze (an outcome job likely ran). Nothing written; retry later.")
         return 1

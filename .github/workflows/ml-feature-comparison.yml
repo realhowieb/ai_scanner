@@ -1,0 +1,61 @@
+name: ML Feature Comparison
+# Predeclared December comparison (docs/ml_feature_comparison_protocol_2026-12.json).
+# dry: input coverage + weekly rows, outcomes blanked. compare: the one planned
+# run on a frozen schema-v2 dataset (needs confirm=COMPARE). Read-only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry (no outcomes used) or compare"
+        required: true
+        default: dry
+        type: choice
+        options: [dry, compare]
+      dataset_version:
+        description: "Frozen schema-v2 dataset (compare only)"
+        required: false
+        default: ""
+      confirm:
+        description: "Type COMPARE to allow mode=compare"
+        required: false
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: ml-v4
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install research dependencies
+        run: python -m pip install --prefer-binary -r requirements-core.txt -r requirements-ml-v4.txt -c requirements.lock
+      - name: Run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEON_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_SCANNER_SQLITE_FALLBACK: 'false'
+          MODE: ${{ inputs.mode }}
+          DATASET: ${{ inputs.dataset_version }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$MODE" = "compare" ]; then
+            if [ "$CONFIRM" != "COMPARE" ]; then echo 'mode=compare needs confirm=COMPARE'; exit 1; fi
+            python scripts/ml_feature_comparison.py --mode compare --dataset-version "$DATASET"
+          else
+            python scripts/ml_feature_comparison.py --mode dry
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ml-feature-comparison-${{ inputs.mode }}-${{ github.run_id }}
+          path: artifacts/ml_feature_comparison
+          retention-days: 90
+          if-no-files-found: ignore
