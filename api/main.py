@@ -37,6 +37,9 @@ from api.settings import Settings, load_settings
 from utils.swallowed import swallowed
 
 tune_allocator()  # cap malloc arenas before any worker thread starts (api/memory.py)
+if os.environ.get("RENDER", "").strip().lower() == "true":
+    # Custom scans load the PreBreakout model without scikit-learn (~50 MB less, same scores).
+    os.environ.setdefault("HSF_LEAN_MODEL_IMPORT", "1")
 
 log = logging.getLogger("hsf_api")
 access_log = logging.getLogger("hsf_api.access")

@@ -167,3 +167,31 @@ class HeavyLoadTests(unittest.TestCase):
         self.assertIn("heavy_load(", inspect.getsource(admin_analytics.scanner_research))
         self.assertIn("heavy_load(", inspect.getsource(admin_analytics._stair))
         self.assertIn("heavy_load(", inspect.getsource(ml_readiness.build))
+
+
+def test_custom_scan_job_releases_memory_after_work(monkeypatch):
+    """A finished (or failed) custom scan hands its freed pages back to the OS."""
+    import api.memory as memory
+    from api import scan_jobs as sj
+
+    calls = []
+    monkeypatch.setattr(memory, "release_memory", lambda: calls.append("trim") or True)
+    monkeypatch.setattr(sj, "_mark_running", lambda job_id: True)
+    monkeypatch.setattr(sj, "_finish", lambda *a, **k: calls.append("finish"))
+    monkeypatch.setattr(sj, "_start_heartbeat", lambda: None)
+
+    class Inline:
+        def submit(self, fn):
+            fn()
+
+    monkeypatch.setattr(sj, "_executor", lambda: Inline())
+    sj.submit("job-ok", lambda report: {"setups": []})
+    assert calls == ["trim", "finish"]
+
+    calls.clear()
+
+    def boom(report):
+        raise RuntimeError("x")
+
+    sj.submit("job-bad", boom)
+    assert calls[0] == "trim"
