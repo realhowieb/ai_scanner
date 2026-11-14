@@ -152,14 +152,41 @@ _FEATURES_V1: Tuple[FeatureSpec, ...] = (
                 SAFE_STORED, "Rank in the scan's BreakoutScore-ordered result rows."),
 )
 
-FEATURE_SCHEMAS: Mapping[int, Tuple[FeatureSpec, ...]] = MappingProxyType({1: _FEATURES_V1})
+SRC_PREDICTION_RECORD = "signal_outcomes.raw_signal.models.prebreakout (inputs the model saw at prediction time)"
+
+# The six production AI Confidence inputs that schema v2 may take from the
+# pick's own prediction record when the scan join left them empty.
+CORE_INPUTS_V2 = ("trend_10d_pct", "trend_20d_pct", "rvol_20", "dollar_vol_20", "scanner_breakout_score",
+                  "scan_gap_pct")
+# core_inputs_source values.
+CORE_FROM_SCAN = "scan_join"                  # every available core input came from the as-of scan join
+CORE_FROM_PREDICTION = "prediction_record"    # at least one empty core input was filled from the record
+CORE_NONE = "none"                            # neither source had any core input
+
+# Schema v2 (2026-11-13): v1 unchanged, plus (a) empty core inputs filled from
+# the pick's own prediction-time record, flagged per row, and (b) RSI-14 and the
+# SPY/SMA20 regime the scheduled scan saved from November 2, 2026. Never filled
+# from today's data; rows without a source stay empty.
+_FEATURES_V2: Tuple[FeatureSpec, ...] = _FEATURES_V1 + (
+    FeatureSpec("core_inputs_source", "str", SRC_PREDICTION_RECORD, "derived: which source supplied the core inputs",
+                SAFE_STORED, "scan_join | prediction_record | none. Provenance flag, not a model input."),
+    FeatureSpec("rsi_14", "float", SRC_SCAN_META, "record.research_metadata.rsi_14", SAFE_STORED,
+                "Wilder RSI-14 from the daily bars the scan held (last bar = scan-time price). From Nov 2, 2026."),
+    FeatureSpec("spy_vs_sma20_pct", "float", SRC_SCAN_META,
+                "record.research_metadata.market_regime_inputs.spy_vs_sma20_pct", SAFE_STORED,
+                "SPY last price vs its 20-bar mean, % (regime spy-sma20-v1). From Nov 2, 2026."),
+    FeatureSpec("spy_above_sma20", "bool", SRC_SCAN_META, "record.research_metadata.market_regime_at_observation",
+                SAFE_STORED, "True when the regime label is SPY_ABOVE_SMA20 (spy-sma20-v1). From Nov 2, 2026."),
+)
+
+FEATURE_SCHEMAS: Mapping[int, Tuple[FeatureSpec, ...]] = MappingProxyType({1: _FEATURES_V1, 2: _FEATURES_V2})
 
 # Features not exposed by schema v1. Some newer observations preserve inputs
 # in research metadata, but they require an explicit versioned reader before use.
 UNAVAILABLE_FEATURES: Tuple[Dict[str, str], ...] = (
     {"name": "rsi_14", "pit": MISSING,
      "reason": "RSI is captured in scheduled research_metadata.rsi_14 from November 2, 2026, "
-               "but schema v1 does not read it. A versioned feature reader and coverage checks are required; no historical backfill."},
+               "but schema v1 does not read it. Schema v2 reads it (no historical backfill)."},
     {"name": "ema9 / ema21 values", "pit": MISSING,
      "reason": "Only the EMA cross tag is stored. Values are reconstructable from raw bars, which aren't persisted."},
     {"name": "adx / vwap / supertrend / ewo / day_trader_tier", "pit": MISSING,
@@ -175,7 +202,7 @@ UNAVAILABLE_FEATURES: Tuple[Dict[str, str], ...] = (
      "reason": "Only current metadata exists. Joining it to history would leak today's values."},
     {"name": "market_regime / breadth", "pit": MISSING,
      "reason": "SPY/SMA20 regime is captured in scheduled research metadata from November 2, 2026, "
-               "but schema v1 does not read it. This is not the Brief regime or breadth/VIX history."},
+               "but schema v1 does not read it (schema v2 does). This is not the Brief regime or breadth/VIX history."},
     {"name": "universe membership list", "pit": UNSAFE_CURRENT_VALUE,
      "reason": "Universe files are overwritten by refresh jobs; only the universe name is frozen."},
 )

@@ -51,7 +51,7 @@ def main():
 
     scope=json.loads((ROOT/'docs/ml_development_quality_scope_2026-11-13.json').read_text())
     rows,raw=load_scope(scope)
-    numeric=sorted({n for fs in P.FEATURE_SETS.values() for n in fs.numeric})
+    numeric=sorted({n for fs in P.FEATURE_SETS.values() if fs.research_schema==1 for n in fs.numeric})
     result=Q.report(rows,raw,numeric_features=numeric,categorical_features=A.CATEGORICAL_FEATURES)
     result['scope']=scope
     out=ROOT/'artifacts/ml_development_quality'

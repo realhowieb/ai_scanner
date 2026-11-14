@@ -89,6 +89,7 @@ class FeatureSet:
     categorical: Tuple[str, ...]
     signals: bool
     description: str
+    research_schema: int = 1   # minimum research feature schema version the set needs
 
 
 FEATURE_SETS: Dict[str, FeatureSet] = {
@@ -104,13 +105,28 @@ FEATURE_SETS: Dict[str, FeatureSet] = {
         tuple(A.CATEGORICAL_FEATURES), True,
         "all SAFE_STORED / SAFE_ASOF_JOIN research features minus " + ", ".join(LEAKAGE_REVIEW_FEATURES)),
 }
+# Schema v2 ablation arms (2026-11-13 plan): the same six core inputs, read
+# with the prediction-record repair, then + RSI, + regime, + both. Only usable
+# on datasets built with research feature schema v2.
+_CORE = tuple(A.AI_CONFIDENCE_FEATURE_MAP.values())
+_REGIME = ("spy_vs_sma20_pct", "spy_above_sma20")
+FEATURE_SETS.update({
+    "core_v2": FeatureSet("core_v2", _CORE, (), False,
+                          "6 core inputs, empty ones filled from the pick's prediction record (schema v2)", 2),
+    "core_rsi_v2": FeatureSet("core_rsi_v2", _CORE + ("rsi_14",), (), False, "core_v2 + RSI-14", 2),
+    "core_regime_v2": FeatureSet("core_regime_v2", _CORE + _REGIME, (), False,
+                                 "core_v2 + SPY vs 20-day average (% and above/below)", 2),
+    "core_rsi_regime_v2": FeatureSet("core_rsi_regime_v2", _CORE + ("rsi_14",) + _REGIME, (), False,
+                                     "core_v2 + RSI-14 + SPY regime", 2),
+})
+ABLATION_ARMS_V2 = ("core_v2", "core_rsi_v2", "core_regime_v2", "core_rsi_regime_v2")
 DEFAULT_FEATURE_SETS = ("production", "leakage_safe")
 
 
 def feature_schema_version(fs: FeatureSet) -> str:
     """Names the exact inputs: research schema version + this engine's feature set."""
     digest = hashlib.sha256(json.dumps([fs.numeric, fs.categorical, fs.signals]).encode()).hexdigest()[:8]
-    return f"research-v{rs.FEATURE_SCHEMA_VERSION}/{ENGINE_VERSION}/{fs.name}-{digest}"
+    return f"research-v{max(rs.FEATURE_SCHEMA_VERSION, fs.research_schema)}/{ENGINE_VERSION}/{fs.name}-{digest}"
 
 
 # ----------------------------------------------------------------------------- providers
@@ -210,6 +226,8 @@ class ProviderModel(A.Model):
             raise ValueError("labels must be 0/1")
         if len(np.unique(y)) < 2:
             raise ValueError("training labels need both classes")
+        if self.feature_set.research_schema >= 2 and not any("core_inputs_source" in r.features for r in train):
+            raise ValueError(f"feature set {self.feature_set.name!r} needs a research feature schema v2 dataset")
         self.enc = self._encoder().fit(train)
         X = self.enc.transform(train, impute=False)
         lib = _library(self.provider)

@@ -296,11 +296,76 @@ def feature_snapshot(row: Mapping[str, Any], scan: Optional[Mapping[str, Any]], 
         "pattern_tag": _str(feats.get("pattern_tag")),
         "scanner_rank": _int(meta.get("rank_at_observation")),
     })
+    if int(feature_schema_version) >= 2:
+        v.update(_regime_rsi(meta))
+        v.update(_repair_core(v, raw, row.get("fired_at")))
     names = set(rs.feature_names(feature_schema_version))
     return rs.FeatureSnapshot(
         observation_id=int(row["id"]), ticker=str(row.get("ticker") or "").upper(),
         observed_at=iso(row.get("fired_at")) or "", feature_schema_version=int(feature_schema_version),
         values={k: val for k, val in v.items() if k in names}, join=dict(join_info))
+
+
+# PreBreakout prediction-record input name -> research column (schema v2 repair).
+PREDICTION_CORE_MAP = {
+    "Trend10D%": "trend_10d_pct", "Trend20D%": "trend_20d_pct", "VolRel20": "rvol_20",
+    "DollarVol20": "dollar_vol_20", "BreakoutScore": "scanner_breakout_score", "GapPct": "scan_gap_pct",
+}
+
+
+def prediction_record_inputs(raw_signal: Mapping[str, Any], observed_at: Any,
+                             *, max_lag: _dt.timedelta = MAX_SCAN_LAG) -> Dict[str, float]:
+    """Core inputs the PreBreakout model actually saw for this pick, or {}.
+
+    Used only when every check passes (verified on production 2026-11-13,
+    Diagnostics run 43525855904): the record was captured; the model ran at or
+    before the pick was saved; its source scan started at or before the pick and
+    within ``max_lag``; the input was observed (default mask False), finite and
+    not subject to a clip rule. Anything else -> not used."""
+    p = _json(_json((raw_signal or {}).get("models")).get("prebreakout"))
+    names, values, mask = (p.get(k) for k in ("feature_names", "feature_values", "default_mask"))
+    if p.get("status") != "captured" or not all(isinstance(x, list) for x in (names, values, mask)) \
+            or not len(names) == len(values) == len(mask):
+        return {}
+    obs, inferred, scan = to_dt(observed_at), to_dt(p.get("inferred_at")), to_dt(p.get("source_scan_id"))
+    if obs is None or inferred is None or scan is None or inferred > obs or scan > obs or obs - scan > max_lag:
+        return {}
+    clipped = set(((p.get("preprocessing") or {}).get("clip_thresholds") or {}))
+    out: Dict[str, float] = {}
+    for name, value, defaulted in zip(names, values, mask):
+        col = PREDICTION_CORE_MAP.get(name)
+        if col is None or defaulted is not False or name in clipped:
+            continue
+        x = _num(value)
+        if x is not None:
+            out[col] = x
+    return out
+
+
+def _repair_core(v: Mapping[str, Any], raw_signal: Mapping[str, Any], observed_at: Any) -> Dict[str, Any]:
+    """Fill only EMPTY core inputs from the pick's own prediction record; flag the row."""
+    present = [c for c in rs.CORE_INPUTS_V2 if v.get(c) is not None]
+    fills = {c: x for c, x in prediction_record_inputs(raw_signal, observed_at).items() if v.get(c) is None}
+    if fills:
+        source = rs.CORE_FROM_PREDICTION
+    elif present:
+        source = rs.CORE_FROM_SCAN
+    else:
+        source = rs.CORE_NONE
+    return {**fills, "core_inputs_source": source}
+
+
+def _regime_rsi(meta: Mapping[str, Any]) -> Dict[str, Any]:
+    """RSI-14 and the spy-sma20-v1 regime saved by the joined scheduled scan."""
+    out: Dict[str, Any] = {"rsi_14": None, "spy_vs_sma20_pct": None, "spy_above_sma20": None}
+    rsi = _num(meta.get("rsi_14"))
+    if rsi is not None and 0.0 <= rsi <= 100.0:
+        out["rsi_14"] = rsi
+    label = meta.get("market_regime_at_observation")
+    if meta.get("market_regime_version") == "spy-sma20-v1" and label in ("SPY_ABOVE_SMA20", "SPY_BELOW_SMA20"):
+        out["spy_above_sma20"] = label == "SPY_ABOVE_SMA20"
+        out["spy_vs_sma20_pct"] = _num((meta.get("market_regime_inputs") or {}).get("spy_vs_sma20_pct"))
+    return out
 
 
 def scan_provenance(scan: Optional[Mapping[str, Any]]) -> Dict[str, Any]:

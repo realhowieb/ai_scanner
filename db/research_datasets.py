@@ -38,7 +38,11 @@ _SCAN_JSON_PG = (
     "'scan_id', record->'research_metadata'->'scan_id', "
     "'universe_name', record->'research_metadata'->'universe_name', "
     "'scoring_version', record->'research_metadata'->'scoring_version', "
-    "'scanner_commit_sha', record->'research_metadata'->'scanner_commit_sha'))"
+    "'scanner_commit_sha', record->'research_metadata'->'scanner_commit_sha', "
+    "'rsi_14', record->'research_metadata'->'rsi_14', "
+    "'market_regime_at_observation', record->'research_metadata'->'market_regime_at_observation', "
+    "'market_regime_version', record->'research_metadata'->'market_regime_version', "
+    "'market_regime_inputs', record->'research_metadata'->'market_regime_inputs'))"
 )
 
 
