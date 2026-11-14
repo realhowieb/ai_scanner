@@ -67,9 +67,6 @@ class AllocatorTuningTests(unittest.TestCase):
             self.assertTrue(memory.memory_status()["memory_warning"])
 
 
-
-
-
 class MemoryMaintenanceTests(unittest.TestCase):
     def test_current_pressure_trims_free_pages_and_reports_before_and_after(self):
         from api.today import TTLCache
@@ -110,8 +107,30 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertIn('"rss_delta_mb": 35.0', logs.output[0])
 
 
-if __name__ == "__main__":
-    unittest.main()
+class CustomScanJobReleaseTests(unittest.TestCase):
+    def test_custom_scan_job_releases_memory_after_work(self):
+        """A finished (or failed) custom scan hands its freed pages back to the OS."""
+        from api import scan_jobs as sj
+
+        calls = []
+
+        class Inline:
+            def submit(self, fn):
+                fn()
+
+        def boom(report):
+            raise RuntimeError("x")
+
+        with mock.patch.object(memory, "release_memory", lambda: calls.append("trim") or True), \
+                mock.patch.object(sj, "_mark_running", lambda job_id: True), \
+                mock.patch.object(sj, "_finish", lambda *a, **k: calls.append("finish")), \
+                mock.patch.object(sj, "_start_heartbeat", lambda: None), \
+                mock.patch.object(sj, "_executor", lambda: Inline()):
+            sj.submit("job-ok", lambda report: {"setups": []})
+            self.assertEqual(calls, ["trim", "finish"])
+            calls.clear()
+            sj.submit("job-bad", boom)
+            self.assertEqual(calls[0], "trim")
 
 
 class HeavyLoadTests(unittest.TestCase):
@@ -169,29 +188,5 @@ class HeavyLoadTests(unittest.TestCase):
         self.assertIn("heavy_load(", inspect.getsource(ml_readiness.build))
 
 
-def test_custom_scan_job_releases_memory_after_work(monkeypatch):
-    """A finished (or failed) custom scan hands its freed pages back to the OS."""
-    import api.memory as memory
-    from api import scan_jobs as sj
-
-    calls = []
-    monkeypatch.setattr(memory, "release_memory", lambda: calls.append("trim") or True)
-    monkeypatch.setattr(sj, "_mark_running", lambda job_id: True)
-    monkeypatch.setattr(sj, "_finish", lambda *a, **k: calls.append("finish"))
-    monkeypatch.setattr(sj, "_start_heartbeat", lambda: None)
-
-    class Inline:
-        def submit(self, fn):
-            fn()
-
-    monkeypatch.setattr(sj, "_executor", lambda: Inline())
-    sj.submit("job-ok", lambda report: {"setups": []})
-    assert calls == ["trim", "finish"]
-
-    calls.clear()
-
-    def boom(report):
-        raise RuntimeError("x")
-
-    sj.submit("job-bad", boom)
-    assert calls[0] == "trim"
+if __name__ == "__main__":
+    unittest.main()
