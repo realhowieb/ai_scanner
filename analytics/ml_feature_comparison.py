@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
+from fractions import Fraction
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
@@ -54,6 +55,28 @@ def check_window(rows: Sequence[A.AuditRow], protocol: Mapping[str, Any]) -> Non
             raise ValueError("row inside the reserved forward-test window; refusing")
         if not lo <= day <= hi:
             raise ValueError("row outside the protocol development window; refusing")
+
+
+class OutcomesPending(RuntimeError):
+    """Some outcome in the window can still arrive; the comparison must wait."""
+
+
+def outcome_gate(rows: Sequence[A.AuditRow], h: int) -> Dict[str, int]:
+    """Count outcome states at horizon ``h``. Permanently unavailable / invalid
+    outcomes (no price data will ever exist) are excluded and reported; any
+    genuinely pending outcome blocks. Never reads label values."""
+    from analytics.outcome_intelligence import INVALID, MATURED, PENDING, UNAVAILABLE
+
+    states = Counter(r.maturity.get(f"{h}d") for r in rows)
+    counts = {"signal_days": len(rows), "matured": states.get(MATURED, 0),
+              "excluded_unavailable": states.get(UNAVAILABLE, 0), "excluded_invalid": states.get(INVALID, 0),
+              "pending": states.get(PENDING, 0) + states.get(None, 0)}
+    counts["other"] = len(rows) - sum(counts[k] for k in ("matured", "excluded_unavailable", "excluded_invalid",
+                                                           "pending"))
+    if counts["pending"] or counts["other"]:
+        raise OutcomesPending(f"{counts['pending'] + counts['other']} signal-days still pending at {h}d; "
+                              "freeze after the last window closes")
+    return counts
 
 
 def weekly_folds(data: Sequence[Tuple[A.AuditRow, int]], protocol: Mapping[str, Any], *,
@@ -135,9 +158,10 @@ def passes(weeks: Sequence[Mapping[str, Any]], arm: str, ref: str, rule: Mapping
     if len(d) < rule["min_weeks"]:
         out.update(passed=False, reason="too few usable weeks")
         return out
-    share = out["weeks_better"] / len(d)
-    out["share_better"] = round(share, 3)
-    ok = share >= rule["min_share_of_weeks_better"] - 1e-9 and out["mean_auc_gain"] >= rule["min_mean_auc_gain"]
+    need = Fraction(*rule["min_weeks_better_fraction"])
+    out["share_better"] = f"{out['weeks_better']}/{len(d)}"
+    # Exact rational comparison: 4 of 6 meets two-thirds (0.667 would not).
+    ok = Fraction(out["weeks_better"], len(d)) >= need and out["mean_auc_gain"] >= rule["min_mean_auc_gain"]
     out.update(passed=bool(ok), reason="meets rule" if ok else "below rule")
     return out
 

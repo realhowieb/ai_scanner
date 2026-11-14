@@ -12,7 +12,10 @@
   "target": "F_clean_path_5d",
   "horizon": 5,
   "feature_schema_version": 2,
-  "model": {"provider": "lightgbm", "params": "analytics.ml_v4_providers.DEFAULT_PARAMS['lightgbm'], unchanged, no tuning"},
+  "model": {
+    "provider": "lightgbm",
+    "params": "analytics.ml_v4_providers.DEFAULT_PARAMS['lightgbm'], unchanged, no tuning"
+  },
   "arms": {
     "core_v2": "6 core inputs; an input empty after the scan join is filled from the pick's own prediction record (verified 2026-11-13, Diagnostics run 43525855904)",
     "core_rsi_v2": "core_v2 + rsi_14",
@@ -28,9 +31,21 @@
     "min_validation_per_class": 5,
     "min_training_rows": 60
   },
-  "check_run": {"train_from": "2026-11-02", "purpose": "RSI/regime are empty before 2026-11-02. An addition's mean gain must stay above zero when training starts on that day, so 'missing = older data' cannot pass as signal."},
+  "check_run": {
+    "train_from": "2026-11-02",
+    "purpose": "RSI/regime are empty before 2026-11-02. An addition's mean gain must stay above zero when training starts on that day, so 'missing = older data' cannot pass as signal."
+  },
   "metric": "AUC per validation week (primary). Within-day AUC is reported, not decisive.",
-  "keep_rule": {"min_weeks": 4, "min_share_of_weeks_better": 0.667, "min_mean_auc_gain": 0.01},
+  "keep_rule": {
+    "min_weeks": 4,
+    "min_weeks_better_fraction": [
+      2,
+      3
+    ],
+    "min_mean_auc_gain": 0.01,
+    "fraction_rule": "exact: weeks_better * 3 >= weeks * 2 (4 of 6 passes)"
+  },
   "selection": "Additions failing the rule are dropped. If RSI+regime passes and a single addition passes, the combination must also pass against the better single addition, otherwise the single addition with the larger mean gain is kept. If nothing passes, the recipe is core_v2.",
-  "not_decided_here": "Whether the locked recipe beats production. That is the separate untouched test from 2026-12-23 (hsf-forward-2026-12-23-v1)."
+  "not_decided_here": "Whether the locked recipe beats production. That is the separate untouched test from 2026-12-23 (hsf-forward-2026-12-23-v1).",
+  "outcome_status": "Rows whose 5-day outcome is permanently unavailable or invalid (e.g. price data that will never exist) are excluded and counted in the report. Any genuinely pending outcome blocks the comparison."
 }

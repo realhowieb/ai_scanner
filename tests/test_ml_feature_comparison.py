@@ -16,10 +16,10 @@ PROTOCOL = json.loads((ROOT / "docs/ml_feature_comparison_protocol_2026-12.json"
 RULE = PROTOCOL["keep_rule"]
 
 
-def row(i, day, feats):
+def row(i, day, feats, maturity=rd.MATURED):
     obs = dt.datetime(day.year, day.month, day.day, 15, tzinfo=dt.timezone.utc)
     return A.AuditRow(i, f"T{i}", obs, day.isoformat(), day, {h: rd.label_window_end(day, h) for h in A.HORIZONS},
-                      feats, {}, {"5d": rd.MATURED}, True, None, "MATCHED", 60.0, None)
+                      feats, {}, {"5d": maturity}, True, None, "MATCHED", 60.0, None)
 
 
 def weeks(auc_by_arm):
@@ -102,6 +102,41 @@ class DecideTest(unittest.TestCase):
         m = weeks({a: self.base[:3] for a in C.ARMS})
         m["weeks"] = [{**w, "auc": {**w["auc"], "core_rsi_v2": w["auc"]["core_v2"] + 0.05}} for w in m["weeks"]]
         self.assertEqual(C.decide(m, m, RULE)["tests"]["core_rsi_v2"]["reason"], "too few usable weeks")
+
+
+class ExactFractionTest(unittest.TestCase):
+    def test_four_of_six_weeks_meets_two_thirds(self):
+        base = [0.55] * 6
+        rsi = [0.58, 0.58, 0.58, 0.58, 0.54, 0.54]  # better in exactly 4 of 6, mean gain 0.0167
+        m = weeks({"core_v2": base, "core_rsi_v2": rsi, "core_regime_v2": base, "core_rsi_regime_v2": base})
+        t = C.passes(m["weeks"], "core_rsi_v2", "core_v2", RULE)
+        self.assertEqual(t["share_better"], "4/6")
+        self.assertTrue(t["passed"])
+
+    def test_three_of_five_fails(self):
+        base = [0.55] * 5
+        rsi = [0.60, 0.60, 0.60, 0.54, 0.54]
+        m = weeks({"core_v2": base, "core_rsi_v2": rsi})
+        self.assertFalse(C.passes(m["weeks"], "core_rsi_v2", "core_v2", RULE)["passed"])
+
+
+class OutcomeGateTest(unittest.TestCase):
+    def test_unavailable_and_invalid_excluded_with_counts(self):
+        from analytics.outcome_intelligence import INVALID, UNAVAILABLE
+
+        d = dt.date(2026, 11, 10)
+        rows = [row(1, d, {}), row(2, d, {}, UNAVAILABLE), row(3, d, {}, INVALID), row(4, d, {})]
+        c = C.outcome_gate(rows, 5)
+        self.assertEqual((c["matured"], c["excluded_unavailable"], c["excluded_invalid"], c["pending"]), (2, 1, 1, 0))
+        self.assertEqual(len(A.eligible(rows, 5, "F_clean_path_5d")), 0)  # no labels here; unavailable never enters
+
+    def test_pending_blocks(self):
+        from analytics.outcome_intelligence import PENDING
+
+        d = dt.date(2026, 11, 10)
+        for state in (PENDING, None):
+            with self.subTest(state), self.assertRaises(C.OutcomesPending):
+                C.outcome_gate([row(1, d, {}), row(2, d, {}, state)], 5)
 
 
 class EndToEndTest(unittest.TestCase):

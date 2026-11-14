@@ -77,17 +77,19 @@ def compare(protocol: dict, dataset_version: str) -> dict:
     rows = loaded["audit_rows"]
     C.check_window(rows, protocol)
     h = int(protocol["horizon"])
-    immature = sum(1 for r in rows if not r.matured(h))
-    if immature:
-        raise SystemExit(f"{immature} signal-days not matured at {h}d; freeze after the last window closes")
+    try:
+        outcome_counts = C.outcome_gate(rows, h)  # unavailable/invalid excluded + counted; pending blocks
+    except C.OutcomesPending as e:
+        raise SystemExit(str(e))
     data = A.eligible(rows, h, protocol["target"])
+    outcome_counts["uncertified_or_undefined_label"] = outcome_counts["matured"] - len(data)
     factory = lambda arm: P.ProviderModel(protocol["model"]["provider"], arm)  # noqa: E731
     main = C.run_arms(C.weekly_folds(data, protocol), factory)
     check = C.run_arms(C.weekly_folds(data, protocol,
                                       train_from=dt.date.fromisoformat(protocol["check_run"]["train_from"])), factory)
     decision = C.decide(main, check, protocol["keep_rule"])
     return {"mode": "compare", "protocol_id": protocol["protocol_id"], "dataset_version": dataset_version,
-            "fingerprint": loaded["entry"].get("fingerprint"), "signal_days": len(rows), "eligible": len(data),
+            "fingerprint": loaded["entry"].get("fingerprint"), "signal_days": len(rows), "eligible": len(data), "outcome_counts": outcome_counts,
             "mean_weekly_auc": C.summary_auc(main), "check_mean_weekly_auc": C.summary_auc(check),
             "main": main, "check": check, "decision": decision,
             "library_versions": P.library_versions()}
