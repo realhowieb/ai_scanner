@@ -1,13 +1,12 @@
 """Lean PreBreakout scoring import (HSF_LEAN_MODEL_IMPORT=1): xgboost without scikit-learn,
 same predictions. Runs in subprocesses because the test process already has sklearn loaded."""
+import importlib.util
 import os
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
-
-import importlib.util
 import unittest
+from pathlib import Path
 
 HAVE_ML = all(importlib.util.find_spec(m) is not None for m in ("xgboost", "sklearn", "joblib"))
 
