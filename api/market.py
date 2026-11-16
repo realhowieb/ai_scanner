@@ -278,6 +278,19 @@ def _dt_earnings(now: dt.datetime) -> Dict[str, Dict[str, Any]]:
                    ttl_s=DT_EARNINGS_TTL_S) or {}
 
 
+DT_BENCHMARK = "SPY"
+
+
+def vs_spy(chg_pct: Any, spy_chg_pct: Any) -> Optional[float]:
+    """Today's move minus SPY's, percentage points (display only; the DT score ignores it)."""
+    try:
+        if chg_pct is None or spy_chg_pct is None:
+            return None
+        return round(float(chg_pct) - float(spy_chg_pct), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = ()) -> Dict[str, Any]:
     """The web's Day Trader table: live Alpaca snapshot metrics for the source's
     symbols, with the day-trade score; plus the market state."""
@@ -293,18 +306,24 @@ def day_trader(source: str, custom: Sequence[str] = (), watch: Sequence[str] = (
         def load():
             from market_data import build_day_trader_metrics
 
-            return build_day_trader_metrics(list(symbols)) or []
+            # SPY rides in the same snapshot so "vs SPY" compares like with like
+            # (same moment, same session rules, pre-market included).
+            return build_day_trader_metrics(list(symbols) + ([DT_BENCHMARK] if DT_BENCHMARK not in symbols else [])) or []
 
         now = dt.datetime.now(dt.timezone.utc)
         earn = _dt_earnings(now)
-        rows = sorted(({**enrich_row(r, state, now), **earn.get(_earn_key(r.get("ticker")), {})}
-                       for r in _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S,
-                                        stale_s=DT_ROWS_STALE_S)), key=rank_key)
+        raw = _cached(("dt_rows", tuple(symbols)), load, ttl_s=DT_ROWS_TTL_S, stale_s=DT_ROWS_STALE_S) or []
+        spy_chg = next((r.get("chg_pct") for r in raw if r.get("ticker") == DT_BENCHMARK), None)
+        wanted = set(symbols)
+        raw = [r for r in raw if r.get("ticker") in wanted]
+        rows = sorted(({**enrich_row(r, state, now), **earn.get(_earn_key(r.get("ticker")), {}),
+                        "vs_spy_pct": vs_spy(r.get("chg_pct"), spy_chg)}
+                       for r in raw), key=rank_key)
     flagged = [r for r in rows if r.get("quote_flags")]
     bullish = [r for r in rows if r.get("dt_direction") == "bullish" and not r.get("quote_flags")]
     bearish = [r for r in rows if r.get("dt_direction") == "bearish" and not r.get("quote_flags")]
     return {"state": state, "source": source, "symbols": symbols, "missing": max(0, len(symbols) - len(rows)),
-            "as_of": dt.datetime.now(dt.timezone.utc),
+            "as_of": dt.datetime.now(dt.timezone.utc), "spy_chg_pct": spy_chg if symbols else None,
             "summary": {"strong": sum(1 for r in rows if r.get("dt_quality") == "strong"),
                         "developing": sum(1 for r in rows if r.get("dt_quality") == "developing"),
                         "flagged": len(flagged), "missing": max(0, len(symbols) - len(rows)),

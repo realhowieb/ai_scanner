@@ -123,13 +123,13 @@ describe("Scanner table (TanStack)", () => {
   it("shows columns in the saved order and saves a new order from Table display", async () => {
     preferences.table = { columns: ["setup", "rvol", "last", "change"], compact: false };
     render(<SessionProvider initialMe={me("pro")}><SetupTable rows={rows} premium={false} sparks /></SessionProvider>);
-    await waitFor(() => expect(headers().slice(0, 7)).toEqual(["#", "Ticker", "Setup", "HSF Score", "RVOL", "Last", "Chg %"]));
+    await waitFor(() => expect(headers().slice(0, 7)).toEqual(["#", "Ticker", "Setup", "HSF Score", "RVOL", "vs SPY", "Last"]));
     fireEvent.click(screen.getByText("Table display"));
     fireEvent.click(screen.getByRole("button", { name: "Move Last price earlier" }));
     fireEvent.click(screen.getByText("Save display"));
-    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "sector", "last", "rvol", "picked", "change"]));
+    await waitFor(() => expect(patches[0]?.table?.columns).toEqual(["setup", "sector", "rvol", "last", "vs_spy", "picked", "change"]));
     expect(patches[0]?.table?.hidden).toEqual(["spark", "gap", "prob"]);
-    await waitFor(() => expect(headers().slice(4, 7)).toEqual(["Last", "RVOL", "Chg %"]));
+    await waitFor(() => expect(headers().slice(4, 8)).toEqual(["RVOL", "Last", "vs SPY", "Chg %"]));
   });
 
   it("keeps an open Save dialog when the table re-renders", async () => {
@@ -141,13 +141,15 @@ describe("Scanner table (TanStack)", () => {
   });
 
   it("orders movable columns from the saved list", () => {
-    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["sector", "gap", "spark", "last", "picked", "change", "rvol", "prob"]);
-    expect(columnOrder(["setup", "gap", "sector"])).toEqual(["gap", "sector", "spark", "last", "picked", "change", "rvol", "prob"]);
+    expect(columnOrder(["setup", "gap", "spark"])).toEqual(["sector", "gap", "spark", "last", "picked", "change", "rvol", "vs_spy", "prob"]);
+    expect(columnOrder(["setup", "gap", "sector"])).toEqual(["gap", "sector", "spark", "last", "picked", "change", "rvol", "vs_spy", "prob"]);
   });
 
   it("shows Sector for displays saved before it existed, unless turned off", () => {
-    expect(shownColumns({ columns: ["setup", "last"] })).toEqual(["sector", "setup", "last", "picked"]);
-    expect(shownColumns({ columns: ["setup", "last"], hidden: ["sector", "picked"] })).toEqual(["setup", "last"]);
+    expect(shownColumns({ columns: ["setup", "last"] })).toEqual(["sector", "setup", "last", "picked", "vs_spy"]);
+    expect(shownColumns({ columns: ["setup", "last"], hidden: ["sector", "picked", "vs_spy"] })).toEqual(["setup", "last"]);
+    expect(shownColumns({ columns: ["setup", "rvol", "prob"] })).toEqual(["sector", "picked", "setup", "rvol", "vs_spy", "prob"]);
+    expect(shownColumns(null)).toContain("vs_spy");
     expect(shownColumns(null)).toContain("sector");
     expect(shownColumns(null)).toContain("picked");
   });

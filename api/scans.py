@@ -17,7 +17,7 @@ from api.today import RUN_TTL_S, TTLCache, _cached, _iso, _num, market_runs, run
 from utils.swallowed import swallowed
 
 SCAN_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
-SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank")
+SCAN_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "breakout_score", "prob", "prob_rank", "rs_10d", "rs_20d")
 CALIBRATION_TTL_S = 1800  # matured outcomes change once a day; same as the web
 CALIBRATION_STALE_S = 6 * 3600  # past the TTL, served while one background rebuild runs
 BAR_LIMIT = 260  # about a year of sessions, for the chart's 1Y range
@@ -122,6 +122,7 @@ def _scan_row(o: Dict[str, Any]) -> Dict[str, Any]:
     return {**{k: o.get(k) for k in SCAN_FIELDS},
             "signals": [str(s) for s in o.get("signals") or []],
             "fading": bool(o.get("fading")),
+            "rs_line_high": None if o.get("rs_line_high") is None else bool(o.get("rs_line_high")),
             **{k: _num(o.get(k)) for k in SCAN_NUMBERS}}
 
 
@@ -129,7 +130,7 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
                 min_score: int = 0, signal: Optional[str] = None, sort: str = "score",
                 min_price: Optional[float] = None, max_price: Optional[float] = None,
                 min_rvol: Optional[float] = None, sector: Optional[str] = None,
-                size: Optional[str] = None) -> Dict[str, Any]:
+                size: Optional[str] = None, beating_spy: bool = False) -> Dict[str, Any]:
     from analytics.data_freshness import describe
     from api.sectors import cap_bucket, market_cap_for, sector_for
     from ui.entitlement_view import redact_prebreakout_rows
@@ -183,6 +184,9 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
             opps = [o for o in opps if id(o) in picked]
     elif signal:
         opps = [o for o in opps if signal in (o.get("signals") or [])]
+    if beating_spy:
+        # Up more than SPY over the last 20 sessions; a row without the number never passes.
+        opps = [o for o in opps if (_num(o.get("rs_20d")) or 0.0) > 0.0]
     if size:
         # Company size from the screener's market cap; a name without one never passes.
         opps = [o for o in opps if cap_bucket(cap_of[id(o)]) == size]
@@ -650,6 +654,7 @@ def _stock_core(ticker: str) -> Dict[str, Any]:
     def load():
         from db.signal_outcomes import fetch_ticker_opportunity_history
         from scheduler.morning_digest import _earnings_days_map
+        from ui.results_intelligence import _rs_line_high
         from ui.stock_intelligence import build_stock_intelligence
 
         runs = market_runs()
@@ -674,8 +679,15 @@ def _stock_core(ticker: str) -> Dict[str, Any]:
         for r in rows:  # price even when the name doesn't qualify as a setup
             quote["last"] = quote["last"] if quote["last"] is not None else _num(r.get("Last"))
             quote["chg_pct"] = quote["chg_pct"] if quote["chg_pct"] is not None else _num(r.get("PctChange"))
+        rs = {"rs_10d": None, "rs_20d": None, "rs_line_high": None}
+        for r in rows:  # relative strength vs SPY from the scan's own rows
+            for col, key in (("RS10D%", "rs_10d"), ("RS20D%", "rs_20d")):
+                rs[key] = rs[key] if rs[key] is not None else _num(r.get(col))
+            if rs["rs_line_high"] is None:
+                rs["rs_line_high"] = _rs_line_high(r.get("RSLineHigh"))
         return {"intel": intel, "scan_at": _iso(run["created_at"]) if run else None,
-                "in_latest_scan": bool(rows), "rvol": _num((current_opp or {}).get("rvol")), "quote": quote}
+                "in_latest_scan": bool(rows), "rvol": _num((current_opp or {}).get("rvol")), "quote": quote,
+                "rs": rs}
 
     return stock_cache.get(ticker, load, ttl_s=STOCK_TTL_S, stale_s=STOCK_STALE_S)
 
@@ -689,6 +701,7 @@ def stock_detail(ticker: str, entitlements: Dict[str, bool]) -> Dict[str, Any]:
     out = {
         "ticker": ticker,
         "rvol": core.get("rvol"),
+        **(core.get("rs") or {}),
         "scan_at": core["scan_at"],
         "in_latest_scan": core["in_latest_scan"],
         "has_setup": bool(intel.get("has_opportunity")),

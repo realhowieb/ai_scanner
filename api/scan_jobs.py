@@ -293,10 +293,18 @@ def submit(job_id: str, work: Callable[[Callable[[Dict[str, Any]], None]], Dict[
             def report(progress: Dict[str, Any]) -> None:
                 _set_progress(job_id, {**progress, "elapsed_s": round(time.perf_counter() - started, 1)})
 
-            from api.memory import observe_memory
+            from api.memory import observe_memory, release_memory
 
             with observe_memory("custom_scan"):
-                result = work(report)
+                try:
+                    result = work(report)
+                finally:
+                    # Hand the scan's price frames back to the OS so each scan doesn't
+                    # leave the allocator holding its peak.
+                    try:
+                        release_memory()
+                    except Exception as _ignored:
+                        swallowed("api.scan_jobs.release_memory", _ignored)
             _finish(job_id, "complete", {"phase": "complete", "elapsed_s": round(time.perf_counter() - started, 1)},
                     result=result)
         except ScanCancelled:

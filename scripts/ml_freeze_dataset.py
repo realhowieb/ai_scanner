@@ -89,7 +89,7 @@ def main(argv=None) -> int:
     p.add_argument("--start", type=dt.date.fromisoformat, default=DEFAULT_START)
     p.add_argument("--end", type=dt.date.fromisoformat, default=None,
                    help="last UTC observation day to include (default: today)")
-    p.add_argument("--feature-schema-version", type=int, default=1, choices=(1, 2),
+    p.add_argument("--feature-schema-version", type=int, default=1, choices=(1, 2, 3),
                    help="research feature schema (2 = repaired core inputs + RSI/regime)")
     p.add_argument("--freeze", default="", help=f"type {CONFIRM} to write the registry row")
     a = p.parse_args(argv)

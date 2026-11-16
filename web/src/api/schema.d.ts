@@ -5790,6 +5790,11 @@ export interface components {
             /** Source */
             source: string;
             /**
+             * Spy Chg Pct
+             * @description SPY's Chg % in the same snapshot; null when unavailable
+             */
+            spy_chg_pct?: number | null;
+            /**
              * State
              * @enum {string}
              */
@@ -5903,6 +5908,11 @@ export interface components {
             traded_today?: boolean | null;
             /** Volume */
             volume?: number | null;
+            /**
+             * Vs Spy Pct
+             * @description Today's Chg % minus SPY's at the same moment, percentage points; null without a SPY quote
+             */
+            vs_spy_pct?: number | null;
             /** Vs Vwap Pct */
             vs_vwap_pct?: number | null;
             /** Vwap */
@@ -10060,6 +10070,21 @@ export interface components {
             rank?: number | null;
             /** Rebound Candidate */
             rebound_candidate?: boolean | null;
+            /**
+             * Rs 10D
+             * @description Relative strength: 10-session return minus SPY's over the same dates, percentage points
+             */
+            rs_10d?: number | null;
+            /**
+             * Rs 20D
+             * @description Relative strength: 20-session return minus SPY's over the same dates, percentage points
+             */
+            rs_20d?: number | null;
+            /**
+             * Rs Line High
+             * @description The stock/SPY line is at its highest of the last 50 sessions (outpacing the market)
+             */
+            rs_line_high?: boolean | null;
             /** Rsi 14 */
             rsi_14?: number | null;
             /** Rvol */
@@ -10122,7 +10147,7 @@ export interface components {
              * @default score
              * @enum {string}
              */
-            sort: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+            sort: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob" | "rs_20d";
             /**
              * When
              * @description Earnings window (signal earnings)
@@ -10717,6 +10742,21 @@ export interface components {
              */
             risks: string[];
             /**
+             * Rs 10D
+             * @description 10-session return minus SPY's, percentage points, from the latest scan; null when not in it
+             */
+            rs_10d?: number | null;
+            /**
+             * Rs 20D
+             * @description 20-session return minus SPY's, percentage points, from the latest scan; null when not in it
+             */
+            rs_20d?: number | null;
+            /**
+             * Rs Line High
+             * @description Stock/SPY line at its highest of the last 50 sessions in the latest scan; null when unknown
+             */
+            rs_line_high?: boolean | null;
+            /**
              * Rvol
              * @description Relative volume in the displayed market scan
              */
@@ -10827,14 +10867,14 @@ export interface components {
         /** TablePreferences */
         TablePreferences: {
             /** Columns */
-            columns?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "prob")[];
+            columns?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "vs_spy" | "prob")[];
             /**
              * Compact
              * @default false
              */
             compact: boolean;
             /** Hidden */
-            hidden?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "prob")[];
+            hidden?: ("setup" | "sector" | "spark" | "last" | "picked" | "change" | "gap" | "rvol" | "vs_spy" | "prob")[];
         };
         /**
          * Tape
@@ -11688,6 +11728,21 @@ export interface components {
             rank: number;
             /** Rebound Candidate */
             rebound_candidate?: boolean | null;
+            /**
+             * Rs 10D
+             * @description Relative strength: 10-session return minus SPY's over the same dates, percentage points
+             */
+            rs_10d?: number | null;
+            /**
+             * Rs 20D
+             * @description Relative strength: 20-session return minus SPY's over the same dates, percentage points
+             */
+            rs_20d?: number | null;
+            /**
+             * Rs Line High
+             * @description The stock/SPY line is at its highest of the last 50 sessions (outpacing the market)
+             */
+            rs_line_high?: boolean | null;
             /** Rsi 14 */
             rsi_14?: number | null;
             /** Rvol */
@@ -20592,7 +20647,7 @@ export interface operations {
                 /** @description Only setups with this signal */
                 signal?: string | null;
                 /** @description Order of the rows the plan sees (descending); the plan's rows are always its top HSF-ranked setups */
-                sort?: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+                sort?: "score" | "chg_pct" | "gap_pct" | "rvol" | "prob" | "rs_20d";
                 /** @description Last price at least this */
                 min_price?: number | null;
                 /** @description Last price at most this */
@@ -20601,6 +20656,8 @@ export interface operations {
                 min_rvol?: number | null;
                 /** @description Only setups in this sector (see sectors) */
                 sector?: string | null;
+                /** @description Only setups up more than SPY over the last 20 sessions */
+                beating_spy?: boolean;
                 /** @description Only setups of this company size by market cap: micro <$300M, small $300M-2B, mid $2-10B, large $10-200B, mega $200B+ */
                 cap?: ("micro" | "small" | "mid" | "large" | "mega") | null;
             };

@@ -216,7 +216,7 @@ def main() -> None:
     }
     # Same per-scan rank analysis for simple heuristics: top-10 hit rate if the tab ranked by them.
     alt = {}
-    for col in ("BreakoutScore", "BreakoutPos20D", "VolRel20", "Trend10D%", "Trend20D%", "RSI14", "RSvsSPY", "Volatility20D%", "GapPct", "PctChange"):
+    for col in ("BreakoutScore", "BreakoutPos20D", "VolRel20", "Trend10D%", "Trend20D%", "RSI14", "RS10D%", "RS20D%", "Volatility20D%", "GapPct", "PctChange"):
         if col not in scored.columns:
             continue
         for sign, tag in ((1, "high"), (-1, "low")):

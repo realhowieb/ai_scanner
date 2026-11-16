@@ -1,4 +1,6 @@
 import json
+import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import mean
@@ -3695,6 +3697,45 @@ def clear_model_cache() -> None:
     _MODEL_CACHE.clear()
 
 
+def _lean_scoring_enabled() -> bool:
+    """HSF_LEAN_MODEL_IMPORT=1 (the API sets it at boot): scoring loads xgboost without
+    scikit-learn. Training paths never use this; they call _load_ml_libs()."""
+    return os.environ.get("HSF_LEAN_MODEL_IMPORT", "0").strip() == "1"
+
+
+def _load_scoring_libs() -> None:
+    """What score_prebreakout needs: joblib and xgboost, nothing else.
+
+    In lean mode xgboost is imported with scikit-learn hidden. xgboost only uses
+    scikit-learn for its estimator base classes, but importing it pulls in
+    scikit-learn and most of SciPy: about 50 MB that the API kept for the rest of the
+    day after its first custom scan. Predictions are bit-identical either way (the
+    booster does the work). If scikit-learn or xgboost is already loaded there is
+    nothing to save and this imports normally.
+    """
+    global joblib
+    if not _lean_scoring_enabled():
+        _load_ml_libs()
+        return
+    if joblib is None:
+        try:
+            import joblib as _joblib
+
+            joblib = _joblib
+        except Exception:  # pragma: no cover - optional ML dependency
+            return
+    if "xgboost" in sys.modules or "sklearn" in sys.modules:
+        return
+    sys.modules["sklearn"] = None  # type: ignore[assignment]  # makes `import sklearn...` raise ImportError
+    try:
+        import xgboost  # noqa: F401
+    except Exception:  # pragma: no cover - optional ML dependency
+        pass
+    finally:
+        if sys.modules.get("sklearn", 0) is None:
+            del sys.modules["sklearn"]
+
+
 def load_prebreakout_model(model_path: str = MODEL_PATH):
     """
     Load model bundle with model, features, trained_at, auc.
@@ -3703,7 +3744,7 @@ def load_prebreakout_model(model_path: str = MODEL_PATH):
     a best-effort fallback only, so app reboots do not require retraining when
     a saved database model exists. Cached in-process for 15 minutes.
     """
-    _load_ml_libs()
+    _load_scoring_libs()
     if joblib is None:
         return None
     import time as _time

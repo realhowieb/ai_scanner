@@ -91,7 +91,9 @@ class BreakoutBehaviorTests(unittest.TestCase):
         result = self._scan({"BOOM": self._ohlcv()}, spy_df=None)
 
         self.assertEqual(list(result["Ticker"]), ["BOOM"])
-        self.assertIsNone(result.iloc[0]["RSvsSPY"])
+        for col in ("RS10D%", "RS20D%", "RSLineHigh"):
+            self.assertIsNone(result.iloc[0][col])
+        self.assertNotIn("RSvsSPY", result.columns)
 
     def test_progress_callback_starts_and_finishes(self):
         events = []

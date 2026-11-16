@@ -58,7 +58,11 @@ ROW_FEATURES = {
     "Trend10D%": "trend_10d_pct",
     "DollarVol20": "dollar_vol_20",
     "PatternTag": "pattern_tag",
-    "RSvsSPY": "rs_vs_spy",
+    # rs_vs_spy (saved through Nov 2026) was close / SPY close, a price ratio, not
+    # relative strength. Real RS replaced it: return minus SPY's over 10/20 sessions.
+    "RS10D%": "rs_10d_pct",
+    "RS20D%": "rs_20d_pct",
+    "RSLineHigh": "rs_line_high",
     "EMACross": "ema_cross",
 }
 
