@@ -36,6 +36,8 @@ const NAV = [
 ];
 const GROUPS = ["Markets", "Research", "Tools"];
 
+/** Table-heavy pages that use the full screen width on big displays (others keep the 1440px cap). */
+const WIDE_PAGES = ["/scanner", "/day-trader"];
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
 /** Keeps a controlled menu closed after the route changes. */
@@ -112,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const plan = me?.plan;
   return (
-    <div className={isActive(path, "/scanner") ? "shell shell-wide" : "shell"}>
+    <div className={WIDE_PAGES.some((h) => isActive(path, h)) ? "shell shell-wide" : "shell"}>
       <a href="#main" className="skip">Skip to content</a>
       <aside className="sidebar">
         <Link href="/today" className="brand side-brand">HSFinest<span>.com</span></Link>

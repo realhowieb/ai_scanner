@@ -172,9 +172,9 @@ button, input, select { font: inherit; color: inherit; }
 .menu-item { text-align: left; background: none; border: 0; padding: 10px; border-radius: var(--radius-md); color: var(--text); cursor: pointer; font-size: 14px; }
 .menu-item:hover { background: var(--raise); color: var(--text); }
 .col-main { scroll-margin-top: 84px; }
-/* Scanner: the ranked table has 13+ columns, so on big screens the page uses the full width instead of the 1440px cap. */
+/* Scanner and Day Trader: wide tables, so on big screens these pages use the full width instead of the 1440px cap. */
 .shell-wide { --content-max: 2560px; }
-.shell-wide .table-wrap .table th, .shell-wide .table-wrap .table td { padding-left: 10px; padding-right: 10px; } /* all 14 columns fit at 1920 */
+.shell-wide .table-wrap .table th, .shell-wide .table-wrap .table td { padding-left: 10px; padding-right: 10px; } /* all 14 Scanner columns fit at 1920 */
 .main { max-width: var(--content-max); width: 100%; margin: 0 auto; padding: 24px 32px 32px; flex: 1 0 auto; }
 .foot { max-width: var(--content-max); width: 100%; margin: 0 auto; padding: 18px 32px 32px; border-top: 1px solid var(--line-soft); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
 @media (min-width: 901px) and (max-width: 1199px) { .main, .foot { padding-left: 24px; padding-right: 24px; } }
