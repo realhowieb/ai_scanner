@@ -2,7 +2,9 @@
 """Refresh sectors.csv (ticker -> sector, industry, market cap) from Nasdaq's public stock screener.
 
 The screener lists every US-listed stock on Nasdaq, NYSE and NYSE American with its
-sector, industry and market cap, so one request covers the whole scan universe. The
+sector, industry and market cap, so one request covers the whole scan universe. ETFs
+aren't in the screener, so they are added from nasdaqtrader.com's symbol directories
+(nasdaqlisted.txt / otherlisted.txt, ETF column = Y) with sector "ETF". The
 Scanner's Sector and Size filters and the stock page's company facts read this file
 (api/sectors.py); a ticker missing from it simply shows no sector.
 
@@ -28,6 +30,9 @@ HEADERS = {
                   "(KHTML, like Gecko) Version/17.0 Safari/605.1.15",
     "Accept": "application/json, text/plain, */*",
 }
+NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
+ETF_SECTOR = "ETF"
 _MIN_ROWS = 3000
 _SENTINELS = ("AAPL", "MSFT", "NVDA", "JPM", "XOM")
 
@@ -61,6 +66,44 @@ def parse_screener(payload: dict) -> dict[str, tuple[str, str, str]]:
     return dict(sorted(out.items()))
 
 
+def parse_etfs(text: str, etf_col: int, test_col: int) -> set[str]:
+    """A nasdaqtrader symbol directory (pipe-separated) -> tickers flagged ETF=Y, test issues left out.
+
+    nasdaqlisted.txt: Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+    otherlisted.txt:  ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol"""
+    out: set[str] = set()
+    for line in text.splitlines()[1:]:
+        f = [x.strip() for x in line.split("|")]
+        if len(f) <= max(etf_col, test_col) or line.startswith("File Creation Time"):
+            continue
+        if f[etf_col] == "Y" and f[test_col] == "N" and f[0]:
+            out.add(_norm(f[0]))
+    return out
+
+
+def add_etfs(sectors: dict[str, tuple[str, str, str]], etfs: set[str]) -> dict[str, tuple[str, str, str]]:
+    """Give each ETF the screener doesn't already list the sector "ETF" (no industry or market cap)."""
+    out = dict(sectors)
+    for t in etfs:
+        out.setdefault(t, (ETF_SECTOR, "", ""))
+    return dict(sorted(out.items()))
+
+
+def fetch_etfs() -> set[str]:
+    """ETF tickers from both symbol directories; an empty set (with a warning) if either fetch fails."""
+    import requests
+
+    try:
+        nl = requests.get(NASDAQ_LISTED_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+        ol = requests.get(OTHER_LISTED_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+        nl.raise_for_status()
+        ol.raise_for_status()
+    except Exception as e:  # ETFs are a bonus; never block the stock sectors on them
+        print(f"[refresh_sectors] ETF list skipped: {type(e).__name__}: {e}", file=sys.stderr)
+        return set()
+    return parse_etfs(nl.text, 6, 3) | parse_etfs(ol.text, 4, 6)
+
+
 def fetch_sectors() -> dict[str, tuple[str, str, str]]:
     import requests
 
@@ -88,6 +131,9 @@ def main() -> int:
         print(f"[refresh_sectors] implausible result (n={len(sectors)}, missing={missing}); "
               "leaving sectors.csv unchanged", file=sys.stderr)
         return 1
+    n_stocks = len(sectors)
+    sectors = add_etfs(sectors, fetch_etfs())
+    print(f"[refresh_sectors] {n_stocks} stocks + {len(sectors) - n_stocks} ETFs")
     old = set()
     if SECTORS_PATH.exists():
         old = {r["ticker"] for r in csv.DictReader(SECTORS_PATH.read_text().splitlines())}

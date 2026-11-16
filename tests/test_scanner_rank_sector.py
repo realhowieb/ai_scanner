@@ -90,6 +90,23 @@ class SectorFileTests(unittest.TestCase):
         self.assertEqual(to_csv(got), "ticker,sector,industry,market_cap\nAAPL,Technology,,\n"
                                       "BRK-B,Finance,Insurance,1000000000000\n")
 
+    def test_etfs_from_symbol_directories(self):
+        from scripts.refresh_sectors import add_etfs, parse_etfs
+
+        nasdaq = ("Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares\n"
+                  "NVD|GraniteShares 2x Short NVDA Daily ETF|G|N|N|100|Y|N\n"
+                  "AAPL|Apple Inc. - Common Stock|Q|N|N|100|N|N\n"
+                  "ZJZZT|Test ETF|G|Y|N|100|Y|N\n"
+                  "File Creation Time: 1116202600:00|||||||\n")
+        other = ("ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol\n"
+                 "SPY|SPDR S&P 500 ETF Trust|P|SPY|Y|100|N|SPY\n"
+                 "BRK.B|Berkshire Hathaway Class B|N|BRK.B|N|100|N|BRK=B\n")
+        etfs = parse_etfs(nasdaq, 6, 3) | parse_etfs(other, 4, 6)
+        self.assertEqual(etfs, {"NVD", "SPY"})
+        got = add_etfs({"AAPL": ("Technology", "", ""), "SPY": ("Finance", "", "")}, etfs)
+        # A ticker the screener already sectors keeps it; the rest get "ETF" with no industry or cap.
+        self.assertEqual(got, {"AAPL": ("Technology", "", ""), "NVD": ("ETF", "", ""), "SPY": ("Finance", "", "")})
+
 
 if __name__ == "__main__":
     unittest.main()
