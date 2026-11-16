@@ -7,6 +7,11 @@ Render only rebuilds the web service when something under web/ changed, so the w
 also counts as ready when its build differs from the target but `git diff` shows no web/
 change between the two (needs the full git history checked out).
 
+The API has a Render build filter too (API_IGNORED below mirrors it): a promote that only
+touches web/, docs, tests, workflows or Markdown does not redeploy the API, so the API side
+counts as ready when nothing outside those paths changed between its build and the target.
+Keep API_IGNORED in step with the build filter on hsf-api-v1 in Render.
+
     python scripts/wait_for_deploy.py --sha <commit> [--timeout-min 30]
 
 Exit 0 when both are ready, 1 on timeout. Standard library only.
@@ -49,9 +54,24 @@ def web_unchanged(build: str, sha: str) -> bool:
         return False
 
 
+# hsf-api-v1's Render build filter (ignored paths), as git pathspecs.
+API_IGNORED = ["web/", "docs/", "tests/", ".github/", "*.md"]
+
+
+def api_unchanged(build: str, sha: str) -> bool:
+    """True when nothing the API's Render build filter watches changed between build and target."""
+    spec = ["."] + [f":(exclude){p}" if not p.startswith("*") else f":(glob,exclude)**/{p}" for p in API_IGNORED]
+    try:
+        r = subprocess.run(["git", "diff", "--quiet", build, sha, "--", *spec], capture_output=True, timeout=30)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def ready(sha: str, api_build: Optional[str], web_build: Optional[str],
-          unchanged: Callable[[str, str], bool] = web_unchanged) -> tuple:
-    api_ok = same_commit(api_build, sha)
+          unchanged: Callable[[str, str], bool] = web_unchanged,
+          api_same: Callable[[str, str], bool] = api_unchanged) -> tuple:
+    api_ok = same_commit(api_build, sha) or (bool(api_build) and api_same(api_build, sha))
     web_ok = same_commit(web_build, sha) or (bool(web_build) and unchanged(web_build, sha))
     return api_ok, web_ok
 
