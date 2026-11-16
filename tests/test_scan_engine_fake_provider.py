@@ -83,7 +83,7 @@ class ScanEngineFakeProviderTests(unittest.TestCase):
         self.assertEqual(set(requested_symbols), {"BOOM", "MISS", "SPY"})
         self.assertEqual(list(result["Ticker"]), ["BOOM"])
         self.assertTrue(bool(result.iloc[0]["IsBreakout"]))
-        self.assertIsNotNone(result.iloc[0]["RSvsSPY"])
+        self.assertIsNotNone(result.iloc[0]["RS10D%"])
 
 
 if __name__ == "__main__":

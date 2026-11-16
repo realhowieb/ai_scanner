@@ -125,6 +125,22 @@ await step("Scanner shows when HSF picked up each setup", async () => {
   check("Scanner shows when HSF picked up each setup", / ET$/.test(when), when);
 });
 
+await step("Scanner shows relative strength vs SPY and filters to stocks beating SPY", async () => {
+  // "vs SPY" column: 20-session return minus SPY's (rs_20d), with an RS high badge; "—" on rows
+  // from scans saved before relative strength existed. The vs SPY filter sends beating_spy.
+  await page.getByRole("columnheader", { name: /vs SPY/ }).first().waitFor();
+  const first = ((await page.locator("table .vs-spy .mono").first().textContent({ timeout: 5_000 }).catch(() => "—")) ?? "").trim();
+  await page.getByRole("combobox", { name: "vs SPY" }).selectOption("beat");
+  await page.waitForURL(/[?&]spy=beat/);
+  await page.locator("table .tk, .empty").first().waitFor();
+  const shown = await page.locator("table .vs-spy .mono").allTextContents();
+  const allBeat = shown.every((t) => t.trim().startsWith("+"));
+  await page.getByRole("combobox", { name: "vs SPY" }).selectOption("");
+  await page.waitForURL((u) => !u.search.includes("spy=beat"));
+  await page.locator("table .tk").first().waitFor();
+  check("Scanner shows relative strength vs SPY and filters to stocks beating SPY", allBeat, `first row ${first}; ${shown.length} rows beating SPY`);
+});
+
 await step("Scanner phone cards keep ticker, badges and actions inside the card; Compare toggles", async () => {
   // Same session at iPhone width: the table turns into cards (#ticker row, badge row, fact grid).
   await page.setViewportSize({ width: 390, height: 844 });
@@ -141,6 +157,18 @@ await step("Scanner phone cards keep ticker, badges and actions inside the card;
   await shot(page, "journey-1b-scanner-phone");
   await page.setViewportSize({ width: 1440, height: 1000 });
   check("Scanner phone cards keep ticker, badges and actions inside the card; Compare toggles", over === 0 && pressed === "true", `overflowing cards ${over}, compare ${pressed}`);
+});
+
+await step("Day Trader shows each name's move vs SPY today", async () => {
+  // vs SPY = Chg % minus SPY's in the same snapshot (vs_spy_pct). A source with no rows shows no table.
+  await page.goto(`${BASE}/day-trader`);
+  await page.locator(".dt-table, .dt-cards, .empty").first().waitFor({ timeout: 60_000 });
+  const table = await page.locator(".dt-table").count();
+  const header = table ? await page.getByRole("columnheader", { name: /vs SPY/ }).count() : 0;
+  await shot(page, "journey-1c-day-trader-vs-spy");
+  await page.goto(`${BASE}/scanner`);
+  await page.locator("table .tk").first().waitFor();
+  check("Day Trader shows each name's move vs SPY today", !table || header > 0, table ? `vs SPY header ${header}` : "no rows right now");
 });
 
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {

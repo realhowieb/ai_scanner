@@ -143,7 +143,7 @@ _FEATURES_V1: Tuple[FeatureSpec, ...] = (
     FeatureSpec("dollar_vol_20", "float", SRC_SCAN_META, "record.research_metadata.row_features.dollar_vol_20",
                 SAFE_STORED, "20-day average dollar volume."),
     FeatureSpec("rs_vs_spy", "float", SRC_SCAN_META, "record.research_metadata.row_features.rs_vs_spy",
-                SAFE_STORED, "Relative strength vs SPY as computed by the scan."),
+                SAFE_STORED, "Saved as close / SPY close (a price ratio, not relative strength). Schema v3 adds real RS."),
     FeatureSpec("ema_cross", "str", SRC_SCAN_META, "record.research_metadata.row_features.ema_cross",
                 SAFE_STORED, "EMA cross tag from the scan (no EMA values are stored)."),
     FeatureSpec("pattern_tag", "str", SRC_SCAN_META, "record.research_metadata.row_features.pattern_tag",
@@ -179,7 +179,20 @@ _FEATURES_V2: Tuple[FeatureSpec, ...] = _FEATURES_V1 + (
                 SAFE_STORED, "True when the regime label is SPY_ABOVE_SMA20 (spy-sma20-v1). From Nov 2, 2026."),
 )
 
-FEATURE_SCHEMAS: Mapping[int, Tuple[FeatureSpec, ...]] = MappingProxyType({1: _FEATURES_V1, 2: _FEATURES_V2})
+# Schema v3 (2026-11-16): v2 unchanged, plus real relative strength vs SPY that the
+# scheduled scan saves from the deploy of PR "relative strength" (mid-November 2026).
+# v1's rs_vs_spy stays as it was saved: close / SPY close, a price ratio, not RS.
+_FEATURES_V3: Tuple[FeatureSpec, ...] = _FEATURES_V2 + (
+    FeatureSpec("rs_10d_pct", "float", SRC_SCAN_META, "record.research_metadata.row_features.rs_10d_pct",
+                SAFE_STORED, "10-session return minus SPY's over the same dates, percentage points."),
+    FeatureSpec("rs_20d_pct", "float", SRC_SCAN_META, "record.research_metadata.row_features.rs_20d_pct",
+                SAFE_STORED, "20-session return minus SPY's over the same dates, percentage points."),
+    FeatureSpec("rs_line_high", "bool", SRC_SCAN_META, "record.research_metadata.row_features.rs_line_high",
+                SAFE_STORED, "Stock/SPY ratio at its highest of the last 50 sessions at scan time."),
+)
+
+FEATURE_SCHEMAS: Mapping[int, Tuple[FeatureSpec, ...]] = MappingProxyType(
+    {1: _FEATURES_V1, 2: _FEATURES_V2, 3: _FEATURES_V3})
 
 # Features not exposed by schema v1. Some newer observations preserve inputs
 # in research metadata, but they require an explicit versioned reader before use.

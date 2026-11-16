@@ -1,6 +1,8 @@
 # ai_scanner/scan/indicators.py
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 import numpy as np
 import pandas as pd
 
@@ -334,6 +336,47 @@ def rs_20d_vs_spy(df_ticker: pd.DataFrame, df_spy: pd.DataFrame) -> float:
         return np.nan
     except Exception:
         return np.nan
+
+
+RS_LINE_HIGH_BARS = 50  # "RS line at a new high" looks back this many sessions (fewer when history is short)
+RS_LINE_MIN_BARS = 21
+
+
+def relative_strength_vs_spy(close: pd.Series, spy_close: Optional[pd.Series]) -> Dict[str, Any]:
+    """Real relative strength vs SPY for the latest bar of one stock.
+
+    ``rs_10d`` / ``rs_20d``: the stock's 10/20-session return minus SPY's over the same
+    dates, in percentage points (the same math as PreBreakout's RSvsSPY10D/20D, which
+    is Trend% minus SPY's trend). SPY is aligned onto the stock's own dates (last SPY
+    close at or before each date), so both returns end on the same bar.
+    ``rs_line_high``: the stock/SPY price ratio (the "RS line") is at its highest close
+    of the last RS_LINE_HIGH_BARS sessions, the classic sign a stock is outpacing the
+    market before its own price breaks out. None when there's too little history.
+    Never raises.
+    """
+    out: Dict[str, Any] = {"rs_10d": None, "rs_20d": None, "rs_line_high": None}
+    try:
+        if spy_close is None or close is None or len(close) < 2 or len(spy_close) < 2:
+            return out
+        c = pd.to_numeric(pd.Series(close), errors="coerce")
+        s = pd.to_numeric(pd.Series(spy_close), errors="coerce").dropna()
+        s = s[~s.index.duplicated(keep="last")].sort_index()
+        spy_on = s.reindex(s.index.union(c.index)).ffill().reindex(c.index)
+        ok = c.notna() & spy_on.notna() & (c > 0) & (spy_on > 0)
+        c, spy_on = c[ok], spy_on[ok]
+        if len(c) < 2 or c.index[-1] != close.index[-1]:
+            return out
+        for lb, key in ((10, "rs_10d"), (20, "rs_20d")):
+            if len(c) >= lb + 1:
+                stock_ret = float(c.iloc[-1]) / float(c.iloc[-(lb + 1)]) - 1.0
+                spy_ret = float(spy_on.iloc[-1]) / float(spy_on.iloc[-(lb + 1)]) - 1.0
+                out[key] = round((stock_ret - spy_ret) * 100.0, 3)
+        if len(c) >= RS_LINE_MIN_BARS:
+            line = (c / spy_on).iloc[-RS_LINE_HIGH_BARS:]
+            out["rs_line_high"] = bool(float(line.iloc[-1]) >= float(line.max()) * (1 - 1e-9))
+    except Exception:
+        return {"rs_10d": None, "rs_20d": None, "rs_line_high": None}
+    return out
 
 
 # -----------------------------

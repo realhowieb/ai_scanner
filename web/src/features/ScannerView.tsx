@@ -51,6 +51,7 @@ export const SORTS = [
   { id: "chg_pct", label: "Change %" },
   { id: "gap_pct", label: "Gap %" },
   { id: "rvol", label: "Relative volume" },
+  { id: "rs_20d", label: "vs SPY (20 sessions)" },
   { id: "prob", label: "PreBreakout", feature: "can_early_breakout" },
 ] as const;
 type Sort = (typeof SORTS)[number]["id"];
@@ -77,6 +78,8 @@ export function readFilters(sp: URLSearchParams) {
     // Any sector name the API listed; an unknown one just matches nothing.
     sector: (sp.get("sector") || "").slice(0, 64),
     cap: (CAP_SIZES.some(([id]) => id === sp.get("cap")) ? sp.get("cap") : "") as (typeof CAP_SIZES)[number][0] | "",
+    /** Only setups up more than SPY over the last 20 sessions. */
+    spy: sp.get("spy") === "beat" ? "beat" as const : "" as const,
     price: (PRICE_BANDS.some(([id]) => id === pr) ? pr : "") as (typeof PRICE_BANDS)[number][0],
     rvol: RVOLS.includes(rv) ? rv : 0,
     sort: (SORTS.some((x) => x.id === so) ? so : "score") as Sort,
@@ -110,10 +113,10 @@ export function ScannerView() {
   const sort: Sort = f.sort === "prob" && !premium ? "score" : f.sort;
   const band = PRICE_BANDS.find(([id]) => id === f.price)!;
   const [, , minPrice, maxPrice] = band;
-  const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}:${f.price}:${f.rvol}:${f.sector}:${f.cap}`;
+  const key = lockedSignal ? null : `scan:${scanSignal}:${f.minScore}:${f.size}:${f.page}:${sort}:${f.price}:${f.rvol}:${f.sector}:${f.cap}:${f.spy}`;
   const filterQuery = { min_score: f.minScore, ...(scanSignal ? { signal: scanSignal } : {}), ...(sort !== "score" ? { sort } : {}),
     ...(minPrice != null ? { min_price: minPrice } : {}), ...(maxPrice != null ? { max_price: maxPrice } : {}), ...(f.rvol ? { min_rvol: f.rvol } : {}),
-    ...(f.sector ? { sector: f.sector } : {}), ...(f.cap ? { cap: f.cap } : {}) };
+    ...(f.sector ? { sector: f.sector } : {}), ...(f.cap ? { cap: f.cap } : {}), ...(f.spy ? { beating_spy: true } : {}) };
   const { data, error, loading, refreshing, updatedAt, reload } = useApi(key, (signal) =>
     unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: f.size, offset, ...filterQuery } }, signal })));
   useAutoRefresh(reload, { enabled: key !== null });
@@ -142,14 +145,14 @@ export function ScannerView() {
   const plural = (n: number) => `${n} setup${n === 1 ? "" : "s"}`;
   // total counts what the filters left; the headline counts the whole scan and names the filter's share.
   const scanTotal = data ? (data.scan_total ?? data.total) : 0;
-  const narrowing = Boolean(f.minScore || f.price || f.rvol || f.sector || f.cap);
+  const narrowing = Boolean(f.minScore || f.price || f.rvol || f.sector || f.cap || f.spy);
   const filterName = f.signal ? SIGNALS.find((s) => s.id === f.signal)?.label : narrowing ? "match your filters" : "";
   const filtered = Boolean(data && filterName && scanTotal !== data.total);
   const earnWindow = ef.when === "week" ? "in the next 7 days" : EARNINGS_WHEN.find((w) => w.id === ef.when)!.label.toLowerCase();
   const countText = !data ? "" : earnings
     ? `${plural(scanTotal)} ranked${earn.data ? ` · ${earn.data.total} report ${earnWindow}` : ""}`
     : `${plural(scanTotal)} ranked${filtered ? ` · ${data.total} ${filterName}` : ""}`;
-  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, eview: "", price: "", rvol: 0, wl: "", sector: "", cap: "" };
+  const resetAll = { signal: "", min: 0, sort: "score", size: 25, page: 1, when: "", etime: "", all: 0, eview: "", price: "", rvol: 0, wl: "", sector: "", cap: "", spy: "" };
 
 
   return (
@@ -215,6 +218,12 @@ export function ScannerView() {
             {CAP_SIZES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
         </label>}
+        <label className="inline-field">vs SPY
+          <select value={f.spy} onChange={(e) => set({ spy: e.target.value })}>
+            <option value="">Any</option>
+            <option value="beat">Beating SPY (20 sessions)</option>
+          </select>
+        </label>
         <label className="inline-field">Sort by
           <select value={sort} onChange={(e) => set({ sort: e.target.value })}>
             {SORTS.filter((x) => !("feature" in x) || can(x.feature)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
@@ -263,7 +272,7 @@ export function ScannerView() {
         </Empty></Card>
       ) : data && data.setups.length === 0 ? (
         <Card><Empty title={f.signal || narrowing ? "No setups match these filters." : "The latest scan has no ranked setups."}>
-          {(f.signal || narrowing) ? <button type="button" className="btn" onClick={() => set({ signal: "", min: 0, price: "", rvol: 0, sector: "", cap: "" })}>Clear filters</button> : null}
+          {(f.signal || narrowing) ? <button type="button" className="btn" onClick={() => set({ signal: "", min: 0, price: "", rvol: 0, sector: "", cap: "", spy: "" })}>Clear filters</button> : null}
         </Empty></Card>
       ) : data ? (
         <section className={`card flush${loading || refreshing ? " dim" : ""}`} aria-busy={loading || refreshing}>
@@ -274,7 +283,7 @@ export function ScannerView() {
       ) : null}
 
       {!ownRows && <>
-      {data && sort !== "score" && <p className="cap">Sorted by {SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups{live.updatedAt && sort !== "rvol" && sort !== "prob" ? ", as of the scan" : ""}.</p>}
+      {data && sort !== "score" && <p className="cap">Sorted by {sort === "rs_20d" ? "vs SPY (20 sessions)" : SORTS.find((x) => x.id === sort)!.label.toLowerCase()} within your plan&apos;s top {Math.min(data.total, data.max_results)} HSF-ranked setups{live.updatedAt && sort !== "rvol" && sort !== "prob" ? ", as of the scan" : ""}.</p>}
       {data && data.limited && (
         <div className="cap-note" role="note">
           <p>Your plan shows the top <b>{data.max_results}</b> of <b>{data.total}</b> setups in this scan.</p>

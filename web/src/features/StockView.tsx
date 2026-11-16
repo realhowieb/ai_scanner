@@ -321,6 +321,8 @@ function AINote({ s }: { s: Stock }) {
   );
 }
 
+const upDownClass = (v: number | null | undefined) => (v ?? 0) > 0 ? "up" : (v ?? 0) < 0 ? "down" : "";
+
 export function StockView({ s, premium, pro = false, aiNotes = false, onChanged, extras }: {
   s: Stock; premium: boolean; pro?: boolean; aiNotes?: boolean; onChanged?: () => void; extras?: StockExtras;
 }) {
@@ -426,13 +428,18 @@ export function StockView({ s, premium, pro = false, aiNotes = false, onChanged,
             </Card>
           )}
 
-          {(ranked || s.signals.length > 0) && <Card title="Signals" id="signals">
+          {(ranked || s.signals.length > 0 || s.rs_20d != null) && <Card title="Signals" id="signals">
             {s.signals.length ? <div className="chips">{s.signals.map((g) => <Pill key={g}>{setupLabel(g)}</Pill>)}</div> : <p className="cap">No active signals.</p>}
             <dl className="kv">
               <div><dt>Breakout score</dt><dd className="mono">{s.breakout_score != null && Number.isFinite(s.breakout_score) ? s.breakout_score.toFixed(1) : "—"}</dd></div>
               <div><dt>PreBreakout <span className="cap">(model probability)</span></dt><dd className="mono">{premium ? probPct(s.prob) : <Pill tone="gold">Premium</Pill>}</dd></div>
               <div><dt>Next earnings</dt><dd>{earningsText(s.earnings_days)}</dd></div>
+              {s.rs_20d != null && <div><dt>vs SPY <span className="cap">(10 / 20 sessions)</span></dt>
+                <dd className="mono"><span className={upDownClass(s.rs_10d)}>{pct(s.rs_10d)}</span> / <span className={upDownClass(s.rs_20d)}>{pct(s.rs_20d)}</span></dd></div>}
+              {s.rs_line_high != null && <div><dt>RS line <span className="cap">(stock vs SPY)</span></dt>
+                <dd>{s.rs_line_high ? <Pill tone="up">At a 50-session high</Pill> : <span className="cap">Below its 50-session high</span>}</dd></div>}
             </dl>
+            {s.rs_20d != null && <p className="cap">vs SPY is the stock&apos;s move minus SPY&apos;s over the same days, from the latest scan. Display only: the HSF Score doesn&apos;t use it yet.</p>}
           </Card>}
 
           <Card title="Your lists and alerts" id="mine">

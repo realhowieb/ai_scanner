@@ -8,13 +8,13 @@ import { useAction } from "@/hooks/useAction";
 import { saveWorkspace } from "@/hooks/useWorkspace";
 
 type Col = NonNullable<Schemas["TablePreferences"]["columns"]>[number];
-export const DEFAULT_COLUMNS = ["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"] as const;
+export const DEFAULT_COLUMNS = ["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "vs_spy", "prob"] as const;
 /** Columns that can be moved. #, Ticker, Setup and HSF Score stay first. */
-export const MOVABLE_COLUMNS = ["sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"] as const;
+export const MOVABLE_COLUMNS = ["sector", "spark", "last", "picked", "change", "gap", "rvol", "vs_spy", "prob"] as const;
 /** Columns added after people first saved their display: shown unless turned off (`hidden`),
  * and placed where they sit by default rather than after the saved ones. */
-const NEW_COLUMNS: readonly Col[] = ["sector", "picked"];
-const LABELS = { setup: "Setup", sector: "Sector", spark: "20 sessions", last: "Last price", picked: "Picked up", change: "Change %", gap: "Gap %", rvol: "Relative volume", prob: "PreBreakout" };
+const NEW_COLUMNS: readonly Col[] = ["sector", "picked", "vs_spy"];
+const LABELS = { setup: "Setup", sector: "Sector", spark: "20 sessions", last: "Last price", picked: "Picked up", change: "Change %", gap: "Gap %", rvol: "Relative volume", vs_spy: "vs SPY", prob: "PreBreakout" };
 type Table = { columns?: readonly string[] | null; hidden?: readonly string[] | null } | null | undefined;
 
 /** The columns to show, in saved order: the saved list plus any new column not turned off. */
@@ -22,12 +22,12 @@ export function shownColumns(table: Table): Col[] {
   if (!table?.columns) return [...DEFAULT_COLUMNS];
   const saved = table.columns.filter((c): c is Col => (DEFAULT_COLUMNS as readonly string[]).includes(c));
   const added = NEW_COLUMNS.filter((c) => !saved.includes(c) && !(table.hidden ?? []).includes(c));
-  // A new column goes right after the column it follows by default when that one is shown
-  // (Picked up after Last), otherwise first (Sector).
+  // A new column goes right after the nearest column before it by default that is shown
+  // (Picked up after Last, vs SPY after Relative volume), otherwise first (Sector).
   const out: Col[] = [...saved];
   for (const c of added) {
-    const before = DEFAULT_COLUMNS[DEFAULT_COLUMNS.indexOf(c as (typeof DEFAULT_COLUMNS)[number]) - 1];
-    const at = before && before !== "setup" ? out.indexOf(before) : -1;
+    let at = -1;
+    for (let i = DEFAULT_COLUMNS.indexOf(c as (typeof DEFAULT_COLUMNS)[number]) - 1; i > 0 && at < 0; i--) at = out.indexOf(DEFAULT_COLUMNS[i]!);
     if (at >= 0) out.splice(at + 1, 0, c);
     else out.splice(out.filter((x) => (added as readonly string[]).includes(x)).length, 0, c);
   }

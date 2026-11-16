@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 THRESHOLD = 100.0
 INPUT_COLS = [
     "Ticker", "BreakoutScore", "PctChange", "GapPct", "Trend10D%", "Trend20D%",
-    "VolRel20", "RelVol", "RSvsSPY", "BreakoutPos20D", "Last",
+    "VolRel20", "RelVol", "RS20D%", "BreakoutPos20D", "Last",
 ]
 
 

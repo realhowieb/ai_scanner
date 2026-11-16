@@ -5989,6 +5989,18 @@
       "title": "Source",
       "type": "string"
      },
+     "spy_chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SPY's Chg % in the same snapshot; null when unavailable",
+      "title": "Spy Chg Pct"
+     },
      "state": {
       "enum": [
        "premarket",
@@ -6308,6 +6320,18 @@
        }
       ],
       "title": "Volume"
+     },
+     "vs_spy_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Today's Chg % minus SPY's at the same moment, percentage points; null without a SPY quote",
+      "title": "Vs Spy Pct"
      },
      "vs_vwap_pct": {
       "anyOf": [
@@ -16834,6 +16858,42 @@
       ],
       "title": "Rebound Candidate"
      },
+     "rs_10d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Relative strength: 10-session return minus SPY's over the same dates, percentage points",
+      "title": "Rs 10D"
+     },
+     "rs_20d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Relative strength: 20-session return minus SPY's over the same dates, percentage points",
+      "title": "Rs 20D"
+     },
+     "rs_line_high": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The stock/SPY line is at its highest of the last 50 sessions (outpacing the market)",
+      "title": "Rs Line High"
+     },
      "rsi_14": {
       "anyOf": [
        {
@@ -16978,7 +17038,8 @@
        "chg_pct",
        "gap_pct",
        "rvol",
-       "prob"
+       "prob",
+       "rs_20d"
       ],
       "title": "Sort",
       "type": "string"
@@ -18369,6 +18430,42 @@
       "title": "Risks",
       "type": "array"
      },
+     "rs_10d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "10-session return minus SPY's, percentage points, from the latest scan; null when not in it",
+      "title": "Rs 10D"
+     },
+     "rs_20d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "20-session return minus SPY's, percentage points, from the latest scan; null when not in it",
+      "title": "Rs 20D"
+     },
+     "rs_line_high": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Stock/SPY line at its highest of the last 50 sessions in the latest scan; null when unknown",
+      "title": "Rs Line High"
+     },
      "rvol": {
       "anyOf": [
        {
@@ -18625,11 +18722,12 @@
         "change",
         "gap",
         "rvol",
+        "vs_spy",
         "prob"
        ],
        "type": "string"
       },
-      "maxItems": 9,
+      "maxItems": 10,
       "title": "Columns",
       "type": "array"
      },
@@ -18649,11 +18747,12 @@
         "change",
         "gap",
         "rvol",
+        "vs_spy",
         "prob"
        ],
        "type": "string"
       },
-      "maxItems": 9,
+      "maxItems": 10,
       "title": "Hidden",
       "type": "array"
      }
@@ -20938,6 +21037,42 @@
        }
       ],
       "title": "Rebound Candidate"
+     },
+     "rs_10d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Relative strength: 10-session return minus SPY's over the same dates, percentage points",
+      "title": "Rs 10D"
+     },
+     "rs_20d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Relative strength: 20-session return minus SPY's over the same dates, percentage points",
+      "title": "Rs 20D"
+     },
+     "rs_line_high": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The stock/SPY line is at its highest of the last 50 sessions (outpacing the market)",
+      "title": "Rs Line High"
      },
      "rsi_14": {
       "anyOf": [
@@ -31908,7 +32043,8 @@
         "chg_pct",
         "gap_pct",
         "rvol",
-        "prob"
+        "prob",
+        "rs_20d"
        ],
        "title": "Sort",
        "type": "string"
@@ -31991,6 +32127,18 @@
        ],
        "description": "Only setups in this sector (see sectors)",
        "title": "Sector"
+      }
+     },
+     {
+      "description": "Only setups up more than SPY over the last 20 sessions",
+      "in": "query",
+      "name": "beating_spy",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only setups up more than SPY over the last 20 sessions",
+       "title": "Beating Spy",
+       "type": "boolean"
       }
      },
      {

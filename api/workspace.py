@@ -36,7 +36,7 @@ class ScannerView(StrictModel):
     signal: Literal["", "breakout", "gapper", "golden_cross", "gainer", "prebreakout", "earnings"] = ""
     when: Literal["today", "tomorrow", "week"] = Field(default="today", description="Earnings window (signal earnings)")
     min: Literal[0, 40, 60, 75] = 0
-    sort: Literal["score", "chg_pct", "gap_pct", "rvol", "prob"] = "score"
+    sort: Literal["score", "chg_pct", "gap_pct", "rvol", "prob", "rs_20d"] = "score"
     size: Literal[25, 50, 100] = 25
     price: Literal["", "u5", "5-20", "20-100", "100"] = Field(default="", description="Scanner price band ('' = any)")
     rvol: Literal[0, 1.5, 2, 3] = Field(default=0, description="Minimum relative volume (0 = any)")
@@ -65,14 +65,14 @@ class CustomView(StrictModel):
     score_all: bool = False
 
 
-Column = Literal["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"]
+Column = Literal["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "vs_spy", "prob"]
 
 
 class TablePreferences(StrictModel):
-    columns: list[Column] = Field(default_factory=lambda: ["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "prob"], max_length=9)
+    columns: list[Column] = Field(default_factory=lambda: ["setup", "sector", "spark", "last", "picked", "change", "gap", "rvol", "vs_spy", "prob"], max_length=10)
     # Columns the person turned off. A column in neither list was added after they saved,
     # so it shows (Sector, for one) until they turn it off.
-    hidden: list[Column] = Field(default_factory=list, max_length=9)
+    hidden: list[Column] = Field(default_factory=list, max_length=10)
     compact: bool = False
 
     @field_validator("columns", "hidden")

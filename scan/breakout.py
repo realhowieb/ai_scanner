@@ -161,7 +161,7 @@ def run_breakout_scan(
     - Adds 10/20 day trend, breakout position vs 20-day high, 20-day volatility,
       and dollar volume.
     - Applies price filters, optional gap and unusual volume filters.
-    - Uses SPY (if provided) to compute a simple relative-strength metric.
+    - Uses SPY (if provided) for 10/20-day relative strength and the RS-line high.
     - Ranks results by a composite breakout score and returns the top N rows.
     """
     # Optional: Streamlit diagnostics
@@ -180,12 +180,9 @@ def run_breakout_scan(
 
     # Prepare SPY for relative strength, if available.
     spy_prepped = _prep_symbol_df(spy_df) if spy_df is not None else pd.DataFrame()
-    spy_close = None
+    spy_closes = None
     if not spy_prepped.empty and "Close" in spy_prepped.columns:
-        try:
-            spy_close = float(spy_prepped["Close"].iloc[-1])
-        except Exception:
-            spy_close = None
+        spy_closes = spy_prepped["Close"]
 
     if st is not None and diagnostics:
         try:
@@ -325,13 +322,11 @@ def run_breakout_scan(
         except Exception:
             vol_20d = float("nan")
 
-        # Relative strength vs SPY (simple ratio)
-        rs = None
-        try:
-            if spy_close and spy_close > 0:
-                rs = close / spy_close
-        except Exception:
-            rs = None
+        # Relative strength vs SPY: 10/20-day return minus SPY's, and whether the
+        # stock/SPY line is at a new high. Display and research only: BreakoutScore
+        # and the HSF score don't use it.
+        from scan.indicators import relative_strength_vs_spy
+        rs = relative_strength_vs_spy(df["Close"], spy_closes)
 
         # Pattern tag: basic labeling based on breakout / gap / volume
         pattern_tag = "Base/Neutral"
@@ -418,7 +413,9 @@ def run_breakout_scan(
                 "DollarVol20": dollar_vol_20,
                 "Volatility20D%": vol_20d,
                 "PatternTag": pattern_tag,
-                "RSvsSPY": rs,
+                "RS10D%": rs["rs_10d"],
+                "RS20D%": rs["rs_20d"],
+                "RSLineHigh": rs["rs_line_high"],
                 "IsBreakout": is_breakout,
                 "Spark10D": spark,
                 "EMACross": ema_cross,

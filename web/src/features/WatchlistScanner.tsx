@@ -21,7 +21,7 @@ import { StarterWatchlistButton } from "./Starters";
 import { watchlistQuotes } from "./WatchlistsView";
 
 type Row = Schemas["ScanSetup"];
-const SORT_KEY: Record<ServerSort, keyof Row> = { score: "score", chg_pct: "chg_pct", gap_pct: "gap_pct", rvol: "rvol", prob: "prob" };
+const SORT_KEY: Record<ServerSort, keyof Row> = { score: "score", chg_pct: "chg_pct", gap_pct: "gap_pct", rvol: "rvol", prob: "prob", rs_20d: "rs_20d" };
 
 /** The watchlist the tab shows: the one in the link, else the default, else the first. */
 export function useScannerWatchlists(asked: number, enabled: boolean) {

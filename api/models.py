@@ -378,6 +378,12 @@ class ScanSetup(Setup):
     sector: Optional[str] = Field(default=None, description="Sector from Nasdaq's stock screener; null when unknown")
     market_cap: Optional[float] = Field(default=None, description="Market cap in dollars from Nasdaq's stock screener; null when unknown")
     pickup: Optional[Pickup] = Field(default=None, description="When HSF picked this stock up; null when unknown")
+    rs_10d: Optional[float] = Field(default=None, description=(
+        "Relative strength: 10-session return minus SPY's over the same dates, percentage points"))
+    rs_20d: Optional[float] = Field(default=None, description=(
+        "Relative strength: 20-session return minus SPY's over the same dates, percentage points"))
+    rs_line_high: Optional[bool] = Field(default=None, description=(
+        "The stock/SPY line is at its highest of the last 50 sessions (outpacing the market)"))
 
 
 class SectorCount(BaseModel):
@@ -519,6 +525,12 @@ class StockDetail(BaseModel):
     company: Optional[CompanyFacts] = Field(default=None, description="Sector, industry and market cap; null when unknown")
     ticker: str
     rvol: Optional[float] = Field(default=None, description="Relative volume in the displayed market scan")
+    rs_10d: Optional[float] = Field(default=None, description=(
+        "10-session return minus SPY's, percentage points, from the latest scan; null when not in it"))
+    rs_20d: Optional[float] = Field(default=None, description=(
+        "20-session return minus SPY's, percentage points, from the latest scan; null when not in it"))
+    rs_line_high: Optional[bool] = Field(default=None, description=(
+        "Stock/SPY line at its highest of the last 50 sessions in the latest scan; null when unknown"))
     scan_at: Optional[str] = Field(default=None, description="Latest market scan used")
     in_latest_scan: bool = Field(description="The ticker had at least one row in that scan")
     has_setup: bool = Field(description="It qualifies as an HSF setup (or has a recent recorded score)")
@@ -1104,6 +1116,8 @@ class DayTraderRow(BaseModel):
     last: Optional[float] = None
     change_dollar: Optional[float] = None
     chg_pct: Optional[float] = None
+    vs_spy_pct: Optional[float] = Field(default=None, description=(
+        "Today's Chg % minus SPY's at the same moment, percentage points; null without a SPY quote"))
     gap_pct: Optional[float] = None
     vwap: Optional[float] = None
     vs_vwap_pct: Optional[float] = None
@@ -1166,6 +1180,7 @@ class DayTrader(BaseModel):
     missing: int = Field(description="Symbols with no live quote")
     as_of: str
     summary: Dict[str, Any] = Field(default={}, description="UI summary counts: strong, developing, flagged, missing, best long/short")
+    spy_chg_pct: Optional[float] = Field(default=None, description="SPY's Chg % in the same snapshot; null when unavailable")
     rows: List[DayTraderRow] = []
 
 
