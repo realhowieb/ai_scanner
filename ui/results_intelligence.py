@@ -88,7 +88,17 @@ def _row_to_signal_fields(row: Dict[str, Any]) -> Dict[str, Any]:
         "gap_pct": gap,
         "last": _num(_col(row, "Last", "last", "Price")),
         "rvol": _num(_col(row, "VolRel20")),
+        # Relative strength vs SPY (display/filter only; the HSF score doesn't use it).
+        "rs_10d": _num(_col(row, "RS10D%")),
+        "rs_20d": _num(_col(row, "RS20D%")),
+        "rs_line_high": _rs_line_high(_col(row, "RSLineHigh")),
     }
+
+
+def _rs_line_high(v: Any) -> Optional[bool]:
+    if v is None or (isinstance(v, float) and v != v):
+        return None
+    return _truthy(v)
 
 
 def _add_prob_rank(opps: List[Dict[str, Any]]) -> None:
@@ -172,7 +182,7 @@ def consolidate_scanner_results(
             for k in ("breakout_score", "prob", "prob_raw"):
                 if f[k] is not None and (cur[k] is None or f[k] > cur[k]):
                     cur[k] = f[k]
-            for k in ("chg_pct", "gap_pct", "last", "rvol"):
+            for k in ("chg_pct", "gap_pct", "last", "rvol", "rs_10d", "rs_20d", "rs_line_high"):
                 if cur.get(k) is None and f.get(k) is not None:
                     cur[k] = f[k]
 
@@ -197,6 +207,7 @@ def consolidate_scanner_results(
             "models": source_models.get(s["ticker"], {}),
             "chg_pct": s["chg_pct"], "gap_pct": s["gap_pct"],
             "last": s.get("last"), "rvol": s.get("rvol"),
+            "rs_10d": s.get("rs_10d"), "rs_20d": s.get("rs_20d"), "rs_line_high": s.get("rs_line_high"),
         })
 
     _add_prob_rank(opps)

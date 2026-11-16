@@ -137,3 +137,19 @@ class ProviderGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SchemaV3RelativeStrengthTest(unittest.TestCase):
+    """v3 = v2 + real relative strength vs SPY saved by the scan (Nov 2026)."""
+
+    def test_v3_adds_only_rs_columns(self):
+        v2, v3 = rs.feature_names(2), rs.feature_names(3)
+        self.assertEqual(v3[:len(v2)], v2)
+        self.assertEqual(v3[len(v2):], ("rs_10d_pct", "rs_20d_pct", "rs_line_high"))
+
+    def test_scan_rs_columns_reach_row_features(self):
+        from analytics.research_metadata import ROW_FEATURES
+        self.assertEqual(ROW_FEATURES["RS10D%"], "rs_10d_pct")
+        self.assertEqual(ROW_FEATURES["RS20D%"], "rs_20d_pct")
+        self.assertEqual(ROW_FEATURES["RSLineHigh"], "rs_line_high")
+        self.assertNotIn("RSvsSPY", ROW_FEATURES)

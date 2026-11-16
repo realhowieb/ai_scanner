@@ -21,9 +21,9 @@ import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks, useNewsFlags }
 /** `scan_last`: the scan's price when Last comes from a live trade (withLiveQuotes). */
 type Row = Schemas["ScanSetup"] & { scan_last?: number | null };
 /** Server sort ids (GET /v1/scans/latest `sort`). Every server sort is high-to-low. */
-export type ServerSort = "score" | "chg_pct" | "gap_pct" | "rvol" | "prob";
+export type ServerSort = "score" | "chg_pct" | "gap_pct" | "rvol" | "prob" | "rs_20d";
 /** Column id → the server sort it maps to. Other columns cannot be sorted. */
-const SERVER_SORT: Partial<Record<string, ServerSort>> = { score: "score", change: "chg_pct", gap: "gap_pct", rvol: "rvol", prob: "prob" };
+const SERVER_SORT: Partial<Record<string, ServerSort>> = { score: "score", change: "chg_pct", gap: "gap_pct", rvol: "rvol", vs_spy: "rs_20d", prob: "prob" };
 
 // Headless table (TanStack Table): column visibility and order come from the saved
 // Table display settings; sorting is manual because the API ranks and pages the rows.
@@ -34,6 +34,7 @@ const upDown = (v: number | null | undefined) => (v ?? 0) > 0 ? "up" : (v ?? 0) 
 const HINTS: Record<string, [string, ReactNode]> = {
   score: ["HSF Score", "An opportunity ranking from 0 to 100 that blends trend, momentum, volume and setup quality. It is not a probability of profit."],
   rvol: ["Relative volume", "Today's volume compared with the stock's recent average. 2.0 means twice as much trading as usual; the bar turns amber from 1.5."],
+  vs_spy: ["vs SPY", "Relative strength: the stock's move over the last 20 sessions minus SPY's over the same days. +8% means it beat the market by 8 points. RS high means the stock-vs-SPY line is at its best level in 50 sessions, often a sign big buyers are in before the price breaks out."],
   picked: ["Picked up", "When HSF picked the stock up: the first scan of its current run in HSF's scans, with the price then and the move since. Exact to that scan (about hourly in market hours)."],
   prob: ["PreBreakout", "The model's calibrated chance of a breakout soon. The bar shows where the model ranks the name in this scan (full bar = top); names in the top 10% are labelled."],
 };
@@ -132,6 +133,11 @@ function TickerCell({ row }: { row: { original: Row } }) {
   const c = useCtx(); const r = row.original;
   return <>{c.sparks && c.choose(r.ticker)} <TickerLink ticker={r.ticker} named scanId={c.scanId} />{!c.ranks && <RankMove row={r} compared={c.compared} />}{r.fading && <> <Pill tone="warn">Fading</Pill></>}<NewsMark ticker={r.ticker} flag={c.news[r.ticker]} /></>;
 }
+/** Relative strength vs SPY (20 sessions) and the RS-line high badge. */
+export function VsSpy({ rs, high }: { rs?: number | null; high?: boolean | null }) {
+  if (rs == null) return <span className="cap" title="Not in the latest scan, or too little history">—</span>;
+  return <span className="vs-spy"><span className={`mono ${upDown(rs)}`}>{pct(rs)}</span>{high && <> <span title="Stock-vs-SPY line at a 50-session high"><Pill tone="up">RS high</Pill></span></>}</span>;
+}
 function SparkCell({ row }: { row: { original: Row } }) { const c = useCtx(); return <DailySpark points={c.series[row.original.ticker]} ticker={row.original.ticker} />; }
 
 const COLUMNS = col.columns([
@@ -147,10 +153,11 @@ const COLUMNS = col.columns([
   col.display({ id: "gap", header: "Gap %", cell: (c) => pct(c.row.original.gap_pct) }),
   col.display({ id: "rsi", header: "RSI (14)", cell: (c) => num(c.row.original.rsi_14) }),
   col.display({ id: "rvol", header: "RVOL", cell: (c) => <RvolMeter rvol={c.row.original.rvol} /> }),
+  col.display({ id: "vs_spy", header: "vs SPY", cell: (c) => <VsSpy rs={c.row.original.rs_20d} high={c.row.original.rs_line_high} /> }),
   col.display({ id: "prob", header: "PreBreakout", cell: (c) => <PreBreakoutMeter prob={c.row.original.prob} rank={c.row.original.prob_rank} /> }),
   col.display({ id: "save", header: () => <span className="sr-only">Actions</span>, cell: ActionsCell }),
 ]);
-const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change: "num", gap: "num" };
+const TH_CLASS: Record<string, string> = { score: "w-score", last: "num", change: "num", gap: "num", vs_spy: "num" };
 
 /** Ranked rows, as a table on wide screens and as cards on phones. Rows come ranked from the API. */
 /** `numbered` = rows are in HSF rank order, so the position is the rank; off for other sort orders. */
@@ -204,7 +211,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
   });
 
   const cellClass = (id: string, r: Row) => id === "rank" ? "mono cap"
-    : id === "last" || id === "gap" ? "num mono" : id === "change" ? `num mono ${upDown(r.chg_pct)}` : id === "save" ? "num" : undefined;
+    : id === "last" || id === "gap" ? "num mono" : id === "vs_spy" ? "num" : id === "change" ? `num mono ${upDown(r.chg_pct)}` : id === "save" ? "num" : undefined;
 
   return (
     <div className={sparks && table?.compact ? "scanner-results is-compact" : "scanner-results"}>
@@ -277,6 +284,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <div hidden={!visible("change")}><dt>Chg</dt><dd className={`mono ${upDown(r.chg_pct)}`}>{pct(r.chg_pct)}</dd></div>
               <div hidden={!visible("gap")}><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
               <div hidden={!visible("rvol")}><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
+              <div hidden={!visible("vs_spy")}><dt>vs SPY</dt><dd><VsSpy rs={r.rs_20d} high={r.rs_line_high} /></dd></div>
               {showRsi && <div><dt>RSI (14)</dt><dd className="mono">{num(r.rsi_14)}</dd></div>}
               {showPicked && visible("picked") && <div className="sc-picked"><dt>Picked up</dt><dd><PickedCell pickup={r.pickup} last={r.last} /></dd></div>}
               {showSector && visible("sector") && <div className="sc-sector"><dt>Sector</dt><dd>{r.sector ?? "—"}</dd></div>}

@@ -299,6 +299,9 @@ def feature_snapshot(row: Mapping[str, Any], scan: Optional[Mapping[str, Any]], 
     if int(feature_schema_version) >= 2:
         v.update(_regime_rsi(meta))
         v.update(_repair_core(v, raw, row.get("fired_at")))
+    if int(feature_schema_version) >= 3:
+        v.update({"rs_10d_pct": _num(feats.get("rs_10d_pct")), "rs_20d_pct": _num(feats.get("rs_20d_pct")),
+                  "rs_line_high": _bool(feats.get("rs_line_high")) if "rs_line_high" in feats else None})
     names = set(rs.feature_names(feature_schema_version))
     return rs.FeatureSnapshot(
         observation_id=int(row["id"]), ticker=str(row.get("ticker") or "").upper(),

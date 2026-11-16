@@ -276,7 +276,7 @@ def _score_prebreakout(results):
 # Columns kept per stored candidate: what the tab, alerts and audits read.
 PREBREAKOUT_CANDIDATE_FIELDS = (
     "Ticker", "Last", "PctChange", "GapPct", "Volume", "VolRel20", "DollarVol20", "BreakoutScore",
-    "BreakoutPos20D", "Trend10D%", "Trend20D%", "Volatility20D%", "RSI14", "RSvsSPY", "IsBreakout",
+    "BreakoutPos20D", "Trend10D%", "Trend20D%", "Volatility20D%", "RSI14", "RS10D%", "RS20D%", "RSLineHigh", "IsBreakout",
     "PatternTag", "EMACross", "Spark10D", "PreBreakoutProb", "PreBreakoutProb%", "PreBreakoutProbRaw",
 )
 

@@ -85,12 +85,13 @@ export const FLAG_HELP: Record<string, string> = {
   "Stale quote": "No trade in several days.",
 };
 
-type SortKey = "score" | "ticker" | "last" | "chg" | "gap" | "vwap" | "rvol" | "volume";
+type SortKey = "score" | "ticker" | "last" | "chg" | "spy" | "gap" | "vwap" | "rvol" | "volume";
 const COLS: { key: SortKey; label: string; narrow?: boolean; get: (r: Row) => number | string | null | undefined }[] = [
   { key: "ticker", label: "Ticker", get: (r) => r.ticker },
   { key: "score", label: "DT score", get: (r) => r.day_trade_score },
   { key: "last", label: "Last", get: (r) => r.last },
   { key: "chg", label: "Chg %", get: (r) => r.session_chg_pct ?? r.chg_pct },
+  { key: "spy", label: "vs SPY", get: (r) => r.vs_spy_pct },
   { key: "gap", label: "Gap %", narrow: true, get: (r) => r.gap_pct },
   { key: "vwap", label: "vs VWAP", narrow: true, get: (r) => r.vs_vwap_pct },
   { key: "rvol", label: "RVOL", get: (r) => r.rvol },
@@ -131,7 +132,7 @@ function EarningsTag({ r }: { r: Row }) {
 // Saved on this device so the page opens the way you left it.
 const PREFS_KEY = "hsf.dayTrader.v1";
 type Prefs = { source: Source; listId: number | null; custom: string[]; filters: Filters; sort: { key: SortKey; desc: boolean } };
-const SORT_KEYS: SortKey[] = ["score", "ticker", "last", "chg", "gap", "vwap", "rvol", "volume"];
+const SORT_KEYS: SortKey[] = ["score", "ticker", "last", "chg", "spy", "gap", "vwap", "rvol", "volume"];
 export const DEFAULT_PREFS: Prefs = { source: "movers", listId: null, custom: [], filters: NO_FILTERS, sort: { key: "score", desc: true } };
 /** Saved prefs, checked field by field; anything unknown or malformed falls back to the default. */
 export function readPrefs(raw: string | null): Prefs {
@@ -570,7 +571,7 @@ function Live() {
         : narrow ? (
           <section ref={listRef} className={`dt-cards${switching ? " dim" : ""}`} aria-label="Day Trader symbols">
             <div className="chips" role="group" aria-label="Sort by">
-              {(["score", "chg", "rvol", "volume"] as const).map((k) => (
+              {(["score", "chg", "spy", "rvol", "volume"] as const).map((k) => (
                 <button key={k} type="button" className="chip" aria-pressed={sort.key === k} onClick={() => sortBy(k)}>
                   {COLS.find((c) => c.key === k)!.label}{sort.key === k ? (sort.desc ? " ↓" : " ↑") : ""}
                 </button>
@@ -589,6 +590,7 @@ function Live() {
                   <Sparkline points={series[r.ticker]} ticker={r.ticker} />
                 </div>
                 <dl className="dt-card-stats">
+                  <div><dt>vs SPY</dt><dd className={`mono ${tone(r.vs_spy_pct)}`}>{pct(r.vs_spy_pct)}</dd></div>
                   <div><dt>Gap</dt><dd className="mono">{pct(r.gap_pct)}</dd></div>
                   <div><dt>vs VWAP</dt><dd className={`mono ${tone(r.vs_vwap_pct)}`}>{pct(r.vs_vwap_pct)}</dd></div>
                   <div><dt>RVOL</dt><dd className="mono">{num(r.rvol)}</dd></div>
@@ -630,6 +632,7 @@ function Live() {
                         </td>
                         <td className="num mono"><Flash v={r.last} dir={moves[r.ticker]?.last}>{price(r.last)}</Flash></td>
                         <td className="num mono"><Change r={r} offHours={offHours} /></td>
+                        <td className={`num mono ${tone(r.vs_spy_pct)}`}>{pct(r.vs_spy_pct)}</td>
                         <td className="num mono hide-narrow">{pct(r.gap_pct)}</td>
                         <td className={`num mono hide-narrow ${tone(r.vs_vwap_pct)}`}>{pct(r.vs_vwap_pct)}</td>
                         <td className="num mono">{num(r.rvol)}</td>
