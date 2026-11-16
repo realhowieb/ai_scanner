@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import sqlite3
+import subprocess
 import unittest
 from unittest import mock
 
@@ -52,7 +53,28 @@ class WaitForDeployTests(unittest.TestCase):
     def test_old_api_or_no_build_waits(self):
         from scripts.wait_for_deploy import ready
 
-        self.assertEqual(ready("abcdef1234567890", "999999999999", None, lambda a, b: True), (False, False))
+        self.assertEqual(ready("abcdef1234567890", "999999999999", None, lambda a, b: True, lambda a, b: False),
+                         (False, False))
+
+    def test_api_counts_when_only_filtered_paths_changed(self):
+        from scripts.wait_for_deploy import ready
+
+        # Web-only promote: Render's build filter skips the API, so its older build is fine.
+        self.assertEqual(ready("abcdef1234567890", "999999999999", "abcdef123456", lambda a, b: False, lambda a, b: True),
+                         (True, True))
+        self.assertEqual(ready("abcdef1234567890", None, "abcdef123456", lambda a, b: False, lambda a, b: True),
+                         (False, True))
+
+    def test_api_unchanged_against_real_history(self):
+        from scripts.wait_for_deploy import api_unchanged
+
+        # 2bc4d389 -> ee17e548 (#457, #459) only touched web/ and docs: the API was not rebuilt.
+        shas = ("2bc4d389355e", "ee17e5484a1edbf4731701f054f6af5c9f91a47e", "88922f5b8706ed72de97ed100d40b6b2656a3532")
+        if any(subprocess.run(["git", "cat-file", "-e", f"{s}^{{commit}}"], capture_output=True).returncode for s in shas):
+            self.skipTest("history not available")
+        self.assertTrue(api_unchanged("2bc4d389355e", "ee17e5484a1edbf4731701f054f6af5c9f91a47e"))
+        # ee17e548 -> 88922f5b (#461) changed the API's sector code: the API must redeploy.
+        self.assertFalse(api_unchanged("ee17e5484a1e", "88922f5b8706ed72de97ed100d40b6b2656a3532"))
 
 
 try:
