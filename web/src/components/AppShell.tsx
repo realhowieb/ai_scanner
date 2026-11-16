@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const plan = me?.plan;
   return (
-    <div className="shell">
+    <div className={isActive(path, "/scanner") ? "shell shell-wide" : "shell"}>
       <a href="#main" className="skip">Skip to content</a>
       <aside className="sidebar">
         <Link href="/today" className="brand side-brand">HSFinest<span>.com</span></Link>
