@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-VERIFIED_SENDER_DOMAIN = "ai.hsfinest.com"   # verified in Resend 2026-09-28 (P1-33)
+VERIFIED_SENDER_DOMAIN = "hsfinest.com"   # sender moved off ai.hsfinest.com 2026-11-16 (Resend un-verified it)
 DEFAULT_FROM_NAME = "HSF Alerts"
 
 
