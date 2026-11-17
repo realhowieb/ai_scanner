@@ -26,10 +26,10 @@ class BillingEmailHealthTests(unittest.TestCase):
         return body if isinstance(body, dict) else json.loads(body.body)
 
     def test_verified_sender_reported_by_domain_only(self):
-        body = self.health({**FULL, "SMTP_FROM": "alerts@ai.hsfinest.com"})
-        self.assertEqual(body["email"], {"configured": True, "missing": [], "sender_domain": "ai.hsfinest.com"})
+        body = self.health({**FULL, "SMTP_FROM": "alerts@hsfinest.com"})
+        self.assertEqual(body["email"], {"configured": True, "missing": [], "sender_domain": "hsfinest.com"})
         dumped = json.dumps(body)
-        for secret in ("re_live_secret_key", "resend-user-xyz", "alerts@ai.hsfinest.com"):
+        for secret in ("re_live_secret_key", "resend-user-xyz", "alerts@hsfinest.com"):
             self.assertNotIn(secret, dumped)
 
     def test_missing_sender_is_reported(self):
