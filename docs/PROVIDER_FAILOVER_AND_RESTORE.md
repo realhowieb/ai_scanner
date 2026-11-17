@@ -55,7 +55,7 @@ from `dev` to `main` releases both services.
 - **Login rejected:** the API key was revoked. Create a new *sending-only* key in
   Resend and update `SMTP_PASS` in the API Render environment and GitHub Actions secrets.
 - **Sender rejected:** `SMTP_FROM` must be on the verified domain
-  (`ai.hsfinest.com`). Check the domain is still Verified in Resend (DNS changes at
+  (`hsfinest.com`; `ai.hsfinest.com` until 2026-11-16). Check the domain is still Verified in Resend (DNS changes at
   the registrar can un-verify it).
 - **Recipient refused (only the owner receives):** the account fell back to test
   mode or the domain lost verification.

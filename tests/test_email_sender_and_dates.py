@@ -20,16 +20,16 @@ class SenderTests(unittest.TestCase):
     def test_display_name_defaults_to_hsf_alerts(self):
         from ui.email_utils import _sender
 
-        self.assertEqual(_sender("alerts@ai.hsfinest.com"),
-                         ("HSF Alerts <alerts@ai.hsfinest.com>", "alerts@ai.hsfinest.com"))
+        self.assertEqual(_sender("alerts@hsfinest.com"),
+                         ("HSF Alerts <alerts@hsfinest.com>", "alerts@hsfinest.com"))
 
     def test_existing_name_is_kept_and_override_is_honoured(self):
         from ui.email_utils import _sender
 
-        self.assertEqual(_sender("HSFinest Team <team@ai.hsfinest.com>"),
-                         ("HSFinest Team <team@ai.hsfinest.com>", "team@ai.hsfinest.com"))
+        self.assertEqual(_sender("HSFinest Team <team@hsfinest.com>"),
+                         ("HSFinest Team <team@hsfinest.com>", "team@hsfinest.com"))
         with mock.patch("config.SMTP_FROM_NAME", "HSF Desk", create=True):
-            self.assertEqual(_sender("alerts@ai.hsfinest.com")[0], "HSF Desk <alerts@ai.hsfinest.com>")
+            self.assertEqual(_sender("alerts@hsfinest.com")[0], "HSF Desk <alerts@hsfinest.com>")
 
     def test_sent_message_header_and_envelope(self):
         import ui.email_utils as eu
@@ -37,24 +37,24 @@ class SenderTests(unittest.TestCase):
         server = mock.MagicMock()
         server.__enter__.return_value = server
         with mock.patch("config.SMTP_HOST", "smtp.test"), mock.patch("config.SMTP_USER", "u"), \
-             mock.patch("config.SMTP_PASS", "p"), mock.patch("config.SMTP_FROM", "alerts@ai.hsfinest.com"), \
+             mock.patch("config.SMTP_PASS", "p"), mock.patch("config.SMTP_FROM", "alerts@hsfinest.com"), \
              mock.patch("smtplib.SMTP", return_value=server), redirect_stdout(io.StringIO()):
             self.assertTrue(eu.send_alert_email("a@example.com", "Breakout alert triggered", "body"))
         envelope_from, _to, raw = server.sendmail.call_args.args
-        self.assertEqual(envelope_from, "alerts@ai.hsfinest.com")
-        self.assertEqual(email.message_from_string(raw)["From"], "HSF Alerts <alerts@ai.hsfinest.com>")
+        self.assertEqual(envelope_from, "alerts@hsfinest.com")
+        self.assertEqual(email.message_from_string(raw)["From"], "HSF Alerts <alerts@hsfinest.com>")
 
     def test_billing_live_alerts_use_the_same_name(self):
         from billing_service import realtime_alerts as ra
 
         server = mock.MagicMock()
         server.__enter__.return_value = server
-        env = {"SMTP_HOST": "smtp.test", "SMTP_USER": "u", "SMTP_PASS": "p", "SMTP_FROM": "alerts@ai.hsfinest.com"}
+        env = {"SMTP_HOST": "smtp.test", "SMTP_USER": "u", "SMTP_PASS": "p", "SMTP_FROM": "alerts@hsfinest.com"}
         with mock.patch.dict(os.environ, env), mock.patch("smtplib.SMTP", return_value=server):
             self.assertTrue(ra._send_email("a@example.com", "Live alert", "body"))
         envelope_from, _to, raw = server.sendmail.call_args.args
-        self.assertEqual(envelope_from, "alerts@ai.hsfinest.com")
-        self.assertEqual(email.message_from_string(raw)["From"], "HSF Alerts <alerts@ai.hsfinest.com>")
+        self.assertEqual(envelope_from, "alerts@hsfinest.com")
+        self.assertEqual(email.message_from_string(raw)["From"], "HSF Alerts <alerts@hsfinest.com>")
 
 
 class NewYorkDateTests(unittest.TestCase):

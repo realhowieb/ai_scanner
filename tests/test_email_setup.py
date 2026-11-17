@@ -11,12 +11,12 @@ class DescribeTests(unittest.TestCase):
     def test_verified_domain_is_ok_and_secrets_never_appear(self):
         from ui.email_setup import describe_smtp, explain
 
-        d = describe_smtp("smtp.resend.com", SECRETS[1], SECRETS[0], "alerts@ai.hsfinest.com")
+        d = describe_smtp("smtp.resend.com", SECRETS[1], SECRETS[0], "alerts@hsfinest.com")
         self.assertEqual(d["status"], "OK")
-        self.assertEqual(d["sender_masked"], "al***@ai.hsfinest.com")
+        self.assertEqual(d["sender_masked"], "al***@hsfinest.com")
         self.assertEqual(d["display_name"], "HSF Alerts")
         dumped = json.dumps(d) + explain(d)
-        for secret in SECRETS + ("alerts@ai.hsfinest.com",):
+        for secret in SECRETS + ("alerts@hsfinest.com",):
             self.assertNotIn(secret, dumped)
 
     def test_unverified_default_sender_warns(self):
@@ -37,8 +37,8 @@ class DescribeTests(unittest.TestCase):
     def test_display_name_sources(self):
         from ui.email_setup import describe_smtp
 
-        self.assertEqual(describe_smtp("h", "u", "p", "HSF Desk <a@ai.hsfinest.com>")["display_name"], "HSF Desk")
-        self.assertEqual(describe_smtp("h", "u", "p", "a@ai.hsfinest.com", "Team")["display_name"], "Team")
+        self.assertEqual(describe_smtp("h", "u", "p", "HSF Desk <a@hsfinest.com>")["display_name"], "HSF Desk")
+        self.assertEqual(describe_smtp("h", "u", "p", "a@hsfinest.com", "Team")["display_name"], "Team")
 
 
 class JobRecordTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class JobRecordTests(unittest.TestCase):
         import scheduler.morning_digest as md
 
         with mock.patch("config.SMTP_HOST", "smtp.resend.com"), mock.patch("config.SMTP_USER", SECRETS[1]), \
-             mock.patch("config.SMTP_PASS", SECRETS[0]), mock.patch("config.SMTP_FROM", "alerts@ai.hsfinest.com"), \
+             mock.patch("config.SMTP_PASS", SECRETS[0]), mock.patch("config.SMTP_FROM", "alerts@hsfinest.com"), \
              mock.patch("db.email_job_runs.record_email_run") as rec:
             md.record_email_job("digest", {"sent": 1, "skipped": {}})
         stats = rec.call_args.args[1]
