@@ -18,9 +18,22 @@ export type FiredItem = {
   /** Free text when the message isn't a list of ticker lines (e.g. a move alert). */
   text: string | null;
   ticker: string | null;
+  /** The saved alerts / rules behind it ("alert:<alert id>", "rule:<rule id>"), for per-rule counts. */
+  sources: string[];
+  /** Tickers that weren't in the previous firing of the same kind of alert; null when there's no earlier one loaded. */
+  fresh: Set<string> | null;
 };
 
-type EventLike = { event_id?: string | null; id?: number | null; ticker?: string | null; message: string; fired_at?: string | null };
+type EventLike = {
+  event_id?: string | null; id?: number | null; ticker?: string | null; message: string; fired_at?: string | null;
+  alert_id?: number | null; rule_id?: number | null;
+};
+
+function sourceOf(e: EventLike): string | null {
+  if (e.rule_id != null) return `rule:${e.rule_id}`;
+  if (e.alert_id != null) return `alert:${e.alert_id}`;
+  return null;
+}
 
 const MORE = /^…and (\d+) more\.?$/;
 const RULE = /\(≥ ([0-9.]+)\)/;
@@ -98,6 +111,8 @@ export function groupFired(events: EventLike[]): FiredItem[] {
         prev.tiers.push({ rule: p.rule ?? "", count: p.rows.length + p.extra });
         prev.tiers.sort((a, b) => Number(b.rule) - Number(a.rule));
         prev.total = Math.max(prev.total, prev.rows.length, p.rows.length + p.extra);
+        const src = sourceOf(e);
+        if (src && !prev.sources.includes(src)) prev.sources.push(src);
         continue;
       }
     }
@@ -111,9 +126,63 @@ export function groupFired(events: EventLike[]): FiredItem[] {
       tiers: breakout ? [{ rule: p.rule ?? "", count: rows.length + p.extra }] : [],
       text: p.text,
       ticker: rows[0]?.ticker ?? e.ticker ?? null,
+      sources: [sourceOf(e)].filter((x): x is string => !!x),
+      fresh: null,
     };
     meta.set(item, { t, breakout });
     out.push(item);
   }
-  return out.map((item) => ({ ...item, ticker: item.rows[0]?.ticker ?? item.ticker }));
+  const items = out.map((item) => ({ ...item, ticker: item.rows[0]?.ticker ?? item.ticker }));
+  // Oldest first: each list alert compared with the one before it of the same kind.
+  const last = new Map<string, Set<string>>();
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!;
+    if (item.rows.length === 0) continue;
+    const names = new Set(item.rows.map((r) => r.ticker));
+    const prev = last.get(item.title);
+    item.fresh = prev ? new Set([...names].filter((t) => !prev.has(t))) : null;
+    last.set(item.title, names);
+  }
+  return items;
+}
+
+/** Calendar day in New York, for grouping ("2026-11-17"). */
+export function etDay(iso: string | null | undefined): string {
+  const t = ms(iso);
+  if (t === null) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t));
+}
+
+/** "Mon Nov 17" for a day from etDay. */
+export function dayLabel(day: string): string {
+  if (!day) return "Unknown day";
+  const d = new Date(`${day}T12:00:00Z`);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(d);
+}
+
+/** The best number on an alert: its top score, or nothing when the rows carry none. */
+export function bestValue(item: FiredItem): number | null {
+  const vals = item.rows.map((r) => r.value).filter((v): v is number => v !== null);
+  return vals.length ? Math.max(...vals) : null;
+}
+
+export type TickerStat = { ticker: string; count: number; kinds: string[]; first: string | null; last: string | null; best: number | null };
+
+/** Per ticker across the given alerts (newest first in): times it fired, kinds, first/last time, best score. */
+export function tickerStats(items: FiredItem[]): TickerStat[] {
+  const by = new Map<string, TickerStat>();
+  for (const item of items) {
+    const names = item.rows.length ? item.rows : item.ticker ? [{ ticker: item.ticker, value: null }] : [];
+    for (const r of names) {
+      const s = by.get(r.ticker) ?? { ticker: r.ticker, count: 0, kinds: [], first: null, last: null, best: null };
+      s.count += 1;
+      if (!s.kinds.includes(item.title)) s.kinds.push(item.title);
+      const at = item.firedAt ?? null;
+      if (at && (!s.last || ms(at)! > ms(s.last)!)) s.last = at;
+      if (at && (!s.first || ms(at)! < ms(s.first)!)) s.first = at;
+      if (r.value !== null && (s.best === null || r.value > s.best)) s.best = r.value;
+      by.set(r.ticker, s);
+    }
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count || (b.best ?? -1) - (a.best ?? -1) || a.ticker.localeCompare(b.ticker));
 }

@@ -104,14 +104,16 @@ class AdminApiTests(ApiTestCase):
         with mock.patch("api.operations.load_snapshot", return_value={"report": report, "refresh_failed": False}), \
              mock.patch("api.operations.get_summary", return_value={"available": True}), \
              mock.patch("analytics.email_health.evaluate", return_value=email), \
-             mock.patch("db.email_job_runs.recent_email_runs", return_value=[]):
+             mock.patch("db.email_job_runs.recent_email_runs", return_value=[]), \
+             mock.patch("ui.email_setup.sender_domain_row",
+                        return_value={"job": "sender", "label": "Sender domain", "status": "HEALTHY", "detail": "ok"}):
             r = self.client.get("/v1/admin/health", headers=self.auth())
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
         self.assertEqual(body["health_score"], 90)
         self.assertEqual([s["name"] for s in body["subsystems"]], ["Scanner"])
         self.assertEqual(body["incidents"][0]["id"], "X1")
-        self.assertEqual(body["email"]["jobs"][0]["label"], "Morning digest")
+        self.assertEqual([j["label"] for j in body["email"]["jobs"]], ["Sender domain", "Morning digest"])
 
     def test_earnings_refresh_runs_once_in_background(self):
         from api import admin

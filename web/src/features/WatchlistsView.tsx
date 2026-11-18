@@ -12,7 +12,7 @@
 // place of the scan's price; without it the scan price or the daily bar is shown, labelled.
 import Link from "@/components/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
@@ -23,6 +23,7 @@ import { ConfirmDialog, Dialog } from "@/components/Dialog";
 import { Card, Empty, ErrorLine, ErrorState, Freshness, Pill, RefreshStatus, ScoreBadge, Skeleton, TickerLink } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
+import { useNarrow } from "@/hooks/useNarrow";
 import { etTime, num, pct, price, setupLabel, shortDate } from "@/lib/format";
 import { tabKey } from "@/lib/tabs";
 
@@ -344,19 +345,6 @@ export function watchlistCsv(items: WatchlistDetail["items"], scores: Map<string
   };
 }
 
-/** Phone layout (compact rows, no table) below this width. */
-function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(max-width: 760px)");
-    const on = () => setNarrow(mq.matches);
-    on();
-    mq.addEventListener?.("change", on);
-    return () => mq.removeEventListener?.("change", on);
-  }, []);
-  return narrow;
-}
 
 export type SortKey = "ticker" | "score" | "price" | "chg" | "since" | "rank" | "rvol" | "added";
 type SortState = { key: SortKey; desc: boolean };

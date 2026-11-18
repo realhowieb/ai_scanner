@@ -78,7 +78,9 @@ export const watchlists = {
 export const alerts = {
   list: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts", { signal })),
   types: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/types", { signal })),
-  events: (signal?: AbortSignal) => unwrap(api.GET("/v1/alerts/events", { params: { query: { limit: 20 } }, signal })),
+  /** Newest first; `cursor` (the last event's) pages back further. */
+  events: (signal?: AbortSignal, opts: { limit?: number; cursor?: string } = {}) =>
+    unwrap(api.GET("/v1/alerts/events", { params: { query: { limit: opts.limit ?? 20, ...(opts.cursor ? { cursor: opts.cursor } : {}) } }, signal })),
   create: async (body: AlertCreate) => {
     const result = await unwrap(api.POST("/v1/alerts", { body: body as Schemas["AlertCreate"] }));
     captureUsage("alert_created", { kind: body.type === "price" ? "price" : "technical" });

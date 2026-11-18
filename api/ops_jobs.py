@@ -12,8 +12,11 @@ Every POLL_SECONDS one thread checks what is due. Each job is claimed once per k
                         flagged, API memory, the last live check. Incidents whose code is
                         in HSF_OPS_NOTE_IGNORE (default RETIREMENT_POLICY_EFFECT, the known
                         historical parity finding) are left out.
-    weekly recap        Saturday from 14:00 UTC: services.weekly_recap to every verified,
-                        opted-in account.
+    weekly recap        Saturday from 14:00 UTC (through Sunday): services.weekly_recap to
+                        every verified, opted-in account. A run where sends failed tries
+                        again an hour later; the per-account claim stops a second copy.
+    sender domain       every 6 hours: asks Resend whether SMTP_FROM's domain is verified
+                        and reports to Sentry when it isn't (every email would fail).
     weekly earnings     Sunday from 22:00 UTC (or Monday before 13:00 UTC if Sunday was missed):
                         services.weekly_earnings, the week ahead's reporters, to Pro and up.
     business email      Monday from 12:00 UTC: services.business_report to the admins.
@@ -38,6 +41,7 @@ Env (all default on; set to 0 to stop one):
     HSF_LIVE_CHECK_NOTIFY         live check notices
     HSF_NIGHTLY_OPS_NOTE          nightly ops note
     HSF_WEEKLY_RECAP_ENABLED      weekly recap (services.weekly_recap)
+    HSF_SENDER_DOMAIN_CHECK       sender domain check
     HSF_WEEKLY_EARNINGS_ENABLED   weekly earnings email (services.weekly_earnings)
     HSF_BUSINESS_EMAIL_ENABLED    business email (services.business_report)
     HSF_ONBOARDING_EMAILS_ENABLED tips and come-back emails (services.onboarding_emails)
@@ -64,6 +68,8 @@ log = logging.getLogger("hsf.ops_jobs")
 UTC = dt.timezone.utc
 POLL_SECONDS = 300
 LIVE_CHECK_EVERY = dt.timedelta(minutes=10)
+SENDER_CHECK_EVERY = dt.timedelta(hours=6)
+RETRY_FAILED_AFTER_S = 3600
 LIVE_CHECK_LOOKBACK = dt.timedelta(hours=3)
 LIVE_WORKFLOW = "live-acceptance.yml"
 GH_API = "https://api.github.com"
@@ -249,7 +255,9 @@ def run_nightly_note(now: dt.datetime) -> bool:
 
 # ---- weekly and daily jobs --------------------------------------------------------------------------
 def weekly_recap_due(now: dt.datetime) -> Optional[str]:
-    if now.weekday() == 5 and now.hour >= 14:
+    """Saturday from 14:00 UTC, and all of Sunday so a run that failed (email down) can
+    still go out once it's fixed. The claim keeps it to one send per account."""
+    if (now.weekday() == 5 and now.hour >= 14) or now.weekday() == 6:
         return iso_week(_et(now).date())
     return None
 
@@ -293,9 +301,23 @@ def founder_feedback_nudge() -> Dict[str, Any]:
     return {"sent": True, **out}
 
 
-def _run_once(job: str, key: Optional[str], fn) -> None:
-    """Claim then run; release the claim if the job itself crashed so it retries next pass."""
+_retry_at: Dict[tuple, float] = {}
+
+
+def _sends_failed(result: Any) -> bool:
+    return isinstance(result, Mapping) and int(result.get("failed") or 0) > 0
+
+
+def _run_once(job: str, key: Optional[str], fn, *, retry_failed_sends: bool = False,
+              clock=time.monotonic) -> None:
+    """Claim then run; release the claim if the job itself crashed so it retries next pass.
+    With retry_failed_sends, a run whose result counts failed sends is released too and
+    tried again after RETRY_FAILED_AFTER_S (the email jobs claim each account, so only the
+    accounts that didn't get it are sent to)."""
     if not key:
+        return
+    wait = _retry_at.get((job, key))
+    if wait is not None and clock() < wait:
         return
     from services import ops_notify
 
@@ -307,6 +329,34 @@ def _run_once(job: str, key: Optional[str], fn) -> None:
     except Exception as e:
         log.warning(json.dumps({"event": "ops_job_failed", "job": job, "error": type(e).__name__}))
         ops_notify.release(job, key)
+        return
+    if retry_failed_sends and _sends_failed(result):
+        _retry_at[(job, key)] = clock() + RETRY_FAILED_AFTER_S
+        log.info(json.dumps({"event": "ops_job_retry_later", "job": job, "key": key,
+                             "failed": result.get("failed"), "in_s": RETRY_FAILED_AFTER_S}))
+        ops_notify.release(job, key)
+    else:
+        _retry_at.pop((job, key), None)
+
+
+def check_sender_domain() -> Optional[str]:
+    """Report to Sentry when Resend says the sender domain isn't verified. Returns the problem."""
+    try:
+        from ui.email_setup import sender_domain_problem
+
+        problem = sender_domain_problem()
+    except Exception as e:
+        log.warning(json.dumps({"event": "sender_domain_check_error", "error": type(e).__name__}))
+        return None
+    if problem:
+        log.warning(json.dumps({"event": "sender_domain_unverified", "detail": problem}))
+        try:
+            from ui.monitoring import capture
+
+            capture(RuntimeError(f"Email sender domain: {problem}"))
+        except Exception:
+            pass
+    return problem
 
 
 def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = None) -> None:
@@ -319,14 +369,21 @@ def tick(now: Optional[dt.datetime] = None, state: Optional[Dict[str, Any]] = No
             live_check_notices(now)
     if _on("HSF_NIGHTLY_OPS_NOTE"):
         run_nightly_note(now)
+    if _on("HSF_SENDER_DOMAIN_CHECK"):
+        last = state.get("sender_checked")
+        if last is None or now - last >= SENDER_CHECK_EVERY:
+            state["sender_checked"] = now
+            check_sender_domain()
     if _on("HSF_WEEKLY_RECAP_ENABLED"):
         from services import weekly_recap
 
-        _run_once("weekly_recap", weekly_recap_due(now), lambda: weekly_recap.run(now=now))
+        _run_once("weekly_recap", weekly_recap_due(now), lambda: weekly_recap.run(now=now),
+                  retry_failed_sends=True)
     if _on("HSF_WEEKLY_EARNINGS_ENABLED"):
         from services import weekly_earnings
 
-        _run_once("weekly_earnings", weekly_earnings_due(now), lambda: weekly_earnings.run(now=now))
+        _run_once("weekly_earnings", weekly_earnings_due(now), lambda: weekly_earnings.run(now=now),
+                  retry_failed_sends=True)
     if _on("HSF_BUSINESS_EMAIL_ENABLED"):
         from services import business_report
 
