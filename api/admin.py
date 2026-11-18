@@ -225,10 +225,8 @@ def system_health() -> Dict[str, Any]:
 
 
 def email_health() -> Dict[str, Any]:
-    from analytics.email_health import evaluate
+    from analytics.email_health import STATUS_ORDER, evaluate
     from db.email_job_runs import recent_email_runs
-
-    from analytics.email_health import STATUS_ORDER
 
     result = evaluate(recent_email_runs(days=5))
     jobs = [{"job": job, "label": j.get("label"), "status": j.get("status"), "detail": j.get("detail")}
