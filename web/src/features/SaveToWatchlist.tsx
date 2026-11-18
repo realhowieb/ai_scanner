@@ -51,7 +51,9 @@ export function SaveToWatchlistDialog({ ticker, open, onClose, onSaved, inLists 
     onClose();
   };
 
-  const items = lists.data ?? [];
+  // Archived lists stay out of the picker (unless the ticker is already in one); pinned lists come first.
+  const items = (lists.data ?? []).filter((w) => !w.archived || inLists.includes(w.id))
+    .sort((a, b) => Number(b.is_default) - Number(a.is_default) || Number(!!b.pinned) - Number(!!a.pinned));
   return (
     <Dialog open={open} title={`Save ${ticker} to a watchlist`} onClose={close}
       footer={<button type="button" className="btn" onClick={close}>Done</button>}>

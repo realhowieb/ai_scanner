@@ -5,7 +5,7 @@ import types from "./fixtures/alert-types.json";
 import { jsonResponse } from "./helpers";
 
 type Item = { ticker: string; added_at: string; price_when_added: number | null; note: string | null };
-type WL = { id: number; name: string; is_default: boolean; items: Item[] };
+type WL = { id: number; name: string; is_default: boolean; items: Item[]; pinned?: boolean; archived?: boolean };
 type AlertRow = { id: number; type: string; ticker: string | null; threshold: number | null; direction: string | null;
   watchlist_only: boolean; enabled: boolean; last_fired_at: string | null; created_at: string };
 
@@ -40,7 +40,7 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   ];
   const scanAt = new Date().toISOString();
 
-  const summary = (w: WL) => ({ id: w.id, name: w.name, is_default: w.is_default, symbol_count: w.items.length });
+  const summary = (w: WL) => ({ id: w.id, name: w.name, is_default: w.is_default, symbol_count: w.items.length, pinned: !!w.pinned, archived: !!w.archived });
   const detail = (w: WL) => ({ ...summary(w), items: w.items });
   const err = (status: number, detail: string) => jsonResponse({ detail }, status, { "x-request-id": `srv-${status}-${calls.length}` });
 
@@ -103,6 +103,37 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       lists.push(w);
       return jsonResponse(detail(w), 201);
     }
+    if ((m = path.match(/^\/v1\/watchlists\/(\d+)\/(merge|tickers\/remove|tickers\/copy)$/)) && method === "POST") {
+      const w = lists.find((x) => x.id === Number(m![1]));
+      if (!w) return err(404, "Watchlist not found.");
+      if (m[2] === "merge") {
+        const src = lists.find((x) => x.id === body.from_watchlist_id);
+        if (!src) return err(404, "Watchlist not found.");
+        if (src === w) return err(409, "Pick a different list to merge.");
+        const fresh = src.items.filter((i) => !w.items.some((x) => x.ticker === i.ticker));
+        w.items.push(...fresh);
+        if (src.is_default) w.is_default = true;
+        lists.splice(lists.indexOf(src), 1);
+        return jsonResponse({ ...detail(w), merged: fresh.length });
+      }
+      if (m[2] === "tickers/remove") {
+        const tk = body.tickers as string[];
+        const removed = w.items.filter((i) => tk.includes(i.ticker)).map((i) => i.ticker);
+        w.items = w.items.filter((i) => !tk.includes(i.ticker));
+        return jsonResponse({ removed, missing: tk.filter((t) => !removed.includes(t)) });
+      }
+      const to = lists.find((x) => x.id === body.to_watchlist_id);
+      if (!to) return err(404, "Watchlist not found.");
+      const out = { copied: [] as string[], already_present: [] as string[], missing: [] as string[], moved: [] as string[] };
+      for (const t of body.tickers as string[]) {
+        const it = w.items.find((i) => i.ticker === t);
+        if (!it) out.missing.push(t);
+        else if (to.items.some((i) => i.ticker === t)) out.already_present.push(t);
+        else { to.items.push({ ...it }); out.copied.push(t); }
+      }
+      if (body.move) { out.moved = [...out.copied, ...out.already_present]; w.items = w.items.filter((i) => !out.moved.includes(i.ticker)); }
+      return jsonResponse(out);
+    }
     if ((m = path.match(/^\/v1\/watchlists\/(\d+)(?:\/tickers(?:\/([^/]+))?)?$/))) {
       const w = lists.find((x) => x.id === Number(m![1]));
       if (!w) return err(404, "Watchlist not found.");
@@ -123,6 +154,9 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
         if (body.name && lists.some((x) => x !== w && x.name.toLowerCase() === body.name.toLowerCase())) return err(409, `You already have a watchlist named "${body.name}".`);
         if (body.name) w.name = body.name;
         if (body.make_default) { lists.forEach((x) => (x.is_default = false)); w.is_default = true; }
+        if (body.archived && w.is_default) return err(409, "Your default watchlist can't be archived.");
+        if (body.pinned !== undefined) w.pinned = body.pinned;
+        if (body.archived !== undefined) { w.archived = body.archived; if (body.archived) w.pinned = false; }
         return jsonResponse(detail(w));
       }
       if (!sub && method === "DELETE") { lists.splice(lists.indexOf(w), 1); return new Response(null, { status: 204 }); }

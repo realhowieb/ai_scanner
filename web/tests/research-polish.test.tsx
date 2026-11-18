@@ -157,6 +157,7 @@ describe("Watchlist prices", () => {
     vi.stubGlobal("fetch", vi.fn((input: Request, init?: RequestInit) => api.fetch(input, init)));
     api.seedList("Main", ["AAA"]);
     wrap(<WatchlistsView />, "pro");
+    fireEvent.click(await screen.findByRole("tab", { name: "List alerts" }));
     const card = (await screen.findByRole("heading", { name: "Alerts on this list" })).closest("section")!;
     expect(within(card).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });

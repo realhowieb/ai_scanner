@@ -64,11 +64,12 @@ def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT wl.id, wl.name, wl.created_at, wl.is_default, COUNT(wi.id) AS symbol_count
+        SELECT wl.id, wl.name, wl.created_at, wl.is_default, COUNT(wi.id) AS symbol_count,
+               wl.pinned, wl.archived_at
         FROM watchlists wl
         LEFT JOIN watchlist_items wi ON wi.watchlist_id = wl.id
         WHERE wl.user_id = %s
-        GROUP BY wl.id, wl.name, wl.created_at, wl.is_default
+        GROUP BY wl.id, wl.name, wl.created_at, wl.is_default, wl.pinned, wl.archived_at
         ORDER BY wl.is_default DESC, wl.created_at DESC, wl.id DESC
         """,
         (user_id,),
@@ -85,6 +86,8 @@ def list_watchlists(user_id: str) -> List[Dict[str, Any]]:
                 "created_at": _row_get(r, "created_at", 2),
                 "is_default": bool(_row_get(r, "is_default", 3, False)),
                 "symbol_count": int(_row_get(r, "symbol_count", 4, 0) or 0),
+                "pinned": bool(_row_get(r, "pinned", 5, False)),
+                "archived_at": _row_get(r, "archived_at", 6),
             }
         )
     return normalized
@@ -178,7 +181,9 @@ def set_default_watchlist(watchlist_id: int, user_id: str) -> bool:
     if not _watchlist_owner_exists(watchlist_id, user_id, conn):
         return False
     cur = conn.cursor()
-    cur.execute("UPDATE watchlists SET is_default = (id = %s) WHERE user_id = %s", (int(watchlist_id), user_id))
+    # The default list is never archived: making an archived list the default brings it back.
+    cur.execute("UPDATE watchlists SET is_default = (id = %s), archived_at = CASE WHEN id = %s THEN NULL "
+                "ELSE archived_at END WHERE user_id = %s", (int(watchlist_id), int(watchlist_id), user_id))
     conn.commit()
     cur.close()
     return True
@@ -305,6 +310,62 @@ def duplicate_watchlist(watchlist_id: int, user_id: str, new_name: Optional[str]
     _repair_default_watchlist(user_id, conn)
     conn.commit()
     return new_id
+
+
+def set_watchlist_flags(watchlist_id: int, user_id: str, *, pinned: Optional[bool] = None,
+                        archived: Optional[bool] = None) -> bool:
+    """Pin/unpin and archive/unarchive one list. Archiving keeps the list and its tickers;
+    the default list can't be archived (callers check), and archiving unpins."""
+    if pinned is None and archived is None:
+        return True
+    conn = _get_conn()
+    if not _watchlist_owner_exists(watchlist_id, user_id, conn):
+        return False
+    cur = conn.cursor()
+    if pinned is not None:
+        cur.execute("UPDATE watchlists SET pinned = %s WHERE id = %s AND user_id = %s",
+                    (bool(pinned), int(watchlist_id), user_id))
+    if archived is True:
+        cur.execute("UPDATE watchlists SET archived_at = COALESCE(archived_at, NOW()), pinned = FALSE "
+                    "WHERE id = %s AND user_id = %s", (int(watchlist_id), user_id))
+    elif archived is False:
+        cur.execute("UPDATE watchlists SET archived_at = NULL WHERE id = %s AND user_id = %s",
+                    (int(watchlist_id), user_id))
+    conn.commit()
+    cur.close()
+    return True
+
+
+def merge_watchlists(target_id: int, source_id: int, user_id: str) -> Optional[int]:
+    """Copy every ticker (with its added date, price and note) from `source_id` into
+    `target_id` that isn't already there, then delete the source list. A ticker on both
+    keeps the target's row. If the source was the default, the target becomes the default.
+    Returns how many tickers were copied, or None when either list isn't the user's."""
+    if int(target_id) == int(source_id):
+        raise ValueError("Pick a different list to merge.")
+    conn = _get_conn()
+    try:
+        _lock_user_watchlists(user_id, conn)
+        if not (_watchlist_owner_exists(target_id, user_id, conn) and _watchlist_owner_exists(source_id, user_id, conn)):
+            conn.rollback()
+            return None
+        cur = conn.cursor()
+        cur.execute("SELECT is_default FROM watchlists WHERE id = %s", (int(source_id),))
+        source_default = bool(_row_get(cur.fetchone(), "is_default", 0, False))
+        cur.close()
+        copied = _copy_items(int(source_id), int(target_id), conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM watchlists WHERE id = %s AND user_id = %s", (int(source_id), user_id))
+        if source_default:
+            cur.execute("UPDATE watchlists SET is_default = (id = %s), archived_at = CASE WHEN id = %s THEN NULL "
+                        "ELSE archived_at END WHERE user_id = %s", (int(target_id), int(target_id), user_id))
+        conn.commit()
+        cur.close()
+    except BaseException:
+        conn.rollback()
+        raise
+    _repair_default_watchlist(user_id, conn)
+    return copied
 
 
 def delete_watchlist(watchlist_id: int, user_id: str) -> None:
@@ -639,6 +700,7 @@ _WRITE_FUNCTIONS = (
     "delete_watchlist", "add_tickers_to_watchlist", "add_to_watchlist", "remove_tickers_from_watchlist",
     "remove_from_watchlist", "copy_tickers_between_watchlists", "move_tickers_between_watchlists",
     "update_watchlist_item_note", "set_watchlist_tickers", "_repair_default_watchlist",
+    "set_watchlist_flags", "merge_watchlists",
 )
 
 

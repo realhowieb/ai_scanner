@@ -41,8 +41,14 @@ def _db(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 def list_watchlists(user: str) -> List[Dict[str, Any]]:
     from db import watchlists as wl
 
-    return [{"id": int(w["id"]), "name": w["name"], "is_default": bool(w["is_default"]),
-             "symbol_count": int(w["symbol_count"])} for w in _db(wl.list_watchlists, user)]
+    out = []
+    for w in _db(wl.list_watchlists, user):
+        archived_at = w.get("archived_at")
+        out.append({"id": int(w["id"]), "name": w["name"], "is_default": bool(w["is_default"]),
+                    "symbol_count": int(w["symbol_count"]), "pinned": bool(w.get("pinned")),
+                    "archived": archived_at is not None and not bool(w["is_default"]),
+                    "archived_at": archived_at.isoformat() if hasattr(archived_at, "isoformat") else archived_at})
+    return out
 
 
 def _owned(user: str, watchlist_id: int) -> Dict[str, Any]:
@@ -74,10 +80,13 @@ def create_watchlist(user: str, name: str, make_default: bool = False) -> Dict[s
     return get_watchlist(user, new_id)
 
 
-def update_watchlist(user: str, watchlist_id: int, *, name: Optional[str], make_default: bool) -> Dict[str, Any]:
+def update_watchlist(user: str, watchlist_id: int, *, name: Optional[str], make_default: bool,
+                     pinned: Optional[bool] = None, archived: Optional[bool] = None) -> Dict[str, Any]:
     from db import watchlists as wl
 
-    _owned(user, watchlist_id)
+    w = _owned(user, watchlist_id)
+    if archived and (w["is_default"] or make_default):
+        raise Conflict("Your default watchlist can't be archived. Make another list the default first.")
     if name is not None:
         try:
             _db(wl.rename_watchlist, int(watchlist_id), user, name)
@@ -85,7 +94,50 @@ def update_watchlist(user: str, watchlist_id: int, *, name: Optional[str], make_
             raise Conflict(str(e)) from e
     if make_default:
         _db(wl.set_default_watchlist, int(watchlist_id), user)
+    if pinned is not None or archived is not None:
+        _db(wl.set_watchlist_flags, int(watchlist_id), user, pinned=pinned, archived=archived)
     return get_watchlist(user, watchlist_id)
+
+
+def remove_tickers(user: str, watchlist_id: int, tickers: List[str]) -> Dict[str, List[str]]:
+    """Remove several tickers (and their notes) from one list in one write."""
+    from db import watchlists as wl
+
+    _owned(user, watchlist_id)
+    r = _db(wl.remove_tickers_from_watchlist, user, tickers, int(watchlist_id))
+    return {"removed": list(r["removed"]), "missing": list(r["missing"])}
+
+
+def copy_tickers(user: str, watchlist_id: int, to_watchlist_id: int, tickers: List[str], *,
+                 move: bool = False) -> Dict[str, List[str]]:
+    """Copy (or move) tickers to another of the user's lists, keeping each one's added date,
+    price when added and note. Moving removes them from this list, including ones the
+    other list already had."""
+    from db import watchlists as wl
+
+    _owned(user, watchlist_id)
+    _owned(user, to_watchlist_id)
+    if int(watchlist_id) == int(to_watchlist_id):
+        raise Conflict("Pick a different list.")
+    fn = wl.move_tickers_between_watchlists if move else wl.copy_tickers_between_watchlists
+    r = _db(fn, user, int(watchlist_id), int(to_watchlist_id), tickers)
+    return {"copied": list(r.get("copied", [])), "already_present": list(r.get("already_present", [])),
+            "missing": list(r.get("missing", [])), "moved": list(r.get("moved", []))}
+
+
+def merge_watchlist(user: str, watchlist_id: int, from_watchlist_id: int) -> Dict[str, Any]:
+    """Fold `from_watchlist_id` into this list and delete it (see db.watchlists.merge_watchlists)."""
+    from db import watchlists as wl
+
+    _owned(user, watchlist_id)
+    _owned(user, from_watchlist_id)
+    try:
+        copied = _db(wl.merge_watchlists, int(watchlist_id), int(from_watchlist_id), user)
+    except ValueError as e:
+        raise Conflict(str(e)) from e
+    if copied is None:
+        raise NotFound("watchlist")
+    return {**get_watchlist(user, watchlist_id), "merged": int(copied)}
 
 
 def delete_watchlist(user: str, watchlist_id: int) -> None:
