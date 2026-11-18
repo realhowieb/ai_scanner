@@ -610,7 +610,11 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .wl-nav { gap: 10px; }
 .wl-items, .alert-list { list-style: none; margin: 0; padding: 0; }
 .wl-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.wl-summary span { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg-2); color: var(--muted); font-size: 13px; }
+.wl-summary .wl-chip { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg-2); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.wl-summary .wl-chip:hover:not(:disabled) { border-color: var(--line); color: var(--text); }
+.wl-summary .wl-chip.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+.wl-summary .wl-chip:disabled { cursor: default; opacity: .6; }
+.wl-filter-note { margin: 0 0 8px; }
 .wl-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .metric-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .metric-strip span { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg-2); color: var(--muted); font-size: 13px; }

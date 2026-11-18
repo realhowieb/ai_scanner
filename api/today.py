@@ -109,6 +109,26 @@ class TTLCache:
                 totals["refreshes"] += len(cache._refreshing)
         return totals
 
+    @classmethod
+    def sizes(cls) -> Dict[str, Dict[str, Any]]:
+        """Approximate size of each cache by name (entries, MB). Values are measured
+        outside the cache locks on a snapshot, so a slow walk never blocks requests."""
+        from api.memory import approx_bytes
+
+        with cls._instances_lock:
+            caches = list(cls._instances)
+        out: Dict[str, Dict[str, Any]] = {}
+        for cache in caches:
+            with cache._lock:
+                values = [v for (_, _, v) in cache._items.values()]
+            nbytes, partial = approx_bytes(values)
+            row = out.setdefault(cache.name, {"entries": 0, "mb": 0.0})
+            row["entries"] += len(values)
+            row["mb"] = round(row["mb"] + nbytes / 1048576, 1)
+            if partial:
+                row["partial"] = True
+        return out
+
     def _refresh(self, key: Any, loader: Callable[[], Any], ttl_s: float, stale_s: float) -> None:
         with self._lock:
             slot = self._loading.setdefault(key, [threading.Lock(), 0])

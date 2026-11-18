@@ -227,6 +227,16 @@ await step("watchlist: ticker listed, note saved, invalid and duplicate tickers 
     status.includes(`Already in the list: ${ticker}`) && status.includes("Not valid"), status.slice(0, 160));
 });
 
+await step("watchlist summary chips filter the list", async () => {
+  const chip = page.getByRole("button", { name: /^1 with notes/ });
+  await chip.click();
+  const note = await page.locator(".wl-filter-note").textContent();
+  const pressed = await chip.getAttribute("aria-pressed");
+  await chip.click(); // clicking again shows every ticker
+  await page.locator(".wl-filter-note").waitFor({ state: "detached" });
+  check("watchlist summary chips filter the list", pressed === "true" && /Showing 1 of 1: with notes/.test(note), note.replace(/\s+/g, " "));
+});
+
 await step("Scanner Watchlist tab shows the watchlist's stocks", async () => {
   const id = new URL(watchlistUrl).searchParams.get("id");
   await page.goto(`${BASE}/scanner?signal=watchlist&wl=${id}`);
