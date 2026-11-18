@@ -2,95 +2,29 @@
 import { tabKey } from "@/lib/tabs";
 
 import Link from "@/components/Link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 import { api, unwrap } from "@/api/client";
 import { alerts, alertRules, emailPrefs } from "@/api/userData";
-import type { Alert } from "@/api/userData";
-import { ConfirmDialog, Dialog } from "@/components/Dialog";
-import { Card, Empty, ErrorLine, ErrorState, Pill, Skeleton, UpgradeButton } from "@/components/ui";
+import { Dialog } from "@/components/Dialog";
+import { Card, Empty, ErrorLine, ErrorState, Skeleton, UpgradeButton } from "@/components/ui";
 import { useAction } from "@/hooks/useAction";
 import { useApi } from "@/hooks/useApi";
 import { currentPushState, disablePush, enablePush } from "@/lib/webPush";
 import type { PushState } from "@/lib/webPush";
 import { groupFired } from "@/lib/alertEvents";
-import type { FiredItem } from "@/lib/alertEvents";
-import { etTime } from "@/lib/format";
 import { useSession } from "@/session/SessionProvider";
 
 import { NotificationDelivery } from "./NotificationDelivery";
 import { SmartAlerts } from "./SmartAlerts";
 import { StarterAlerts } from "./Starters";
 import { AlertComposer } from "./AlertComposer";
-import { TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
-
-function AlertRow({ a, onChanged }: { a: Alert; onChanged: () => void }) {
-  const toggle = useAction();
-  const del = useAction();
-  const [confirming, setConfirming] = useState(false);
-  const label = describeAlert(a);
-  return (
-    <li className="alert-row">
-      <div className="grow stack-xs">
-        <span className="strong">{label}</span>
-        <span className="cap">{a.last_fired_at ? `Last fired ${etTime(a.last_fired_at)}` : "Hasn't fired yet"}{a.created_at ? ` · Created ${etTime(a.created_at)}` : ""}</span>
-        <ErrorLine error={toggle.error} />
-      </div>
-      <Pill tone={a.enabled ? "up" : undefined}>{a.enabled ? "On" : "Off"}</Pill>
-      <button type="button" className="btn btn-sm" aria-pressed={a.enabled} disabled={toggle.busy}
-        aria-label={`${a.enabled ? "Turn off" : "Turn on"}: ${label}`}
-        onClick={() => void toggle.run(async () => { await alerts.setEnabled(a.id, !a.enabled); onChanged(); return true; })}>
-        {toggle.busy ? "Saving…" : a.enabled ? "Turn off" : "Turn on"}
-      </button>
-      <button type="button" className="btn btn-sm btn-danger-outline" aria-label={`Delete: ${label}`} onClick={() => { del.clear(); setConfirming(true); }}>Delete</button>
-      <ConfirmDialog open={confirming} title="Delete this alert?" confirmLabel="Delete alert" busy={del.busy}
-        body={<p>{label}. Its history stays in recent alerts. This can&apos;t be undone.</p>} error={<ErrorLine error={del.error} />}
-        onClose={() => setConfirming(false)}
-        onConfirm={() => void del.run(async () => { await alerts.remove(a.id); setConfirming(false); onChanged(); return true; })} />
-    </li>
-  );
-}
-
-const FIRED_SHOWN = 8;
-
-function FiredRowItem({ item }: { item: FiredItem }) {
-  const [open, setOpen] = useState(false);
-  const rows = open ? item.rows : item.rows.slice(0, FIRED_SHOWN);
-  const unlisted = item.total - item.rows.length;
-  const many = item.rows.length > 1 || item.total > 1;
-  const head = many ? `${item.title} · ${item.total} names` : item.ticker ? `${item.title} · ${item.ticker}` : item.title;
-  return (
-    <li className="fired">
-      <span className="cap fired-time">{etTime(item.firedAt)}</span>
-      <div className="stack-xs grow">
-        <div className="fired-head">
-          <span className="strong">{head}</span>
-          {item.tiers.length > 1 && item.tiers.map((t) => <Pill key={t.rule}>{`≥ ${t.rule}: ${t.count}`}</Pill>)}
-          {item.tiers.length === 1 && item.tiers[0]!.rule && <span className="cap">BreakoutScore ≥ {item.tiers[0]!.rule}</span>}
-        </div>
-        {rows.length > 0 && (
-          <ul className="fired-chips" aria-label={`${item.title} matches`}>
-            {rows.map((r) => (
-              <li key={r.ticker} className="fired-chip" title={r.earnings ? `${r.detail} · ${r.earnings}` : r.detail}>
-                <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="mono strong">{r.ticker}</Link>
-                {r.value !== null ? <span className="mono fired-val">{r.value.toFixed(1)}</span> : r.detail && <span className="cap">{r.detail}</span>}
-                {r.earnings && <span className="fired-warn" aria-label={r.earnings}>⚠️</span>}
-              </li>
-            ))}
-            {item.rows.length > FIRED_SHOWN && (
-              <li><button type="button" className="link-btn cap" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-                {open ? "Show fewer" : `Show all ${item.rows.length}`}
-              </button></li>
-            )}
-          </ul>
-        )}
-        {open && unlisted > 0 && <span className="cap">…and {unlisted} more not listed in the alert.</span>}
-        {item.tiers.length > 1 && <span className="cap">Your ≥ {item.tiers.map((t) => t.rule).join(" and ≥ ")} breakout alerts fired on the same scan, shown together.</span>}
-        {item.text && <span className="body-sm">{item.text}</span>}
-      </div>
-    </li>
-  );
-}
+import { ActivityFilters, ActivityTable, DEFAULT_FILTER, FiredMost, TickersTable, inRange } from "./AlertActivity";
+import type { ActivityFilter } from "./AlertActivity";
+import { TYPES_UNAVAILABLE, typesUnavailable } from "./AlertForm";
+import { AlertRulesTable } from "./AlertRulesTable";
+import type { RuleFilter } from "./AlertRulesTable";
 
 function EmailToggle() {
   const prefs = useApi("email-prefs", (signal) => emailPrefs.get(signal));
@@ -160,13 +94,23 @@ export function PushToggle() {
   );
 }
 
+type AlertEvent = Awaited<ReturnType<typeof alerts.events>>[number];
+const PAGE = 100;
+type View = "activity" | "rules" | "tickers" | "delivery";
+const VIEWS: [View, string][] = [["activity", "Activity"], ["rules", "Rules"], ["tickers", "Tickers"], ["delivery", "Delivery"]];
+
 export function AlertsView() {
   const { me } = useSession();
   const list = useApi("alerts", (signal) => alerts.list(signal));
   const rules = useApi("alert-rules", (signal) => alertRules.list(signal));
   const types = useApi("alert-types", (signal) => alerts.types(signal));
-  const events = useApi("alert-events", (signal) => alerts.events(signal));
-  const [view, setView] = useState<"activity" | "rules" | "delivery">("activity");
+  const events = useApi("alert-events", (signal) => alerts.events(signal, { limit: PAGE }));
+  const [older, setOlder] = useState<AlertEvent[]>([]);
+  const [olderMore, setOlderMore] = useState<boolean | null>(null);
+  const olderAct = useAction();
+  const [view, setView] = useState<View>("activity");
+  const [chosen, setChosen] = useState<ActivityFilter | null>(null);
+  const [ruleFilter, setRuleFilter] = useState<RuleFilter>("all");
   const [newOpen, setNewOpen] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
@@ -178,6 +122,23 @@ export function AlertsView() {
     if (window.location.hash === "#delivery") setView("delivery");
     if (new URLSearchParams(window.location.search).get("new") === "1") setNewOpen(true);
   }, []);
+  const allEvents = useMemo(() => {
+    const seen = new Set<string>();
+    return [...(events.data ?? []), ...older].filter((e) => (seen.has(e.event_id) ? false : (seen.add(e.event_id), true)));
+  }, [events.data, older]);
+  const items = useMemo(() => groupFired(allEvents), [allEvents]);
+  const hasMore = olderMore ?? (events.data?.length ?? 0) >= PAGE;
+  const loadOlder = () => {
+    const cursor = allEvents[allEvents.length - 1]?.cursor;
+    if (!cursor) return;
+    void olderAct.run(async () => {
+      const page = await alerts.events(undefined, { limit: PAGE, cursor });
+      setOlder((o) => [...o, ...page]);
+      setOlderMore(page.length >= PAGE);
+      setFilter((f) => ({ ...f, range: "all" }));
+      return true;
+    });
+  };
   const data = list.data;
   const full = !!data && data.used >= data.limit;
   const smart = rules.data?.rules ?? [];
@@ -185,40 +146,66 @@ export function AlertsView() {
   const rulesKnown = !!rules.data || (!!rules.error && typesUnavailable(rules.error.status));
   const active = (data?.alerts.filter((a) => a.enabled).length ?? 0) + smart.filter((a) => a.enabled).length;
   const paused = (data?.alerts.filter((a) => !a.enabled).length ?? 0) + smart.filter((a) => !a.enabled).length;
+  const firedWeek = items.filter((i) => inRange(i, "7d")).length;
+  // Opens on the last 7 days, or on everything loaded when nothing fired that recently.
+  const filter: ActivityFilter = chosen ?? (firedWeek === 0 ? { ...DEFAULT_FILTER, range: "all" } : DEFAULT_FILTER);
+  const setFilter = (f: ActivityFilter | ((prev: ActivityFilter) => ActivityFilter)) => setChosen(typeof f === "function" ? f(filter) : f);
   const nextPlan = me?.plan === "basic" ? "pro" : me?.plan === "pro" ? "premium" : null;
+  const ruleEmail = Array.isArray(rules.data?.capabilities?.delivery_channels) && rules.data!.capabilities.delivery_channels.includes("email");
+  const go = (v: View) => { setView(v); document.getElementById(`alert-tab-${v}`)?.focus(); };
+  const toRules = (f: RuleFilter) => { setRuleFilter(f); go("rules"); };
+  const showTicker = (t: string) => { setFilter((f) => ({ ...f, ticker: t, kind: "", freshOnly: false })); go("activity"); };
+  const chip = (on: boolean, onClick: () => void, title: string, children: ReactNode) => (
+    <button type="button" className={`wl-chip${on ? " on" : ""}`} aria-pressed={on} title={title} onClick={onClick}>{children}</button>
+  );
   return <div className="stack">
     <section className="page-head"><div><h1 className="h1">Alerts</h1><p className="cap">Scan-based alerts run after market scans; price alerts are checked about every minute.</p></div>
       <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>New alert</button>
     </section>
     {created && <p className="notice" role="status">Created: {created}.</p>}
     {list.error && !data ? <ErrorState error={list.error} onRetry={list.reload} what="your alerts" /> : !data ? <Skeleton rows={6} label="Loading alerts" /> : <>
-      <div className="metric-strip" aria-label="Alert summary">
-        <span><strong>{rulesKnown ? active : "—"}</strong> active</span>
-        <span><strong>{rulesKnown ? paused : "—"}</strong> paused</span>
-        <span><strong>{data.used} / {data.limit}</strong> saved price/technical alerts (including paused)</span>
-        {rules.data && <span><strong>{rules.data.used} / {rules.data.limit}</strong> active alert allowance</span>}
-        <span><strong>{data.email_enabled ? "Available" : "Pro"}</strong> email delivery</span>
+      <div className="wl-summary al-summary" aria-label="Alert summary">
+        {chip(view === "rules" && ruleFilter === "active", () => toRules("active"), "Show active alerts in Rules", <><strong>{rulesKnown ? active : "—"}</strong> active</>)}
+        {chip(view === "rules" && ruleFilter === "paused", () => toRules("paused"), "Show paused alerts in Rules", <><strong>{rulesKnown ? paused : "—"}</strong> paused</>)}
+        {chip(view === "rules" && ruleFilter === "legacy", () => toRules("legacy"), "Show price/technical alerts in Rules", <><strong>{data.used} / {data.limit}</strong> saved price/technical (including paused)</>)}
+        {rules.data && chip(view === "rules" && ruleFilter === "all", () => toRules("all"), "Show every alert in Rules", <><strong>{rules.data.used} / {rules.data.limit}</strong> active alert allowance</>)}
+        {chip(view === "delivery", () => go("delivery"), "Open Delivery", <><strong>{data.email_enabled ? "Available" : "Pro"}</strong> email delivery</>)}
+        {events.data && firedWeek > 0 && chip(view === "activity" && filter.range === "7d" && !filter.kind && !filter.ticker && !filter.freshOnly,
+          () => { setFilter({ ...DEFAULT_FILTER, range: "7d" }); go("activity"); }, "Show the last 7 days in Activity", <><strong>{firedWeek}</strong> fired in 7 days</>)}
       </div>
-      <div className="chips" role="tablist" onKeyDown={tabKey} aria-label="Alert views">{(["activity", "rules", "delivery"] as const).map((v) =>
-        <button type="button" role="tab" tabIndex={view === v ? 0 : -1} id={`alert-tab-${v}`} aria-controls={`alert-panel-${v}`} aria-selected={view === v} className="chip" key={v} onClick={() => setView(v)}>{v[0]!.toUpperCase() + v.slice(1)}</button>)}</div>
+      <div className="wl-tabs" role="tablist" onKeyDown={tabKey} aria-label="Alert views">{VIEWS.map(([v, label]) =>
+        <button type="button" role="tab" tabIndex={view === v ? 0 : -1} id={`alert-tab-${v}`} aria-controls={`alert-panel-${v}`} aria-selected={view === v} className={`wl-tab${view === v ? " on" : ""}`} key={v} onClick={() => setView(v)}>{label}</button>)}</div>
       <section id="alert-panel-activity" role="tabpanel" aria-labelledby="alert-tab-activity" hidden={view !== "activity"} className="stack">
         {data.alerts.length === 0 && smart.length === 0 && rules.data && <StarterAlerts rules={rules} onDone={(label) => { setCreated(label); reload(); }} />}
+        <div className={items.length > 0 ? "al-split" : undefined}>
         <Card title="Recently fired" id="events">{events.error && !events.data ? <ErrorState error={events.error} onRetry={events.reload} what="recent alerts" /> : !events.data ? <Skeleton rows={3} label="Loading recent alerts" /> : events.data.length === 0 ? <Empty title="No recent triggers.">
           {active > 0 ? "Your alert is active; no trigger has been recorded yet."
             : paused > 0 ? "Your saved alerts are paused. View rules to manage them."
             : rules.error && !typesUnavailable(rules.error.status) ? "HSF rule status could not be loaded. View rules to retry."
             : !rules.data && !rules.error ? "Loading rule status…" : "Create an alert using New alert or from a stock page."}
           {(active > 0 || paused > 0 || !!rules.error && !typesUnavailable(rules.error.status)) && <div><button type="button" className="btn btn-sm" onClick={() => { setView("rules"); document.getElementById("alert-tab-rules")?.focus(); rules.reload(); }}>View rules</button></div>}
-        </Empty> : <ul className="fired-list">{groupFired(events.data).map((item) => <FiredRowItem key={item.key} item={item} />)}</ul>}</Card>
+        </Empty> : <>
+          <ActivityFilters items={items} filter={filter} onFilter={setFilter} />
+          {filter.ticker && <p className="cap" role="status">Showing alerts with {filter.ticker}. <button type="button" className="link-btn" onClick={() => setFilter((f) => ({ ...f, ticker: "" }))}>Show all</button></p>}
+          <ActivityTable items={items} filter={filter} onFilter={setFilter} next={hasMore} onLoadOlder={loadOlder} loadingOlder={olderAct.busy} olderError={<ErrorLine error={olderAct.error} />} />
+        </>}</Card>
+        {items.length > 0 && <FiredMost items={items} filter={filter} onPick={(t) => setFilter((f) => ({ ...f, ticker: t }))} onAll={() => go("tickers")} />}
+        </div>
       </section>
       <section id="alert-panel-rules" role="tabpanel" aria-labelledby="alert-tab-rules" hidden={view !== "rules"} className="stack">
         <Card title="Your alerts" id="mine" aside={`${data.used} saved price/technical · ${smart.length} HSF rules`}>
           <p className="cap">Paused price/technical alerts still use saved slots. Pausing an HSF rule frees an active slot.</p>
-          {data.alerts.length ? <ul className="alert-list">{data.alerts.map((a) => <AlertRow key={a.id} a={a} onChanged={reload} />)}</ul> : smart.length === 0 && (!rules.error || typesUnavailable(rules.error.status)) && !rules.loading ? <Empty title="No alerts yet.">Choose New alert to get started.</Empty> : null}
+          {data.alerts.length || smart.length ? <AlertRulesTable legacy={data.alerts} rules={smart} items={items} emailAllowed={ruleEmail}
+            filter={ruleFilter} onFilter={setRuleFilter} onChanged={reload} />
+            : (!rules.error || typesUnavailable(rules.error.status)) && !rules.loading ? <Empty title="No alerts yet.">Choose New alert to get started.</Empty> : null}
           {rules.error && !typesUnavailable(rules.error.status) && <ErrorState error={rules.error} onRetry={rules.reload} what="HSF alert rules" />}
           {data.used > data.limit && <p className="cap">Only your newest {data.limit} alerts can fire on this plan. Delete some or upgrade.</p>}
+          {items.length > 0 && <p className="cap">“30 days” counts the alerts loaded on Activity.</p>}
         </Card>
-        <SmartAlerts onChanged={reload} folded rules={rules} />
+        <SmartAlerts onChanged={reload} folded hideList rules={rules} />
+      </section>
+      <section id="alert-panel-tickers" role="tabpanel" aria-labelledby="alert-tab-tickers" hidden={view !== "tickers"} className="stack">
+        {events.data && <TickersTable items={items} filter={filter} onFilter={setFilter} onShow={showTicker} />}
       </section>
       <section id="alert-panel-delivery" role="tabpanel" aria-labelledby="alert-tab-delivery" hidden={view !== "delivery"} className="stack">
         <Card title="How you're notified" id="delivery"><p className="body-sm">Fired alerts appear in Activity.</p><PushToggle />

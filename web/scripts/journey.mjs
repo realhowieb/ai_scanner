@@ -271,6 +271,16 @@ await step("alerts page: capacity, turn off", async () => {
   check("alerts page: capacity, turn off", true, capacity);
 });
 
+await step("alerts summary chip opens Rules filtered to paused; Activity table or empty state shows", async () => {
+  await page.getByLabel("Alert summary").getByRole("button", { name: /^(\d+|—) paused$/ }).click();
+  const pausedOn = await page.getByRole("radio", { name: /^Paused/ }).isChecked();
+  await page.getByRole("region", { name: "Your alert rules" }).getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await page.getByRole("region", { name: "Fired alerts" }).or(page.getByText("No recent triggers.")).or(page.getByRole("status").filter({ hasText: /^No alerts/ })).first().waitFor();
+  await shot(page, "journey-5b-alerts-activity");
+  check("alerts summary chip opens Rules filtered to paused; Activity table or empty state shows", pausedOn);
+});
+
 await step("return later: sign out, sign in, everything is still there", async () => {
   await page.getByRole("button", { name: /Account/ }).click();
   await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
