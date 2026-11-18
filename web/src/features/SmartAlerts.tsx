@@ -76,8 +76,10 @@ function RuleRow({ r, types, scope, emailAllowed, onChanged }: {
 }
 
 /** `folded`: the form stays behind one "Add smart alert" button (stock pages, where the card sits in the side column). */
-export function SmartAlerts({ ticker, onChanged, folded = false, rules: given }: {
+export function SmartAlerts({ ticker, onChanged, folded = false, rules: given, hideList = false }: {
   ticker?: string; onChanged?: () => void; folded?: boolean;
+  /** The page lists the rules itself (Alerts → Rules table); this card only adds them. */
+  hideList?: boolean;
   /** The page's own alert-rules answer (Alerts), so this card doesn't ask again when it appears. */
   rules?: ApiState<Awaited<ReturnType<typeof alertRules.list>>>;
 }) {
@@ -141,7 +143,7 @@ export function SmartAlerts({ ticker, onChanged, folded = false, rules: given }:
       aside={`${rules.data.used} of ${rules.data.limit} alerts in use`}>
       {open && <p className="cap">Alerts on what HSF sees, not just price: score crossings, new setups, volume spikes, rank jumps
         and earnings heads-ups. Checked after each market scan.</p>}
-      {mine.length > 0 ? (
+      {hideList ? null : mine.length > 0 ? (
         <ul className="alert-list">
           {mine.map((r) => (
             <RuleRow key={r.id} r={r} types={all} emailAllowed={emailAllowed} onChanged={changed}
