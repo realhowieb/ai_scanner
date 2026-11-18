@@ -107,6 +107,59 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertIn('"rss_delta_mb": 35.0', logs.output[0])
 
 
+class CacheSizeTests(unittest.TestCase):
+    def test_approx_bytes_counts_frames_by_buffer_and_shared_objects_once(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": range(10_000)})
+        frame_bytes = int(df.memory_usage(index=True, deep=True).sum())
+        size, partial = memory.approx_bytes([df, df, {"k": df}])
+        self.assertFalse(partial)
+        self.assertGreaterEqual(size, frame_bytes)
+        self.assertLess(size, 2 * frame_bytes)
+
+    def test_approx_bytes_stops_at_the_walk_limit(self):
+        size, partial = memory.approx_bytes([[i] for i in range(100)], limit=10)
+        self.assertTrue(partial)
+        self.assertGreater(size, 0)
+
+    def test_ttlcache_sizes_group_by_name(self):
+        from api.today import TTLCache
+
+        a = TTLCache(4, name="unit_size_probe")
+        b = TTLCache(4, name="unit_size_probe")
+        a.get("x", lambda: list(range(1000)))
+        b.get("y", lambda: "v")
+        row = TTLCache.sizes()["unit_size_probe"]
+        self.assertEqual(row["entries"], 2)
+        self.assertGreaterEqual(row["mb"], 0.0)
+
+    def test_maintenance_log_carries_cache_sizes_and_can_be_turned_off(self):
+        from api.today import TTLCache
+
+        with mock.patch.object(memory, "container_mb", side_effect=[455.0, 400.0]), \
+                mock.patch.object(TTLCache, "prune_all", return_value=0), \
+                mock.patch.object(memory, "_glibc", return_value=None), mock.patch("gc.collect"), \
+                self.assertLogs("hsf.memory", level="INFO") as logs:
+            out = memory.maintain_memory()
+        self.assertIn("cache_sizes", out)
+        self.assertIn("_python_blocks", out["cache_sizes"])
+        self.assertIn('"cache_sizes"', logs.output[0])
+        with mock.patch.dict(os.environ, {"HSF_MEMORY_CACHE_SIZES": "0"}):
+            self.assertEqual(memory.cache_sizes(), {})
+
+    def test_sizing_failure_never_breaks_maintenance(self):
+        from api.today import TTLCache
+
+        with mock.patch.object(memory, "container_mb", side_effect=[455.0, 400.0]), \
+                mock.patch.object(TTLCache, "prune_all", return_value=0), \
+                mock.patch.object(memory, "_glibc", return_value=None), mock.patch("gc.collect"), \
+                mock.patch.object(memory, "cache_sizes", side_effect=RuntimeError("boom")):
+            out = memory.maintain_memory()
+        self.assertNotIn("cache_sizes", out)
+        self.assertEqual(out["before_mb"], 455.0)
+
+
 class CustomScanJobReleaseTests(unittest.TestCase):
     def test_custom_scan_job_releases_memory_after_work(self):
         """A finished (or failed) custom scan hands its freed pages back to the OS."""

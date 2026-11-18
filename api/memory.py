@@ -202,6 +202,68 @@ def heavy_load(operation: str):
                 pass
 
 
+_SIZE_WALK_LIMIT = 500_000  # objects visited per cache before the walk stops (marked partial)
+
+
+def approx_bytes(root, limit: int = _SIZE_WALK_LIMIT) -> tuple[int, bool]:
+    """Rough deep size of a cached value: pandas/numpy report their own buffer sizes,
+    containers are walked once (shared objects counted once). Returns (bytes, partial)."""
+    seen: set = set()
+    stack = [root]
+    total = 0
+    visited = 0
+    while stack:
+        obj = stack.pop()
+        oid = id(obj)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        visited += 1
+        if visited > limit:
+            return total, True
+        try:
+            if hasattr(obj, "memory_usage") and hasattr(obj, "columns"):  # DataFrame
+                total += int(obj.memory_usage(index=True, deep=True).sum())
+                continue
+            if hasattr(obj, "memory_usage") and hasattr(obj, "dtype") and hasattr(obj, "index"):  # Series
+                total += int(obj.memory_usage(index=True, deep=True))
+                continue
+            if hasattr(obj, "nbytes") and hasattr(obj, "dtype"):  # ndarray
+                total += int(obj.nbytes)
+                continue
+            total += sys.getsizeof(obj)
+            if isinstance(obj, dict):
+                stack.extend(obj.keys())
+                stack.extend(obj.values())
+            elif isinstance(obj, (list, tuple, set, frozenset)):
+                stack.extend(obj)
+            elif hasattr(obj, "__dict__") and not isinstance(obj, type):
+                stack.append(vars(obj))
+        except Exception:  # noqa: BLE001 - sizing is best effort
+            continue
+    return total, False
+
+
+def cache_sizes() -> dict:
+    """Per-cache sizes for the maintenance log (HSF_MEMORY_CACHE_SIZES=0 turns it off)."""
+    if os.getenv("HSF_MEMORY_CACHE_SIZES", "1").strip() == "0":
+        return {}
+    from api.today import TTLCache
+
+    out: dict = TTLCache.sizes()
+    try:
+        from data import prices
+
+        frames = [v[0] for v in list(prices._PRICE_CACHE.values())]
+        nbytes, partial = approx_bytes(frames)
+        out["price_frames"] = {"entries": len(frames), "mb": round(nbytes / 1048576, 1),
+                               **({"partial": True} if partial else {})}
+    except Exception:  # noqa: BLE001 - sizing is best effort
+        pass
+    out["_python_blocks"] = sys.getallocatedblocks()
+    return out
+
+
 def maintain_memory() -> dict:
     """Five-minute ops maintenance: expire unused entries; trim only under current pressure.
 
@@ -232,6 +294,10 @@ def maintain_memory() -> dict:
     result = {"expired_cache_entries": expired, "before_mb": before, "after_mb": after,
               "allocator_trimmed": trimmed, "cache_counts": TTLCache.statistics()}
     if expired or (before is not None and before >= _env_mb("HSF_MEMORY_WARN_MB", 400.0)):
+        try:
+            result["cache_sizes"] = cache_sizes()
+        except Exception:  # noqa: BLE001 - sizing must never fail maintenance
+            pass
         logging.getLogger("hsf.memory").info(json.dumps({"event": "memory_maintenance", **result}))
     return result
 
