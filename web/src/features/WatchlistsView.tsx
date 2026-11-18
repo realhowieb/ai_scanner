@@ -34,6 +34,17 @@ import { WatchlistPerformanceCard } from "./WatchlistPerformance";
 import { AutoTag } from "./SetupTable";
 
 const NOTE_MAX = 500;
+
+/** Summary chip filters: each chip lists the tickers it counts. */
+type WlFilter = "all" | "scan" | "auto" | "attention" | "notes";
+
+/** Why a ticker counts as "needs attention": Fading in the scan, or its HSF Score fell since the previous scan. */
+export function attentionReasons(fading: boolean | null | undefined, scoreChange: number | null | undefined): string[] {
+  const out: string[] = [];
+  if (fading) out.push("Fading");
+  if ((scoreChange ?? 0) < 0) out.push(`Score −${Math.abs(scoreChange!)} since last scan`);
+  return out;
+}
 /** GET /v1/quotes answers at most this many tickers per request. */
 export const QUOTE_CHUNK = 50;
 type LatestQuotes = Schemas["LatestQuotes"];
@@ -338,6 +349,9 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const legacy = !!detail.data && detail.data.scan_at === undefined;
   const scan = useApi(legacy ? "wl-scan" : null, (signal) => unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: 200 } }, signal })));
   const [byScore, setByScore] = useState(false);
+  const [filterState, setFilterState] = useState<{ id: number; f: WlFilter }>({ id, f: "all" });
+  const filter: WlFilter = filterState.id === id ? filterState.f : "all"; // a new list starts unfiltered
+  const setFilter = (f: WlFilter) => setFilterState({ id, f: f === filter ? "all" : f });
   const [manageOpen, setManageOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -370,10 +384,25 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
   const series = daily?.series ?? {};
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
-  const items = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
-  const ranked = legacy ? w.items.filter((i) => scores.has(i.ticker)).length : w.items.filter((i) => i.latest).length;
-  const attention = w.items.filter((i) => scores.get(i.ticker)?.fading || (intelBy.get(i.ticker)?.score_change ?? 0) < 0).length;
-  const notes = w.items.filter((i) => i.note).length;
+  const reasonsFor = (t: string) => attentionReasons(scores.get(t)?.fading, intelBy.get(t)?.score_change);
+  const matches: Record<WlFilter, (i: WatchlistDetail["items"][number]) => boolean> = {
+    all: () => true,
+    scan: (i) => legacy ? scores.has(i.ticker) : !!i.latest,
+    auto: (i) => !legacy && !i.latest && !!i.auto,
+    attention: (i) => reasonsFor(i.ticker).length > 0,
+    notes: (i) => !!i.note,
+  };
+  const count = (f: WlFilter) => w.items.filter(matches[f]).length;
+  const sorted = byScore ? [...w.items].sort((a, b) => (scores.get(b.ticker)?.score ?? -1) - (scores.get(a.ticker)?.score ?? -1)) : w.items;
+  const items = sorted.filter(matches[filter]);
+  const chips: { f: WlFilter; n: number; label: string; tip: string }[] = [
+    { f: "all", n: w.symbol_count, label: "tracked", tip: "Every ticker on this list. Click to show them all." },
+    { f: "scan", n: count("scan"), label: "in latest scan", tip: "Made the latest market scan's ranked list. Their rank is shown on the row." },
+    ...(!legacy && count("auto") > 0 ? [{ f: "auto" as const, n: count("auto"), label: "auto-scored", tip: "Not in the latest scan's ranked list, so Premium scored them after the scan (the Auto tag)." }] : []),
+    { f: "attention", n: count("attention"), label: "need attention", tip: "Fading, or the HSF Score fell since the previous scan. The reason is on each row." },
+    { f: "notes", n: count("notes"), label: "with notes", tip: "Tickers you've written a note on." },
+  ];
+  const filterLabel = chips.find((c) => c.f === filter)?.label;
   const hasQuotes = Object.keys(quoteBy).length > 0;
   const feed = quotes.data?.feed === "iex" ? " Prices come from one exchange (IEX), so they can differ slightly from the consolidated price." : "";
 
@@ -382,10 +411,14 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
       <Card title={<>{w.name} {w.is_default && <Pill>Default</Pill>}</>} id="wl-detail"
         aside={`${w.symbol_count} ticker${w.symbol_count === 1 ? "" : "s"}`}>
         <div className="wl-summary" aria-label="Watchlist summary">
-          <span><strong>{w.symbol_count}</strong> tracked</span>
-          <span><strong>{ranked}</strong> ranked</span>
-          <span><strong>{attention}</strong> need attention</span>
-          <span><strong>{notes}</strong> with notes</span>
+          {chips.map((c) => (
+            <button key={c.f} type="button" className={`wl-chip${filter === c.f && c.f !== "all" ? " on" : ""}`}
+              aria-pressed={c.f === "all" ? filter === "all" : filter === c.f} title={c.tip}
+              aria-label={`${c.n} ${c.label}. ${c.tip}`} disabled={c.f !== "all" && c.n === 0 && filter !== c.f}
+              onClick={() => setFilter(c.f)}>
+              <strong>{c.n}</strong> {c.label}
+            </button>
+          ))}
         </div>
         <div className="row-actions watchlist-actions">
           <button type="button" className="btn" aria-expanded={manageOpen || !w.items.length} aria-controls="watchlist-add" onClick={() => setManageOpen((v) => !v)}>Add tickers</button>
@@ -430,6 +463,12 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
               build={() => watchlistCsv(items, scores, quoteBy, scanAt)} />
           </div>
         )}
+        {filter !== "all" && w.items.length > 0 && (
+          <p className="cap wl-filter-note" role="status">
+            Showing {items.length} of {w.items.length}: {filterLabel}.{" "}
+            <button type="button" className="link-btn" onClick={() => setFilter("all")}>Show all</button>
+          </p>
+        )}
         {w.items.length === 0 ? (
           <Empty title="No tickers yet.">Add some above, or use Save to watchlist on the Scanner or a stock page.</Empty>
         ) : (
@@ -439,6 +478,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
               const bar = daily?.last_bar?.[it.ticker];
               const q = quoteBy[it.ticker];
               const rank = !legacy ? it.latest?.rank : undefined;
+              const why = reasonsFor(it.ticker).filter((r) => r !== "Fading" || !s?.fading); // Fading already has its own tag
               return (
                 <li key={it.ticker} className="wl-item">
                   <div className="wl-main">
@@ -451,6 +491,7 @@ function Detail({ id, onChanged, onDeleted }: { id: number; onChanged: () => voi
                         {s.fading && <Pill tone="warn">Fading</Pill>}
                       </>
                     ) : <span className="cap wl-unranked">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
+                    {why.map((r) => <Pill key={r} tone="warn">{r}</Pill>)}
                     <span className="wl-spark"><DailySpark points={series[it.ticker]} ticker={it.ticker} width={88} height={24} /></span>
                     <span className="wl-act">
                       <Link href={`/stocks/${encodeURIComponent(it.ticker)}`} className="btn btn-sm">Open</Link>
