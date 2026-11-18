@@ -272,7 +272,7 @@ await step("alerts page: capacity, turn off", async () => {
 });
 
 await step("alerts summary chip opens Rules filtered to paused; Activity table or empty state shows", async () => {
-  await page.getByLabel("Alert summary").getByRole("button", { name: /paused/ }).click();
+  await page.getByLabel("Alert summary").getByRole("button", { name: /^(\d+|—) paused$/ }).click();
   const pausedOn = await page.getByRole("radio", { name: /^Paused/ }).isChecked();
   await page.getByRole("region", { name: "Your alert rules" }).getByText(`${ticker} price rises above $${SHOWN}`).waitFor();
   await page.getByRole("tab", { name: "Activity" }).click();
