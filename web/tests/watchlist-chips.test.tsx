@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-const rows = () => within(document.querySelector(".wl-items") as HTMLElement).getAllByRole("listitem");
+const rows = () => [...document.querySelectorAll(".wl-table tbody tr")];
 
 describe("watchlist summary chips", () => {
   it("attention reasons: Fading and/or a score drop", () => {

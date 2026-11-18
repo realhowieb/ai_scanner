@@ -132,19 +132,26 @@ describe("Watchlists", () => {
   });
 
   it("shows each ticker's scan state from the list itself, sortable by HSF Score", async () => {
+    localStorage.removeItem("hsf.watchlists.v1");
     api = fakeApi({ scanState: true, scan: [{ ticker: "NVDA", score: 90, last: 120 }, { ticker: "AAPL", score: 81, last: 201.5 }] });
     api.seedList("Main", ["AAPL", "NVDA", "ZZZ"]);
     const u = user();
     wrap(<WatchlistsView />);
     expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
-    expect(screen.getByText("#2 of 2")).toBeInTheDocument();          // AAPL's place in the scan
+    expect(screen.getByTitle("#2 of 2 ranked setups")).toHaveTextContent("#2 of 2"); // AAPL's place in the scan
     expect(screen.getByText("Not ranked in the latest scan")).toBeInTheDocument();
     expect(screen.getAllByText("Breakout")).toHaveLength(2);
     expect(api.count("GET", /^\/v1\/scans\/latest/)).toBe(0);      // no second request
     const order = () => screen.getAllByRole("link").map((a) => a.textContent).filter((t) => ["AAPL", "NVDA", "ZZZ"].includes(t ?? ""));
+    expect(order()).toEqual(["NVDA", "AAPL", "ZZZ"]);                // HSF Score first by default; unranked last
+    await u.click(screen.getByRole("button", { name: "Sort by Ticker" }));
     expect(order()).toEqual(["AAPL", "NVDA", "ZZZ"]);
-    await u.click(screen.getByLabelText("HSF Score"));
+    await u.click(screen.getByRole("button", { name: "Sort by Ticker" }));
+    expect(order()).toEqual(["ZZZ", "NVDA", "AAPL"]);
+    await u.click(screen.getByRole("button", { name: "Sort by HSF Score" }));
     expect(order()).toEqual(["NVDA", "AAPL", "ZZZ"]);
+    expect(JSON.parse(localStorage.getItem("hsf.watchlists.v1")!).sort).toEqual({ key: "score", desc: true }); // remembered
+    localStorage.removeItem("hsf.watchlists.v1");
   });
 
   it("Refresh re-reads the list, its scores and daily bars in place", async () => {
@@ -191,13 +198,14 @@ describe("Watchlist Intelligence", () => {
     const w = api.seedList("Main", ["AAPL", "NVDA"]);
     const u = user();
     wrap(<WatchlistsView />, "premium");
-    expect(await screen.findByText("▲ +6 HSF")).toBeInTheDocument();
-    expect(screen.getByText("Up 3 places")).toBeInTheDocument();
-    expect(screen.getByText("▼ −2 HSF")).toBeInTheDocument();
-    expect(screen.getByText("Down 1 place")).toBeInTheDocument();
-    expect(screen.getByText("PreBreakout")).toBeInTheDocument();
-    expect(screen.getByText("RVOL 3.1x")).toBeInTheDocument();
+    expect(await screen.findByText("▲6")).toHaveAttribute("title", "HSF Score change since the previous scan");
+    expect(screen.getByTitle("Up 3 places since the previous scan")).toHaveTextContent("▲3");
+    expect(screen.getByText("▼2")).toBeInTheDocument();
+    expect(screen.getByTitle("Down 1 place since the previous scan")).toBeInTheDocument();
+    expect(screen.getByText("PB")).toBeInTheDocument();
+    expect(screen.getByText("3.1x")).toBeInTheDocument();
 
+    await u.click(screen.getByRole("tab", { name: "List alerts" }));
     const card = await screen.findByRole("heading", { name: "Alerts on this list" });
     expect(card).toBeInTheDocument();
     const select = screen.getByLabelText("Alert me when any ticker");
@@ -207,7 +215,7 @@ describe("Watchlist Intelligence", () => {
     const posted = api.calls.find((c) => c.method === "POST" && c.path === "/v1/alerts/rules")!.body;
     expect(posted).toEqual({ rule_type: "HSF_SCORE_CROSS_ABOVE", watchlist_id: w.id, enabled: true, threshold: 80 });
     expect(await screen.findByText("HSF Score crosses above 80")).toBeInTheDocument();
-    expect(await screen.findAllByText("1 alert")).toHaveLength(2);      // counts come back from the server
+    expect(await screen.findAllByLabelText("1 alert")).toHaveLength(2);      // counts come back from the server
     await u.click(screen.getByRole("button", { name: "Delete alert HSF Score crosses above" }));
     await waitFor(() => expect(api.rules).toHaveLength(0));
   });
@@ -218,8 +226,9 @@ describe("Watchlist Intelligence", () => {
     wrap(<WatchlistsView />);
     expect(await screen.findByLabelText("HSF Score 81")).toBeInTheDocument();
     await waitFor(() => expect(api.count("GET", /\/intelligence$/)).toBe(1));
-    expect(screen.queryByRole("heading", { name: "Alerts on this list" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/RVOL/)).not.toBeInTheDocument();
+    expect(document.getElementById("wl-rules")).toBeNull();
+    expect(screen.queryByText(/^\d+(\.\d+)?x$/)).not.toBeInTheDocument(); // no RVOL values
+    expect(document.querySelector(".wl-delta")).toBeNull(); // no score or rank moves
   });
 });
 

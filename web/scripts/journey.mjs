@@ -237,6 +237,18 @@ await step("watchlist summary chips filter the list", async () => {
   check("watchlist summary chips filter the list", pressed === "true" && /Showing 1 of 1: with notes/.test(note), note.replace(/\s+/g, " "));
 });
 
+await step("watchlist table sorts by a column, selects rows and switches tabs", async () => {
+  await page.getByRole("button", { name: "Sort by Ticker" }).click();
+  const sorted = await page.getByRole("columnheader", { name: /Ticker/ }).getAttribute("aria-sort");
+  await page.getByRole("checkbox", { name: `Select ${ticker}` }).check();
+  const bar = await page.getByRole("region", { name: "Selected tickers" }).textContent();
+  await page.getByRole("checkbox", { name: `Select ${ticker}` }).uncheck();
+  await page.getByRole("tab", { name: "Performance" }).click();
+  await page.getByRole("heading", { name: "How your stocks did" }).waitFor();
+  await page.getByRole("tab", { name: "Tickers" }).click();
+  check("watchlist table sorts by a column, selects rows and switches tabs", sorted === "ascending" && /1 selected/.test(bar), `sort ${sorted}; ${bar.replace(/\s+/g, " ").slice(0, 60)}`);
+});
+
 await step("Scanner Watchlist tab shows the watchlist's stocks", async () => {
   const id = new URL(watchlistUrl).searchParams.get("id");
   await page.goto(`${BASE}/scanner?signal=watchlist&wl=${id}`);

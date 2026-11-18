@@ -56,6 +56,19 @@ export const watchlists = {
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/changes", { ...wid(id), signal })),
   performance: (id: number, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/watchlists/{watchlist_id}/performance", { ...wid(id), signal })),
+  setPinned: (id: number, pinned: boolean) =>
+    unwrap(api.PATCH("/v1/watchlists/{watchlist_id}", { ...wid(id), body: { pinned } as Schemas["WatchlistUpdate"] })),
+  setArchived: (id: number, archived: boolean) =>
+    unwrap(api.PATCH("/v1/watchlists/{watchlist_id}", { ...wid(id), body: { archived } as Schemas["WatchlistUpdate"] })),
+  merge: (id: number, fromId: number) =>
+    unwrap(api.POST("/v1/watchlists/{watchlist_id}/merge", { ...wid(id), body: { from_watchlist_id: fromId } })),
+  removeTickers: async (id: number, tickers: string[]) => {
+    const result = await unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers/remove", { ...wid(id), body: { tickers } }));
+    if (result.removed?.length) captureUsage("watchlist_stock_removed");
+    return result;
+  },
+  copyTickers: (id: number, to: number, tickers: string[], move = false) =>
+    unwrap(api.POST("/v1/watchlists/{watchlist_id}/tickers/copy", { ...wid(id), body: { to_watchlist_id: to, tickers, move } })),
   setNote: (id: number, ticker: string, note: string) =>
     unwrap(api.PATCH("/v1/watchlists/{watchlist_id}/tickers/{ticker}", {
       params: { path: { watchlist_id: id, ticker } }, body: { note: note.trim() ? note : null },

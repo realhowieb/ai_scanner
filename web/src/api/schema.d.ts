@@ -3625,6 +3625,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/watchlists/{watchlist_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge another list into this one
+         * @description Copies the other list's tickers (with added date, price and note) that aren't here
+         *     yet, then deletes it. Its list alerts are switched off, like a delete.
+         */
+        post: operations["watchlist_merge_v1_watchlists__watchlist_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/watchlists/{watchlist_id}/performance": {
         parameters: {
             query?: never;
@@ -3657,6 +3678,40 @@ export interface paths {
         put?: never;
         /** Watchlist Add */
         post: operations["watchlist_add_v1_watchlists__watchlist_id__tickers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/tickers/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy or move tickers to another list */
+        post: operations["watchlist_copy_v1_watchlists__watchlist_id__tickers_copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watchlists/{watchlist_id}/tickers/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove several tickers at once */
+        post: operations["watchlist_remove_many_v1_watchlists__watchlist_id__tickers_remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10920,6 +10975,60 @@ export interface components {
             /** Tickers */
             tickers: string[];
         };
+        /** TickersCopied */
+        TickersCopied: {
+            /**
+             * Already Present
+             * @description The other list already had them; its row is kept
+             * @default []
+             */
+            already_present: string[];
+            /**
+             * Copied
+             * @description Added to the other list, with their added date, price and note
+             * @default []
+             */
+            copied: string[];
+            /**
+             * Missing
+             * @description Not on this list
+             * @default []
+             */
+            missing: string[];
+            /**
+             * Moved
+             * @description move=true: removed from this list
+             * @default []
+             */
+            moved: string[];
+        };
+        /** TickersCopyBody */
+        TickersCopyBody: {
+            /**
+             * Move
+             * @description true removes them from this list after copying
+             * @default false
+             */
+            move: boolean;
+            /** Tickers */
+            tickers: string[];
+            /** To Watchlist Id */
+            to_watchlist_id: number;
+        };
+        /** TickersRemoved */
+        TickersRemoved: {
+            /**
+             * Missing
+             * @description Not on the list; nothing to remove
+             * @default []
+             */
+            missing: string[];
+            /**
+             * Removed
+             * @default []
+             */
+            removed: string[];
+        };
         /** TickersResult */
         TickersResult: {
             /**
@@ -11265,12 +11374,26 @@ export interface components {
         };
         /** Watchlist */
         Watchlist: {
+            /**
+             * Archived
+             * @description Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.
+             * @default false
+             */
+            archived: boolean;
+            /** Archived At */
+            archived_at?: string | null;
             /** Id */
             id: number;
             /** Is Default */
             is_default: boolean;
             /** Name */
             name: string;
+            /**
+             * Pinned
+             * @description Pinned lists sit at the top of the Watchlists page
+             * @default false
+             */
+            pinned: boolean;
             /** Symbol Count */
             symbol_count: number;
         };
@@ -11374,6 +11497,14 @@ export interface components {
         /** WatchlistDetail */
         WatchlistDetail: {
             /**
+             * Archived
+             * @description Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.
+             * @default false
+             */
+            archived: boolean;
+            /** Archived At */
+            archived_at?: string | null;
+            /**
              * Auto Scored At
              * @description GET only, Premium: when the auto-score pass behind items[].auto ran
              */
@@ -11389,6 +11520,12 @@ export interface components {
             items: components["schemas"]["WatchlistItemDetail"][];
             /** Name */
             name: string;
+            /**
+             * Pinned
+             * @description Pinned lists sit at the top of the Watchlists page
+             * @default false
+             */
+            pinned: boolean;
             /**
              * Scan At
              * @description GET only: the market scan behind items[].latest
@@ -11580,6 +11717,70 @@ export interface components {
             price_when_added?: number | null;
             /** Ticker */
             ticker: string;
+        };
+        /** WatchlistMergeBody */
+        WatchlistMergeBody: {
+            /**
+             * From Watchlist Id
+             * @description The list to fold into this one; it is deleted afterwards
+             */
+            from_watchlist_id: number;
+        };
+        /** WatchlistMerged */
+        WatchlistMerged: {
+            /**
+             * Archived
+             * @description Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.
+             * @default false
+             */
+            archived: boolean;
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Auto Scored At
+             * @description GET only, Premium: when the auto-score pass behind items[].auto ran
+             */
+            auto_scored_at?: string | null;
+            /** Id */
+            id: number;
+            /** Is Default */
+            is_default: boolean;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["WatchlistItemDetail"][];
+            /**
+             * Merged
+             * @description Tickers copied in from the merged list (ones already here are kept as they were)
+             * @default 0
+             */
+            merged: number;
+            /** Name */
+            name: string;
+            /**
+             * Pinned
+             * @description Pinned lists sit at the top of the Watchlists page
+             * @default false
+             */
+            pinned: boolean;
+            /**
+             * Scan At
+             * @description GET only: the market scan behind items[].latest
+             */
+            scan_at?: string | null;
+            /**
+             * Scan Total
+             * @description GET only: ranked setups in that scan
+             */
+            scan_total?: number | null;
+            /**
+             * Stale
+             * @description GET only: a scheduled scan was missed (see Market.stale)
+             */
+            stale?: boolean | null;
+            /** Symbol Count */
+            symbol_count: number;
         };
         /** WatchlistPerfItem */
         WatchlistPerfItem: {
@@ -11791,6 +11992,11 @@ export interface components {
         /** WatchlistUpdate */
         WatchlistUpdate: {
             /**
+             * Archived
+             * @description Archive (true) or bring back (false); the default list can't be archived
+             */
+            archived?: boolean | null;
+            /**
              * Make Default
              * @description true makes this the default watchlist
              * @default false
@@ -11798,6 +12004,11 @@ export interface components {
             make_default: boolean;
             /** Name */
             name?: string | null;
+            /**
+             * Pinned
+             * @description Pin (true) or unpin (false) the list
+             */
+            pinned?: boolean | null;
         };
         /** WebPushConfig */
         WebPushConfig: {
@@ -21863,6 +22074,62 @@ export interface operations {
             };
         };
     };
+    watchlist_merge_v1_watchlists__watchlist_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistMergeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistMerged"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Same list */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
     watchlist_performance_v1_watchlists__watchlist_id__performance_get: {
         parameters: {
             query?: never;
@@ -21930,6 +22197,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TickersResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    watchlist_copy_v1_watchlists__watchlist_id__tickers_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TickersCopyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TickersCopied"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Same list */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    watchlist_remove_many_v1_watchlists__watchlist_id__tickers_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TickersBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TickersRemoved"];
                 };
             };
             /** @description Not signed in */
