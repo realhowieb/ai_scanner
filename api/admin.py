@@ -225,13 +225,23 @@ def system_health() -> Dict[str, Any]:
 
 
 def email_health() -> Dict[str, Any]:
-    from analytics.email_health import evaluate
+    from analytics.email_health import STATUS_ORDER, evaluate
     from db.email_job_runs import recent_email_runs
 
     result = evaluate(recent_email_runs(days=5))
-    return {"status": result["status"], "day": _iso(result.get("day")),
-            "jobs": [{"job": job, "label": j.get("label"), "status": j.get("status"), "detail": j.get("detail")}
-                     for job, j in (result.get("jobs") or {}).items()]}
+    jobs = [{"job": job, "label": j.get("label"), "status": j.get("status"), "detail": j.get("detail")}
+            for job, j in (result.get("jobs") or {}).items()]
+    status = result["status"]
+    try:  # is the sender domain verified in Resend right now? (cached 10 min)
+        from ui.email_setup import sender_domain_row
+
+        row = sender_domain_row()
+        jobs.insert(0, row)
+        if STATUS_ORDER.get(row["status"], 0) > STATUS_ORDER.get(status, 0):
+            status = row["status"]
+    except Exception:
+        pass
+    return {"status": status, "day": _iso(result.get("day")), "jobs": jobs}
 
 
 _probe_cache: Dict[str, Tuple[float, Any]] = {}
