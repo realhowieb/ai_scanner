@@ -571,6 +571,9 @@ class Watchlist(BaseModel):
     name: str
     is_default: bool
     symbol_count: int
+    pinned: bool = Field(default=False, description="Pinned lists sit at the top of the Watchlists page")
+    archived: bool = Field(default=False, description="Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.")
+    archived_at: Optional[str] = None
 
 
 class WatchlistItem(BaseModel):
@@ -600,6 +603,22 @@ class WatchlistDetail(Watchlist):
     scan_total: Optional[int] = Field(default=None, description="GET only: ranked setups in that scan")
     stale: Optional[bool] = Field(default=None, description="GET only: a scheduled scan was missed (see Market.stale)")
     auto_scored_at: Optional[str] = Field(default=None, description="GET only, Premium: when the auto-score pass behind items[].auto ran")
+
+
+class TickersRemoved(BaseModel):
+    removed: List[str] = []
+    missing: List[str] = Field(default=[], description="Not on the list; nothing to remove")
+
+
+class TickersCopied(BaseModel):
+    copied: List[str] = Field(default=[], description="Added to the other list, with their added date, price and note")
+    already_present: List[str] = Field(default=[], description="The other list already had them; its row is kept")
+    missing: List[str] = Field(default=[], description="Not on this list")
+    moved: List[str] = Field(default=[], description="move=true: removed from this list")
+
+
+class WatchlistMerged(WatchlistDetail):
+    merged: int = Field(default=0, description="Tickers copied in from the merged list (ones already here are kept as they were)")
 
 
 class TickersResult(BaseModel):

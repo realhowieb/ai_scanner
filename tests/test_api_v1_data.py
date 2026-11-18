@@ -25,7 +25,56 @@ class FakeWatchlists:
 
     def list_watchlists(self, user):
         return [{"id": i, "name": w["name"], "is_default": w["is_default"], "created_at": None,
-                 "symbol_count": len(w["items"])} for i, w in self.lists.items() if w["user"] == user]
+                 "symbol_count": len(w["items"]), "pinned": w.get("pinned", False),
+                 "archived_at": w.get("archived_at")} for i, w in self.lists.items() if w["user"] == user]
+
+    def set_watchlist_flags(self, i, user, *, pinned=None, archived=None):
+        w = self._own(i, user)
+        if not w:
+            return False
+        if pinned is not None:
+            w["pinned"] = pinned
+        if archived is True:
+            w["archived_at"], w["pinned"] = dt.datetime(2026, 11, 18, tzinfo=UTC), False
+        elif archived is False:
+            w["archived_at"] = None
+        return True
+
+    def remove_tickers_from_watchlist(self, user, tickers, watchlist_id=None):
+        w = self._own(watchlist_id, user)
+        removed = [t for t in tickers if t in w["items"]]
+        for t in removed:
+            del w["items"][t]
+        return {"removed": removed, "missing": [t for t in tickers if t not in removed]}
+
+    def copy_tickers_between_watchlists(self, user, src, dst, tickers):
+        a, b = self._own(src, user), self._own(dst, user)
+        out = {"copied": [], "already_present": [], "missing": []}
+        for t in tickers:
+            key = "missing" if t not in a["items"] else "already_present" if t in b["items"] else "copied"
+            if key == "copied":
+                b["items"][t] = a["items"][t]
+            out[key].append(t)
+        return out
+
+    def move_tickers_between_watchlists(self, user, src, dst, tickers):
+        out = self.copy_tickers_between_watchlists(user, src, dst, tickers)
+        moved = self.remove_tickers_from_watchlist(user, out["copied"] + out["already_present"], src)["removed"]
+        return {**out, "moved": moved}
+
+    def merge_watchlists(self, target, source, user):
+        if int(target) == int(source):
+            raise ValueError("Pick a different list to merge.")
+        a, b = self._own(target, user), self._own(source, user)
+        if not (a and b):
+            return None
+        new = [t for t in b["items"] if t not in a["items"]]
+        for t in new:
+            a["items"][t] = b["items"][t]
+        if b["is_default"]:
+            self.set_default_watchlist(target, user)
+        del self.lists[int(source)]
+        return len(new)
 
     def create_watchlist(self, user, name, *, make_default=False, max_watchlists=None):
         from db.watchlists import WatchlistLimitReached
@@ -145,7 +194,9 @@ class DataApiBase(ApiTestCase):
         self.wl, self.al = FakeWatchlists(), FakeAlerts()
         for name in ("list_watchlists", "create_watchlist", "rename_watchlist", "set_default_watchlist",
                      "delete_watchlist", "get_watchlist_items", "get_watchlist_tickers",
-                     "add_tickers_to_watchlist", "remove_from_watchlist", "update_watchlist_item_note"):
+                     "add_tickers_to_watchlist", "remove_from_watchlist", "update_watchlist_item_note",
+                     "set_watchlist_flags", "remove_tickers_from_watchlist", "copy_tickers_between_watchlists",
+                     "move_tickers_between_watchlists", "merge_watchlists"):
             mock.patch(f"db.watchlists.{name}", side_effect=getattr(self.wl, name)).start()
         for name in ("list_alerts", "create_alert", "set_alert_enabled", "delete_alert", "list_recent_events",
                      "list_events_filtered"):
@@ -164,6 +215,40 @@ class WatchlistAndAlertApiTests(DataApiBase):
         for method, path in (("get", "/v1/watchlists"), ("get", "/v1/alerts"), ("get", "/v1/scans/latest"),
                              ("get", "/v1/stocks/AAPL"), ("post", "/v1/alerts")):
             self.assertEqual(getattr(self.client, method)(path).status_code, 401, path)
+
+    def test_watchlist_pin_archive_bulk_and_merge(self):
+        mk = lambda n: self.client.post("/v1/watchlists", json={"name": n}, headers=self.h).json()["id"]
+        main, july, july2 = mk("Main"), mk("July Top List"), mk("July Top List 2")
+        self.client.post(f"/v1/watchlists/{july}/tickers", json={"tickers": ["NVDA", "AMD", "TSLA"]}, headers=self.h)
+        self.client.post(f"/v1/watchlists/{july2}/tickers", json={"tickers": ["AMD", "PLTR"]}, headers=self.h)
+        # pin + archive; the default can't be archived
+        r = self.client.patch(f"/v1/watchlists/{july}", json={"pinned": True}, headers=self.h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["pinned"])
+        self.assertEqual(self.client.patch(f"/v1/watchlists/{main}", json={"archived": True}, headers=self.h).status_code, 409)
+        r = self.client.patch(f"/v1/watchlists/{july2}", json={"archived": True}, headers=self.h)
+        self.assertTrue(r.json()["archived"])
+        by = {w["id"]: w for w in self.client.get("/v1/watchlists", headers=self.h).json()}
+        self.assertTrue(by[july]["pinned"] and not by[july]["archived"])
+        self.assertTrue(by[july2]["archived"] and by[july2]["archived_at"])
+        # bulk copy / move / remove
+        r = self.client.post(f"/v1/watchlists/{july}/tickers/copy", json={"to_watchlist_id": main, "tickers": ["NVDA", "XYZ"]}, headers=self.h)
+        self.assertEqual((r.json()["copied"], r.json()["missing"]), (["NVDA"], ["XYZ"]))
+        r = self.client.post(f"/v1/watchlists/{july}/tickers/copy", json={"to_watchlist_id": main, "tickers": ["NVDA", "TSLA"], "move": True}, headers=self.h)
+        self.assertEqual(sorted(r.json()["moved"]), ["NVDA", "TSLA"])
+        self.assertEqual(self.client.post(f"/v1/watchlists/{july}/tickers/copy", json={"to_watchlist_id": july, "tickers": ["AMD"]}, headers=self.h).status_code, 409)
+        r = self.client.post(f"/v1/watchlists/{main}/tickers/remove", json={"tickers": ["NVDA", "AMD"]}, headers=self.h)
+        self.assertEqual(r.json(), {"removed": ["NVDA"], "missing": ["AMD"]})
+        # merge July Top List 2 into July Top List: PLTR comes over, AMD stays once, the source is gone
+        r = self.client.post(f"/v1/watchlists/{july}/merge", json={"from_watchlist_id": july2}, headers=self.h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["merged"], 1)
+        self.assertEqual(sorted(i["ticker"] for i in r.json()["items"]), ["AMD", "PLTR"])
+        self.assertNotIn(july2, [w["id"] for w in self.client.get("/v1/watchlists", headers=self.h).json()])
+        self.assertEqual(self.client.post(f"/v1/watchlists/{july}/merge", json={"from_watchlist_id": july}, headers=self.h).status_code, 409)
+        # another account's list can't be a merge source or a copy target
+        self.assertEqual(self.client.post(f"/v1/watchlists/{july}/merge", json={"from_watchlist_id": 999}, headers=self.h).status_code, 404)
+        self.assertEqual(self.client.post(f"/v1/watchlists/{july}/tickers/copy", json={"to_watchlist_id": 999, "tickers": ["AMD"]}, headers=self.h).status_code, 404)
 
     def test_watchlist_lifecycle(self):
         r = self.client.post("/v1/watchlists", json={"name": "Momentum"}, headers=self.h)

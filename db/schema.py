@@ -213,6 +213,9 @@ def ensure_neon_watchlists_schema(conn):
         """
     )
     cur.execute("ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE")
+    # Watchlists page: pinned lists sort to the top, archived lists fold into an Archived group.
+    cur.execute("ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE")
+    cur.execute("ALTER TABLE watchlists ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_items (
@@ -276,6 +279,10 @@ def ensure_sqlite_watchlists_schema(conn):
     wl_cols = {row[1] for row in cur.fetchall()}
     if "is_default" not in wl_cols:
         cur.execute("ALTER TABLE watchlists ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0")
+    if "pinned" not in wl_cols:
+        cur.execute("ALTER TABLE watchlists ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+    if "archived_at" not in wl_cols:
+        cur.execute("ALTER TABLE watchlists ADD COLUMN archived_at TIMESTAMP")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_items (

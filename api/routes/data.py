@@ -35,6 +35,18 @@ class WatchlistCreate(BaseModel):
 class WatchlistUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     make_default: bool = Field(default=False, description="true makes this the default watchlist")
+    pinned: Optional[bool] = Field(default=None, description="Pin (true) or unpin (false) the list")
+    archived: Optional[bool] = Field(default=None, description="Archive (true) or bring back (false); the default list can't be archived")
+
+
+class TickersCopyBody(BaseModel):
+    to_watchlist_id: int
+    tickers: List[str] = Field(min_length=1, max_length=user_data.MAX_TICKERS_PER_REQUEST)
+    move: bool = Field(default=False, description="true removes them from this list after copying")
+
+
+class WatchlistMergeBody(BaseModel):
+    from_watchlist_id: int = Field(description="The list to fold into this one; it is deleted afterwards")
 
 
 class TickersBody(BaseModel):
@@ -313,7 +325,25 @@ def register(app: FastAPI) -> None:
     def watchlist_update(watchlist_id: int, body: WatchlistUpdate,
                          account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         return json_safe(user_data.update_watchlist(_user(account), watchlist_id, name=body.name,
-                                                    make_default=body.make_default))
+                                                    make_default=body.make_default, pinned=body.pinned,
+                                                    archived=body.archived))
+
+    @app.post("/v1/watchlists/{watchlist_id}/merge", response_model=models.WatchlistMerged,
+              responses={**_OWNED, 409: {"description": "Same list"}}, summary="Merge another list into this one")
+    def watchlist_merge(watchlist_id: int, body: WatchlistMergeBody,
+                        account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        """Copies the other list's tickers (with added date, price and note) that aren't here
+        yet, then deletes it. Its list alerts are switched off, like a delete."""
+        from api import alert_rules
+        from db import alert_rules as rule_store
+
+        user = _user(account)
+        out = user_data.merge_watchlist(user, watchlist_id, body.from_watchlist_id)
+        try:
+            alert_rules._db(rule_store.disable_rules_for_watchlist, user, body.from_watchlist_id)
+        except Exception as e:
+            log.warning(json.dumps({"event": "watchlist_rules_disable_failed", "error": type(e).__name__}))
+        return json_safe(out)
 
     @app.delete("/v1/watchlists/{watchlist_id}", status_code=204, responses=_OWNED)
     def watchlist_delete(watchlist_id: int, account: Dict[str, Any] = Depends(current_account)) -> None:
@@ -366,6 +396,18 @@ def register(app: FastAPI) -> None:
     def watchlist_add(watchlist_id: int, body: TickersBody,
                       account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
         return user_data.add_tickers(_user(account), watchlist_id, body.tickers)
+
+    @app.post("/v1/watchlists/{watchlist_id}/tickers/remove", response_model=models.TickersRemoved,
+              responses=_OWNED, summary="Remove several tickers at once")
+    def watchlist_remove_many(watchlist_id: int, body: TickersBody,
+                              account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return user_data.remove_tickers(_user(account), watchlist_id, body.tickers)
+
+    @app.post("/v1/watchlists/{watchlist_id}/tickers/copy", response_model=models.TickersCopied,
+              responses={**_OWNED, 409: {"description": "Same list"}}, summary="Copy or move tickers to another list")
+    def watchlist_copy(watchlist_id: int, body: TickersCopyBody,
+                       account: Dict[str, Any] = Depends(current_account)) -> Dict[str, Any]:
+        return user_data.copy_tickers(_user(account), watchlist_id, body.to_watchlist_id, body.tickers, move=body.move)
 
     @app.delete("/v1/watchlists/{watchlist_id}/tickers/{ticker}", status_code=204, responses=_OWNED)
     def watchlist_remove(watchlist_id: int, ticker: str = TICKER,

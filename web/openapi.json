@@ -18861,6 +18861,100 @@
     "title": "TickersBody",
     "type": "object"
    },
+   "TickersCopied": {
+    "properties": {
+     "already_present": {
+      "default": [],
+      "description": "The other list already had them; its row is kept",
+      "items": {
+       "type": "string"
+      },
+      "title": "Already Present",
+      "type": "array"
+     },
+     "copied": {
+      "default": [],
+      "description": "Added to the other list, with their added date, price and note",
+      "items": {
+       "type": "string"
+      },
+      "title": "Copied",
+      "type": "array"
+     },
+     "missing": {
+      "default": [],
+      "description": "Not on this list",
+      "items": {
+       "type": "string"
+      },
+      "title": "Missing",
+      "type": "array"
+     },
+     "moved": {
+      "default": [],
+      "description": "move=true: removed from this list",
+      "items": {
+       "type": "string"
+      },
+      "title": "Moved",
+      "type": "array"
+     }
+    },
+    "title": "TickersCopied",
+    "type": "object"
+   },
+   "TickersCopyBody": {
+    "properties": {
+     "move": {
+      "default": false,
+      "description": "true removes them from this list after copying",
+      "title": "Move",
+      "type": "boolean"
+     },
+     "tickers": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 200,
+      "minItems": 1,
+      "title": "Tickers",
+      "type": "array"
+     },
+     "to_watchlist_id": {
+      "title": "To Watchlist Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "to_watchlist_id",
+     "tickers"
+    ],
+    "title": "TickersCopyBody",
+    "type": "object"
+   },
+   "TickersRemoved": {
+    "properties": {
+     "missing": {
+      "default": [],
+      "description": "Not on the list; nothing to remove",
+      "items": {
+       "type": "string"
+      },
+      "title": "Missing",
+      "type": "array"
+     },
+     "removed": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Removed",
+      "type": "array"
+     }
+    },
+    "title": "TickersRemoved",
+    "type": "object"
+   },
    "TickersResult": {
     "properties": {
      "added": {
@@ -19714,6 +19808,23 @@
    },
    "Watchlist": {
     "properties": {
+     "archived": {
+      "default": false,
+      "description": "Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.",
+      "title": "Archived",
+      "type": "boolean"
+     },
+     "archived_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Archived At"
+     },
      "id": {
       "title": "Id",
       "type": "integer"
@@ -19725,6 +19836,12 @@
      "name": {
       "title": "Name",
       "type": "string"
+     },
+     "pinned": {
+      "default": false,
+      "description": "Pinned lists sit at the top of the Watchlists page",
+      "title": "Pinned",
+      "type": "boolean"
      },
      "symbol_count": {
       "title": "Symbol Count",
@@ -20010,6 +20127,23 @@
    },
    "WatchlistDetail": {
     "properties": {
+     "archived": {
+      "default": false,
+      "description": "Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.",
+      "title": "Archived",
+      "type": "boolean"
+     },
+     "archived_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Archived At"
+     },
      "auto_scored_at": {
       "anyOf": [
        {
@@ -20041,6 +20175,12 @@
      "name": {
       "title": "Name",
       "type": "string"
+     },
+     "pinned": {
+      "default": false,
+      "description": "Pinned lists sit at the top of the Watchlists page",
+      "title": "Pinned",
+      "type": "boolean"
      },
      "scan_at": {
       "anyOf": [
@@ -20607,6 +20747,133 @@
      "ticker"
     ],
     "title": "WatchlistItemDetail",
+    "type": "object"
+   },
+   "WatchlistMergeBody": {
+    "properties": {
+     "from_watchlist_id": {
+      "description": "The list to fold into this one; it is deleted afterwards",
+      "title": "From Watchlist Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "from_watchlist_id"
+    ],
+    "title": "WatchlistMergeBody",
+    "type": "object"
+   },
+   "WatchlistMerged": {
+    "properties": {
+     "archived": {
+      "default": false,
+      "description": "Archived: kept with its tickers, folded away on the Watchlists page. The default list is never archived.",
+      "title": "Archived",
+      "type": "boolean"
+     },
+     "archived_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Archived At"
+     },
+     "auto_scored_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only, Premium: when the auto-score pass behind items[].auto ran",
+      "title": "Auto Scored At"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "is_default": {
+      "title": "Is Default",
+      "type": "boolean"
+     },
+     "items": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/WatchlistItemDetail"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "merged": {
+      "default": 0,
+      "description": "Tickers copied in from the merged list (ones already here are kept as they were)",
+      "title": "Merged",
+      "type": "integer"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "pinned": {
+      "default": false,
+      "description": "Pinned lists sit at the top of the Watchlists page",
+      "title": "Pinned",
+      "type": "boolean"
+     },
+     "scan_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: the market scan behind items[].latest",
+      "title": "Scan At"
+     },
+     "scan_total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: ranked setups in that scan",
+      "title": "Scan Total"
+     },
+     "stale": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "GET only: a scheduled scan was missed (see Market.stale)",
+      "title": "Stale"
+     },
+     "symbol_count": {
+      "title": "Symbol Count",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "is_default",
+     "symbol_count"
+    ],
+    "title": "WatchlistMerged",
     "type": "object"
    },
    "WatchlistPerfItem": {
@@ -21204,6 +21471,18 @@
    },
    "WatchlistUpdate": {
     "properties": {
+     "archived": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Archive (true) or bring back (false); the default list can't be archived",
+      "title": "Archived"
+     },
      "make_default": {
       "default": false,
       "description": "true makes this the default watchlist",
@@ -21222,6 +21501,18 @@
        }
       ],
       "title": "Name"
+     },
+     "pinned": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Pin (true) or unpin (false) the list",
+      "title": "Pinned"
      }
     },
     "title": "WatchlistUpdate",
@@ -33609,6 +33900,70 @@
     "summary": "HSF intelligence for every symbol on a watchlist"
    }
   },
+  "/v1/watchlists/{watchlist_id}/merge": {
+   "post": {
+    "description": "Copies the other list's tickers (with added date, price and note) that aren't here\nyet, then deletes it. Its list alerts are switched off, like a delete.",
+    "operationId": "watchlist_merge_v1_watchlists__watchlist_id__merge_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WatchlistMergeBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WatchlistMerged"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "409": {
+      "description": "Same list"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Merge another list into this one"
+   }
+  },
   "/v1/watchlists/{watchlist_id}/performance": {
    "get": {
     "description": "Each symbol's move from the price when it was added (saved price, else the last daily\nclose at that time) to the latest daily close, next to SPY over the same span. Best first.",
@@ -33718,6 +34073,129 @@
      }
     ],
     "summary": "Watchlist Add"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/tickers/copy": {
+   "post": {
+    "operationId": "watchlist_copy_v1_watchlists__watchlist_id__tickers_copy_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TickersCopyBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TickersCopied"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "409": {
+      "description": "Same list"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Copy or move tickers to another list"
+   }
+  },
+  "/v1/watchlists/{watchlist_id}/tickers/remove": {
+   "post": {
+    "operationId": "watchlist_remove_many_v1_watchlists__watchlist_id__tickers_remove_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "watchlist_id",
+      "required": true,
+      "schema": {
+       "title": "Watchlist Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TickersBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TickersRemoved"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "404": {
+      "description": "Not found (or not yours)"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Remove several tickers at once"
    }
   },
   "/v1/watchlists/{watchlist_id}/tickers/{ticker}": {
