@@ -638,7 +638,7 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
     <button type="button" className="icon-btn" aria-label={`Remove ${t} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(t); }}>{X_ICON}</button>
   );
   const noteBtn = (it: Item) => (
-    <button type="button" className={`wl-note-btn${it.note ? " has" : ""}`} aria-label={`${it.note ? "Edit" : "Add"} note for ${it.ticker}`}
+    <button type="button" className={`wl-note-btn${it.note ? " has" : ""}`} aria-label={noteOpen === it.ticker ? `Close the ${it.ticker} note editor` : `${it.note ? "Edit" : "Add"} note for ${it.ticker}`}
       aria-expanded={noteOpen === it.ticker} onClick={() => setNoteOpen(noteOpen === it.ticker ? null : it.ticker)} title={it.note ?? "Add a note"}>
       {NOTE_ICON}{it.note && <span className="wl-note-text">{it.note}</span>}
     </button>

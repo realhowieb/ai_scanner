@@ -139,3 +139,14 @@ describe("Watchlists page", () => {
     await waitFor(() => expect(july2.pinned).toBe(true));
   });
 });
+
+describe("note editor labels", () => {
+  it("only the textarea answers to 'Note for X' (the journey uses a substring match)", async () => {
+    api.seedList("Main", ["AAPL"], true);
+    const u = userEvent.setup();
+    view();
+    await u.click(await screen.findByRole("button", { name: "Add note for AAPL" }));
+    expect(screen.getAllByLabelText(/Note for AAPL/i)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Close the AAPL note editor" })).toHaveAttribute("aria-expanded", "true");
+  });
+});
