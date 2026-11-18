@@ -63,3 +63,91 @@ def explain(d: Dict[str, Any]) -> str:
         return (f"sends as {who} — not the verified domain {d.get('verified_domain')}; "
                 "Resend will reject emails to anyone but the account owner")
     return f"sends as {who} (verified domain)"
+
+
+# ---- Is the sender domain actually verified in Resend? ------------------------------------------
+# The domain check above only compares SMTP_FROM with a name written in code. On 2026-11-14
+# Resend un-verified the sender domain and every email failed for three days while the
+# health card still said OK. This asks Resend itself (GET /domains, needs a full-access key).
+RESEND_API = "https://api.resend.com"
+DOMAIN_CHECK_TTL_S = 600
+_domain_cache: Dict[str, Any] = {}
+
+
+def _resend_key() -> Optional[str]:
+    try:
+        from services.marketing_list import resend_key
+
+        return resend_key()
+    except Exception:
+        return None
+
+
+def resend_domain_status(domain: Optional[str], *, key: Optional[str] = None, session: Any = None,
+                         now: Optional[float] = None) -> Dict[str, Any]:
+    """{state, resend_status, domain}. state: verified / unverified (listed, not verified) /
+    missing (not in the Resend account) / unknown (no key, no access, or Resend unreachable).
+    Cached 10 minutes per domain. Never raises and never returns the key."""
+    import time
+
+    domain = str(domain or "").strip().lower()
+    now = time.monotonic() if now is None else now
+    hit = _domain_cache.get(domain)
+    if hit and now - hit[0] < DOMAIN_CHECK_TTL_S:
+        return hit[1]
+    result: Dict[str, Any] = {"domain": domain or None, "state": "unknown", "resend_status": None}
+    key = key or _resend_key()
+    if not domain:
+        result["why"] = "no sender address"
+    elif not key:
+        result["why"] = "no Resend API key"
+    else:
+        try:
+            if session is None:
+                import httpx as session  # in api/requirements.txt
+            res = session.request("GET", f"{RESEND_API}/domains", timeout=10,
+                                  headers={"Authorization": f"Bearer {key}"})
+            code = int(res.status_code)
+            if code != 200:
+                result["why"] = f"Resend answered {code}"
+            else:
+                body = res.json()
+                rows = body.get("data") if isinstance(body, dict) else body
+                match = next((r for r in rows or [] if str(r.get("name") or "").lower() == domain), None)
+                if match is None:
+                    result["state"] = "missing"
+                else:
+                    status = str(match.get("status") or "").lower()
+                    result["resend_status"] = status or None
+                    result["state"] = "verified" if status == "verified" else "unverified"
+        except Exception as e:
+            result["why"] = f"Resend unreachable ({type(e).__name__})"
+    _domain_cache[domain] = (now, result)
+    return result
+
+
+def sender_domain_row(d: Optional[Dict[str, Any]] = None, *, session: Any = None) -> Dict[str, Any]:
+    """One row for the Admin > Email delivery card: is SMTP_FROM's domain verified in Resend?"""
+    d = d or describe_from_config()
+    if d.get("status") == "MISSING":
+        return {"job": "sender", "label": "Sender domain", "status": "WARNING", "detail": explain(d)}
+    s = resend_domain_status(d.get("sender_domain"), session=session)
+    dom = s.get("domain") or "?"
+    if s["state"] == "verified":
+        return {"job": "sender", "label": "Sender domain", "status": "HEALTHY",
+                "detail": f"{dom} is verified in Resend"}
+    if s["state"] == "unverified":
+        return {"job": "sender", "label": "Sender domain", "status": "WARNING",
+                "detail": f"{dom} is '{s.get('resend_status')}' in Resend, not verified — every email will fail"}
+    if s["state"] == "missing":
+        return {"job": "sender", "label": "Sender domain", "status": "WARNING",
+                "detail": f"{dom} is not in the Resend account — every email will fail"}
+    return {"job": "sender", "label": "Sender domain", "status": "UNKNOWN",
+            "detail": f"couldn't ask Resend about {dom} ({s.get('why') or 'unknown'})"}
+
+
+def sender_domain_problem(*, session: Any = None) -> Optional[str]:
+    """A one-line problem when Resend says the sender domain isn't verified, else None.
+    'unknown' (no key / Resend down) is not a problem: it must never raise a false alarm."""
+    row = sender_domain_row(session=session)
+    return row["detail"] if row["status"] == "WARNING" else None

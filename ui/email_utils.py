@@ -32,6 +32,26 @@ except Exception:  # pragma: no cover
     _failure = None
 
 
+# One broken setting (an un-verified sender domain, a revoked key) fails every send the same
+# way. Report each kind of failure to Sentry at most once per 15 minutes per process; the
+# per-run "N send(s) failed" error from record_email_job still counts them all.
+_CAPTURE_EVERY_S = 900
+_last_capture: dict = {}
+
+
+def _capture_send_failure(exc: BaseException, now: float | None = None) -> bool:
+    import time
+
+    now = time.monotonic() if now is None else now
+    key = (type(exc).__name__, getattr(exc, "smtp_code", None))
+    last = _last_capture.get(key)
+    if last is not None and now - last < _CAPTURE_EVERY_S:
+        return False
+    _last_capture[key] = now
+    _capture(exc)
+    return True
+
+
 def _note_failure(reason: str, detail: str = "", exc: BaseException | None = None) -> None:
     if _failure is None:
         return
@@ -165,7 +185,7 @@ def _send_smtp(to_address: str, subject: str, body_text: str, body_html: str,
     except Exception as e:
         print(f"[email] SEND FAILED to {log_id(to_address)} via {SMTP_HOST}:{SMTP_PORT} from {SMTP_FROM} — {type(e).__name__}: {redact(e)}")
         _note_failure("", exc=e)
-        _capture(e)
+        _capture_send_failure(e)
         return False
 
 
