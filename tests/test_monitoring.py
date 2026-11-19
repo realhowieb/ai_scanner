@@ -162,3 +162,20 @@ def test_yfinance_error_logs_are_not_sent_to_sentry(monkeypatch):
     messages = [e.get("logentry", {}).get("message") or e.get("message") for e in events]
     assert "real app error" in messages
     assert not any("possibly delisted" in str(m) for m in messages)
+
+
+def test_yfinance_not_found_lines_are_dropped_from_logs(caplog):
+    import logging
+
+    from ui import monitoring
+
+    monitoring.quiet_yfinance_noise()
+    monitoring.quiet_yfinance_noise()  # idempotent
+    lg = logging.getLogger("yfinance")
+    assert sum(isinstance(f, monitoring._YFinanceNoise) for f in lg.filters) == 1
+    with caplog.at_level(logging.ERROR, logger="yfinance"):
+        lg.error('HTTP Error 404: {"description":"Quote not found for symbol: ZZZZQ"}')
+        lg.error("$CFLT: possibly delisted; no price data found")
+        lg.error("some other yfinance failure")
+    msgs = [r.getMessage() for r in caplog.records]
+    assert msgs == ["some other yfinance failure"]
