@@ -194,7 +194,7 @@ def load_rows(start: Optional[dt.datetime] = None, end: Optional[dt.datetime] = 
         cur = conn.cursor()
         cur.execute("SELECT ticker, fired_at, setup_score AS score, indicators->>'primary_setup' AS setup, "
                     "return_5d, benchmark_return_5d AS benchmark_5d, outcome_computed_at AS computed_at "
-                    f"FROM signal_outcomes WHERE {' AND '.join(where)}", tuple(args))
+                    f"FROM signal_outcomes WHERE {' AND '.join(where)}", tuple(args))  # nosec B608 - fixed clauses, values bound
         raw = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
         cur.close()

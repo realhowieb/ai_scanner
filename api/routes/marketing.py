@@ -9,8 +9,8 @@ from fastapi.responses import Response
 
 from api import models, ratelimit
 from api.deps import _ADMIN
-from api.scans import json_safe
 from api.routes.admin import _admin, _analytics
+from api.scans import json_safe
 
 _TAG = "admin (admins only)"
 _EXTRA = {"x-internal": True}

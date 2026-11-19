@@ -160,7 +160,8 @@ def horizons(filters: Dict[str, Any], unit: str) -> Dict[str, Any]:
 def setups(filters: Dict[str, Any], horizon: int, unit: str, group_by: str) -> Dict[str, Any]:
     condition_of = None
     if group_by == "condition":
-        from api.market_condition import condition_of as lookup, labels_by_day
+        from api.market_condition import condition_of as lookup
+        from api.market_condition import labels_by_day
 
         labels = labels_by_day()
         if not labels:
