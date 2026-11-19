@@ -371,17 +371,22 @@ await step("public track record and market explainer load signed out", async () 
   const ap = await anon.newPage();
   await ap.goto(`${BASE}/results`);
   await ap.getByRole("heading", { level: 1, name: "Every top pick, and how it did" }).waitFor();
+  // A verdict with picks, or (a fresh database, e.g. CI) the "nothing has matured yet" note.
+  // "couldn't load" means the API failed and is a FAIL.
   const verdict = ap.getByRole("heading", { name: /^(No proven edge yet|Ahead of the S&P 500 so far|Behind the S&P 500 so far)$/ });
-  const ok = await verdict.waitFor({ timeout: 15000 }).then(() => true, () => false);
-  const verdictText = ok ? await verdict.textContent() : "no verdict (API answered nothing?)";
-  const rows = ok ? await ap.locator("#picks-h ~ .table-wrap tbody tr").count() : 0;
+  const empty = ap.getByText(/No picks have finished their 5 trading days yet/);
+  const shown = await verdict.or(empty).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+  const hasVerdict = shown && (await verdict.count()) > 0;
+  const verdictText = hasVerdict ? await verdict.textContent() : shown ? "no matured picks yet" : "no verdict (API answered nothing?)";
+  const rows = hasVerdict ? await ap.locator("#picks-h ~ .table-wrap tbody tr").count() : 0;
+  const ok = shown && (!hasVerdict || rows > 0);
   const overflow = await ap.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   await shot(ap, "journey-results-phone");
   await ap.goto(`${BASE}/how-hsf-works#method-market`);
   const market = await ap.locator("#method-market").getByRole("heading", { name: "Market conditions" }).count();
   const speed = await ap.locator("#method-freshness").count();
   await anon.close();
-  check("public track record and market explainer load signed out", ok && rows > 0 && !overflow && market === 1 && speed === 1,
+  check("public track record and market explainer load signed out", ok && !overflow && market === 1 && speed === 1,
     `${verdictText}; ${rows} picks listed${overflow ? "; page scrolls sideways on a phone" : ""}`);
 });
 

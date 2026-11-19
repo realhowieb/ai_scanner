@@ -191,6 +191,9 @@ def load_rows(start: Optional[dt.datetime] = None, end: Optional[dt.datetime] = 
         where.append("fired_at < %s")
         args.append(end)
     try:
+        from db.signal_outcomes import _ensure_schema
+
+        _ensure_schema(conn)  # a fresh database has no outcomes table yet: that's "no picks", not an outage
         cur = conn.cursor()
         cur.execute("SELECT ticker, fired_at, setup_score AS score, indicators->>'primary_setup' AS setup, "
                     "return_5d, benchmark_return_5d AS benchmark_5d, outcome_computed_at AS computed_at "
