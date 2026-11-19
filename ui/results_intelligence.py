@@ -35,6 +35,13 @@ FADING_SIGNAL_MAX = -2.0        # day % at/below this = fading/reversal
 # names in each scan. The calibrated % rarely reaches PREBREAKOUT_SIGNAL_MIN (the map
 # tops out near 33%), so a fixed % cut leaves the tab empty; the in-scan rank does not.
 PREBREAKOUT_TOP_N = 10
+# Split guard: a day or gap move this big (either way) on volume this far below normal is
+# almost always an unadjusted stock split (a 1-for-4 reverse split reads as +300%), not a
+# real move. Real moves of that size trade several times their usual volume. Such a row
+# stays in the raw scan results but isn't ranked as an HSF opportunity; its trend, model
+# and momentum inputs all come from the broken price history.
+SPLIT_SUSPECT_MOVE_PCT = 40.0
+SPLIT_SUSPECT_MAX_RVOL = 0.5
 
 
 def _num(v) -> Optional[float]:
@@ -81,18 +88,28 @@ def _row_to_signal_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     if chg is not None and chg >= GAINER_SIGNAL_MIN:
         signals.add("gainer")
     fading = chg is not None and chg <= FADING_SIGNAL_MAX
+    rvol = _num(_col(row, "VolRel20"))
     return {
         "signals": signals, "fading": fading,
+        "split_suspect": is_split_suspect(chg, gap, rvol),
         "breakout_score": bscore, "prob": prob, "prob_raw": prob_raw,
         "chg_pct": chg if chg is not None else gap,
         "gap_pct": gap,
         "last": _num(_col(row, "Last", "last", "Price")),
-        "rvol": _num(_col(row, "VolRel20")),
+        "rvol": rvol,
         # Relative strength vs SPY (display/filter only; the HSF score doesn't use it).
         "rs_10d": _num(_col(row, "RS10D%")),
         "rs_20d": _num(_col(row, "RS20D%")),
         "rs_line_high": _rs_line_high(_col(row, "RSLineHigh")),
     }
+
+
+def is_split_suspect(chg: Optional[float], gap: Optional[float], rvol: Optional[float]) -> bool:
+    """A huge move on near-zero relative volume (see SPLIT_SUSPECT_MOVE_PCT). Without a
+    relative volume reading there is no way to tell, so the row is kept."""
+    if rvol is None or rvol >= SPLIT_SUSPECT_MAX_RVOL:
+        return False
+    return any(v is not None and abs(v) >= SPLIT_SUSPECT_MOVE_PCT for v in (chg, gap))
 
 
 def _rs_line_high(v: Any) -> Optional[bool]:
@@ -179,6 +196,7 @@ def consolidate_scanner_results(
             # Merge duplicates: union signals; prefer non-None / stronger values.
             cur["signals"] |= f["signals"]
             cur["fading"] = cur["fading"] or f["fading"]
+            cur["split_suspect"] = cur["split_suspect"] or f["split_suspect"]
             for k in ("breakout_score", "prob", "prob_raw"):
                 if f[k] is not None and (cur[k] is None or f[k] > cur[k]):
                     cur[k] = f[k]
@@ -188,6 +206,8 @@ def consolidate_scanner_results(
 
     opps = []
     for s in acc.values():
+        if s["split_suspect"]:
+            continue  # broken price history (likely an unadjusted split): not ranked
         pos = [x for x in _POSITIVE if x in s["signals"]]
         if len(pos) < 2 and s["breakout_score"] is None and s["prob"] is None:
             continue  # doesn't qualify as an HSF opportunity

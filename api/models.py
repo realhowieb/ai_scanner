@@ -196,7 +196,8 @@ class TopSetups(BaseModel):
     scan_at: Optional[str] = None
     setups: List[Setup] = Field(default=[], description="Strong setups, HSF `threshold`+")
     ranked_floor: Optional[int] = Field(default=None, description="HSF floor of `also_ranked` (the ranked list, 40)")
-    also_ranked: List[Setup] = Field(default=[], description="Next ranked names filling the card to 5 when fewer are strong")
+    also_ranked: List[Setup] = Field(default=[], description="Next ranked names filling the card to 10 when fewer are strong")
+    etfs: List[Setup] = Field(default=[], description="The best few ranked ETFs (HSF 40+); setups and also_ranked are stocks only")
 
 
 class Standout(BaseModel):

@@ -164,6 +164,25 @@ function SetupRow({ s, muted = false }: { s: Setup; muted?: boolean }) {
   );
 }
 
+/** Top setups lists stocks only; the best few ETFs (often leveraged or inverse funds that
+ * move two or three times the market) get one line of their own under the table. */
+function EtfLine({ etfs }: { etfs: Setup[] }) {
+  if (etfs.length === 0) return null;
+  return (
+    <p className="cap etf-line" data-testid="etf-line">
+      <span className="strong">ETFs moving:</span>{" "}
+      {etfs.map((e, i) => (
+        <span key={e.ticker}>
+          {i > 0 && " · "}
+          <Link href={`/stocks/${encodeURIComponent(e.ticker)}`} className="mono">{e.ticker}</Link>
+          {" "}HSF {e.score}{e.chg_pct != null && Number.isFinite(e.chg_pct) ? ` ${pct(e.chg_pct)}` : ""}
+        </span>
+      ))}
+      {" · "}<Link href="/scanner?sector=ETF">All ETFs on the Scanner</Link>
+    </p>
+  );
+}
+
 /** One line naming the board's leader, at the top of Top setups. */
 function Leader({ top }: { top: Today["top_setups"] }) {
   const leader = top?.setups[0] ?? top?.also_ranked?.[0];
@@ -298,9 +317,10 @@ export function TodayView({ data, mine, mineFailed = false, side, lead, onMineCh
                     )}
                   </table>
                 </div>
-                <p className="cap">Strong setups score HSF {strongMin}+.{also.length > 0 ? ` Also ranked: HSF ${alsoMin} to ${strongMin - 1}.` : ""}</p>
+                <p className="cap">Strong setups score HSF {strongMin}+.{also.length > 0 ? ` Also ranked: HSF ${alsoMin} to ${strongMin - 1}.` : ""}{(top.etfs?.length ?? 0) > 0 ? " Stocks only; ETFs are listed below." : ""}</p>
               </>
             )}
+            {top && !failed.has("top_setups") && <EtfLine etfs={top.etfs ?? []} />}
             <div className="card-foot">
               <Link href="/scanner">Open the Scanner →</Link>
             </div>

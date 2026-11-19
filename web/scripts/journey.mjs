@@ -86,6 +86,24 @@ await sweepLeftovers(page, "before the run");
 let ticker = null;
 let watchlistUrl = null;
 
+await step("Top setups lists stocks only, ETFs on their own line", async () => {
+  await page.goto(`${BASE}/today`);
+  const card = page.getByRole("region", { name: "Top setups" });
+  await card.getByRole("heading", { name: "Top setups" }).waitFor();
+  const line = card.getByTestId("etf-line");
+  if (!(await line.count())) {
+    check("Top setups lists stocks only, ETFs on their own line", true, "no ETFs ranked in this scan");
+    return;
+  }
+  const href = (l) => decodeURIComponent((l ?? "").split("/stocks/")[1] ?? "");
+  const etfs = (await line.locator('a[href^="/stocks/"]').evaluateAll((as) => as.map((a) => a.getAttribute("href")))).map(href);
+  const board = (await card.locator('table a[href^="/stocks/"]').evaluateAll((as) => as.map((a) => a.getAttribute("href")))).map(href);
+  const overlap = etfs.filter((t) => board.includes(t));
+  const all = await line.getByRole("link", { name: "All ETFs on the Scanner" }).getAttribute("href");
+  check("Top setups lists stocks only, ETFs on their own line", overlap.length === 0 && all === "/scanner?sector=ETF",
+        `ETFs ${etfs.join(",")}${overlap.length ? `; also on the board: ${overlap.join(",")}` : ""}`);
+});
+
 await step("session survives reload and navigation", async () => {
   await page.reload();
   await page.getByRole("heading", { name: "Top setups" }).waitFor();

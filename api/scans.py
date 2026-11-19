@@ -130,7 +130,8 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
                 min_score: int = 0, signal: Optional[str] = None, sort: str = "score",
                 min_price: Optional[float] = None, max_price: Optional[float] = None,
                 min_rvol: Optional[float] = None, sector: Optional[str] = None,
-                size: Optional[str] = None, beating_spy: bool = False) -> Dict[str, Any]:
+                size: Optional[str] = None, beating_spy: bool = False,
+                stocks_only: bool = False) -> Dict[str, Any]:
     from analytics.data_freshness import describe
     from api.sectors import cap_bucket, market_cap_for, sector_for
     from ui.entitlement_view import redact_prebreakout_rows
@@ -187,6 +188,9 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     if beating_spy:
         # Up more than SPY over the last 20 sessions; a row without the number never passes.
         opps = [o for o in opps if (_num(o.get("rs_20d")) or 0.0) > 0.0]
+    if stocks_only:
+        # Top setups lists (landing preview, starter watchlist) leave ETFs out, like Today's.
+        opps = [o for o in opps if sector_of[id(o)] != "ETF"]
     if size:
         # Company size from the screener's market cap; a name without one never passes.
         opps = [o for o in opps if cap_bucket(cap_of[id(o)]) == size]

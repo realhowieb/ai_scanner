@@ -421,6 +421,7 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .rc-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
 .today-personal { display: flex; flex-direction: column; gap: 24px; }
 .leader-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; padding: 10px 14px; margin-bottom: 8px; border: 1px solid var(--info-line); border-radius: var(--radius-lg); background: var(--info-bg-2); }
+.etf-line { margin-top: 8px; }
 .setup-card { gap: 8px; padding: 12px 14px; }
 .sc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sc-top .pill { flex-shrink: 0; white-space: nowrap; }

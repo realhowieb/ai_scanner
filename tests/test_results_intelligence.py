@@ -53,6 +53,18 @@ class ConsolidationTests(unittest.TestCase):
         self.assertEqual(ri.consolidate_scanner_results([]), [])
         self.assertEqual(ri.consolidate_scanner_results([{"foo": 1}, None, {"Ticker": ""}]), [])
 
+    def test_split_suspect_rows_are_not_ranked(self):
+        # A 1-for-4 reverse split reads as +304% with almost no volume (QID, 2026-11-19).
+        rows = [_row("QID", PctChange=304.0, GapPct=300.0, VolRel20=0.2, BreakoutScore=80),
+                _row("BITO", EMACross="Golden", PctChange=102.0, GapPct=101.0, VolRel20=0.1, BreakoutScore=90),
+                _row("RIPS", PctChange=-55.0, GapPct=-50.0, VolRel20=0.05, BreakoutScore=10),  # forward split
+                _row("RUN", PctChange=60.0, GapPct=40.0, VolRel20=6.0, BreakoutScore=80),      # real move
+                _row("NOVOL", PctChange=60.0, GapPct=40.0, BreakoutScore=80)]                 # no RVOL: kept
+        self.assertEqual(sorted(o["ticker"] for o in ri.consolidate_scanner_results(rows)), ["NOVOL", "RUN"])
+        self.assertTrue(ri.is_split_suspect(45.0, None, 0.4))
+        self.assertFalse(ri.is_split_suspect(39.0, 10.0, 0.1))
+        self.assertFalse(ri.is_split_suspect(80.0, 80.0, 0.5))
+
     def test_missing_price_or_chg_is_safe(self):
         opps = ri.consolidate_scanner_results([_row("X", IsBreakout=True, BreakoutScore=55)])
         self.assertEqual(opps[0]["ticker"], "X")  # scores off model alone, no crash

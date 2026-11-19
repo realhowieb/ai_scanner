@@ -11105,10 +11105,16 @@ export interface components {
         TopSetups: {
             /**
              * Also Ranked
-             * @description Next ranked names filling the card to 5 when fewer are strong
+             * @description Next ranked names filling the card to 10 when fewer are strong
              * @default []
              */
             also_ranked: components["schemas"]["Setup"][];
+            /**
+             * Etfs
+             * @description The best few ranked ETFs (HSF 40+); setups and also_ranked are stocks only
+             * @default []
+             */
+            etfs: components["schemas"]["Setup"][];
             /**
              * Ranked Floor
              * @description HSF floor of `also_ranked` (the ranked list, 40)
@@ -20869,6 +20875,8 @@ export interface operations {
                 sector?: string | null;
                 /** @description Only setups up more than SPY over the last 20 sessions */
                 beating_spy?: boolean;
+                /** @description Leave ETFs out (Today's Top setups and the starter watchlist do) */
+                stocks_only?: boolean;
                 /** @description Only setups of this company size by market cap: micro <$300M, small $300M-2B, mid $2-10B, large $10-200B, mega $200B+ */
                 cap?: ("micro" | "small" | "mid" | "large" | "mega") | null;
             };

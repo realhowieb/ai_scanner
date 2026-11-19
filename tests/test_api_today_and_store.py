@@ -153,6 +153,21 @@ class TodayBuilderTests(unittest.TestCase):
             for v in s.values():
                 self.assertFalse(isinstance(v, float) and not math.isfinite(v))
 
+    def test_top_setups_leave_etfs_to_their_own_line(self):
+        with mock.patch("api.today.is_etf", return_value=False):
+            whole = self.build(SAT, PRO)["top_setups"]
+        board = [s["ticker"] for s in whole["setups"] + whole["also_ranked"]]
+        etf = board[0]
+        with mock.patch("api.today.is_etf", side_effect=lambda t: t == etf):
+            top = self.build(SAT, PRO)["top_setups"]
+        self.assertNotIn(etf, [s["ticker"] for s in top["setups"] + top["also_ranked"]])
+        self.assertEqual([s["ticker"] for s in top["etfs"]], [etf])
+        self.assertIsNone(top["etfs"][0]["prob"])  # redacted like the rest
+        # Real sectors.csv: SOXL (a 3x ETF in the fixture) is on the ETF line, not the board.
+        real = self.build(SAT, PRO)["top_setups"]
+        self.assertIn("SOXL", [s["ticker"] for s in real["etfs"]])
+        self.assertNotIn("SOXL", [s["ticker"] for s in real["setups"] + real["also_ranked"]])
+
     def test_recap(self):
         rec = self.build(SAT, PRO)["recap"]
         self.assertEqual(rec["day"], "2026-09-28")
@@ -160,7 +175,7 @@ class TodayBuilderTests(unittest.TestCase):
         self.assertEqual(rec["postmarket_scans"], 1)
 
     def test_one_failing_section_does_not_blank_the_rest(self):
-        with mock.patch("ui.today.today_top_setups", side_effect=RuntimeError("boom secret")):
+        with mock.patch("api.today.is_etf", side_effect=RuntimeError("boom secret")):
             out = self.build(TUE_840_ET, PRO)
         self.assertIsNone(out["top_setups"])
         self.assertEqual(out["errors"], [{"section": "top_setups", "error": "RuntimeError"}])

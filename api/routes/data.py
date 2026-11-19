@@ -142,6 +142,7 @@ def register(app: FastAPI) -> None:
                      min_rvol: Optional[float] = Query(None, ge=0, le=1000, description="Relative volume at least this (x)"),
                      sector: Optional[str] = Query(None, max_length=64, description="Only setups in this sector (see sectors)"),
                      beating_spy: bool = Query(False, description="Only setups up more than SPY over the last 20 sessions"),
+                     stocks_only: bool = Query(False, description="Leave ETFs out (Today's Top setups and the starter watchlist do)"),
                      cap: Optional[Literal["micro", "small", "mid", "large", "mega"]] = Query(
                          None, description="Only setups of this company size by market cap: micro <$300M, small "
                                            "$300M-2B, mid $2-10B, large $10-200B, mega $200B+")
@@ -155,7 +156,7 @@ def register(app: FastAPI) -> None:
         return latest_scan(ent["entitlements"], ent["tier"], limit=limit, offset=offset,
                            min_score=min_score, signal=signal, sort=sort,
                            min_price=min_price, max_price=max_price, min_rvol=min_rvol, sector=sector,
-                           size=cap, beating_spy=beating_spy)
+                           size=cap, beating_spy=beating_spy, stocks_only=stocks_only)
 
     @app.get("/v1/scans/latest/earnings", response_model=models.EarningsScan,
              responses={**_AUTH, 403: {"description": "Pro feature"}}, summary="Earnings scanner")
