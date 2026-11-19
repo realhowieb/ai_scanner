@@ -25,7 +25,7 @@ export function StarterWatchlistButton({ tickers, listId, onDone, compact = fals
   compact?: boolean;
 }) {
   const latest = useApi(tickers ? null : "starter-top", (signal) =>
-    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT } }, signal })));
+    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT, stocks_only: true } }, signal })));
   const act = useAction();
   const picks = (tickers ?? latest.data?.setups.map((s) => s.ticker) ?? []).slice(0, STARTER_COUNT);
   if (!picks.length) return null;
@@ -148,7 +148,7 @@ export function StarterScoreAlertButton({ onDone }: { onDone: () => void }) {
  * reaches HSF 75, so a brand-new account has something working right away. */
 export function StarterSetupButton({ onDone }: { onDone: () => void }) {
   const latest = useApi("starter-top", (signal) =>
-    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT } }, signal })));
+    unwrap(api.GET("/v1/scans/latest", { params: { query: { limit: STARTER_COUNT, stocks_only: true } }, signal })));
   const lists = useApi("watchlists", (signal) => watchlists.list(signal));
   const act = useAction();
   const picks = (latest.data?.setups.map((s) => s.ticker) ?? []).slice(0, STARTER_COUNT);

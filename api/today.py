@@ -391,38 +391,51 @@ def after_close(now: dt.datetime, entitled: bool) -> Optional[Dict[str, Any]]:
 
 
 TOP_N = 10
+ETF_N = 3          # ETFs shown on the line under Top setups
+ETF_SECTOR = "ETF"  # sectors.csv's sector for funds (scripts/refresh_sectors.py)
 _SETUP_FIELDS = ("ticker", "score", "primary_setup", "status", "n_signals")
 _SETUP_NUMBERS = ("last", "chg_pct", "gap_pct", "rvol", "prob")
 
 
+def is_etf(ticker: Any) -> bool:
+    from api.sectors import sector_for
+
+    return sector_for(ticker) == ETF_SECTOR
+
+
 def top_setups(entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """Top setups lists stocks only. Leveraged and inverse ETFs move two or three times the
+    market, so they cleared the momentum and gainer/gapper bars far more often than stocks
+    and filled about half the board; the best few ETFs go on their own line (`etfs`). The
+    Scanner still ranks every name, ETFs included."""
     from ui.entitlement_view import redact_prebreakout_rows
     from ui.market_scans import top_setups as ranked_setups
+    from ui.opportunities import HSF_STRONG_MIN
     from ui.recap import RECAP_MIN_SCORE
-    from ui.today import today_top_setups
 
     runs = market_runs()
     if not runs:
         return {"state": "empty_scan", "threshold": None, "scan_at": None, "setups": []}
     df = run_df(int(runs[0]["id"]))
-    result = today_top_setups(df, n=TOP_N)
+    if df is None or getattr(df, "empty", True):
+        return {"state": "empty_scan", "threshold": None, "scan_at": _iso(runs[0]["created_at"]), "setups": []}
     allowed = bool(entitlements.get("can_early_breakout"))
 
     def shape(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [{**{k: r.get(k) for k in _SETUP_FIELDS}, **{k: _num(r.get(k)) for k in _SETUP_NUMBERS}}
                 for r in redact_prebreakout_rows(rows, allowed=allowed)]
 
+    ranked = ranked_setups(df, n=100_000, minimum_score=RECAP_MIN_SCORE)
+    stocks = [r for r in ranked if not is_etf(r.get("ticker"))]
+    etfs = [r for r in ranked if is_etf(r.get("ticker"))][:ETF_N]
+    strong = [r for r in stocks if int(r.get("score") or 0) >= HSF_STRONG_MIN][:TOP_N]
     # Fewer than TOP_N strong names: fill the card with the next ranked names (HSF 40+, the
     # recap's "ranked list" floor) so a quiet day doesn't read as an empty page.
-    also: List[Dict[str, Any]] = []
-    room = TOP_N - len(result["setups"])
-    if room > 0 and result["state"] != "empty_scan":
-        strong = {r.get("ticker") for r in result["setups"]}
-        pool = ranked_setups(df, n=TOP_N * 2, minimum_score=RECAP_MIN_SCORE)
-        also = [r for r in pool if r.get("ticker") not in strong][:room]
-    return {"state": result["state"], "threshold": result["threshold"],
-            "scan_at": _iso(runs[0]["created_at"]), "setups": shape(result["setups"]),
-            "ranked_floor": RECAP_MIN_SCORE if also else None, "also_ranked": shape(also)}
+    also = stocks[len(strong):TOP_N]
+    return {"state": "qualifying" if strong else "no_qualifying", "threshold": HSF_STRONG_MIN,
+            "scan_at": _iso(runs[0]["created_at"]), "setups": shape(strong),
+            "ranked_floor": RECAP_MIN_SCORE if also else None, "also_ranked": shape(also),
+            "etfs": shape(etfs)}
 
 
 def recap(now: dt.datetime) -> Optional[Dict[str, Any]]:

@@ -19155,11 +19155,20 @@
     "properties": {
      "also_ranked": {
       "default": [],
-      "description": "Next ranked names filling the card to 5 when fewer are strong",
+      "description": "Next ranked names filling the card to 10 when fewer are strong",
       "items": {
        "$ref": "#/components/schemas/Setup"
       },
       "title": "Also Ranked",
+      "type": "array"
+     },
+     "etfs": {
+      "default": [],
+      "description": "The best few ranked ETFs (HSF 40+); setups and also_ranked are stocks only",
+      "items": {
+       "$ref": "#/components/schemas/Setup"
+      },
+      "title": "Etfs",
       "type": "array"
      },
      "ranked_floor": {
@@ -32429,6 +32438,18 @@
        "default": false,
        "description": "Only setups up more than SPY over the last 20 sessions",
        "title": "Beating Spy",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "Leave ETFs out (Today's Top setups and the starter watchlist do)",
+      "in": "query",
+      "name": "stocks_only",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Leave ETFs out (Today's Top setups and the starter watchlist do)",
+       "title": "Stocks Only",
        "type": "boolean"
       }
      },

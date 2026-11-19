@@ -147,6 +147,8 @@ class ApiTests(DbBase):
         self.assertEqual([s["ticker"] for s in body["setups"]], ["AAA", "BBB", "CCC"])
         self.assertEqual(body["setups"][0], {"ticker": "AAA", "hsf_score": 91, "setup": "breakout", "change_pct": 1.5})
         self.assertEqual((body["ranked_total"], body["free_rows"]), (40, 25))
-        self.assertEqual(m.call_args.kwargs["min_score"], 40)
+        self.assertEqual(m.call_args_list[0].kwargs["min_score"], 40)
+        self.assertTrue(m.call_args_list[0].kwargs["stocks_only"])        # preview: stocks only
+        self.assertNotIn("stocks_only", m.call_args_list[1].kwargs)       # counts: the whole list
         with mock.patch("api.scans.latest_scan", side_effect=RuntimeError("no db")):
             self.assertEqual(self.client.get("/v1/public/top-setups").status_code, 503)

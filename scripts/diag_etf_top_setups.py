@@ -55,6 +55,16 @@ def main() -> int:
               f"{(r.get('chg_pct') or 0):>7.1f} {(r.get('last') or 0):>8.2f} {(r.get('rvol') or 0):>6.1f}  "
               f"{','.join(r.get('signals') or [])}")
 
+    from api.today import top_setups as today_board
+
+    with __import__("unittest.mock").mock.patch("api.today.market_runs", return_value=[latest]), \
+         __import__("unittest.mock").mock.patch("api.today.run_df", return_value=df):
+        tb = today_board({})
+    print("\nToday's board with this branch (stocks only + split guard):")
+    print("  strong:", " ".join(f"{r['ticker']}:{r['score']}" for r in tb.get("setups") or []))
+    print("  also:  ", " ".join(f"{r['ticker']}:{r['score']}" for r in tb.get("also_ranked") or []))
+    print("  ETF line:", " ".join(f"{r['ticker']}:{r['score']}" for r in tb.get("etfs") or []))
+
     ranked = top_setups(df, n=10_000, minimum_score=40)
     print("\nlatest ranked (HSF 40+) top 30 with ETF flag:")
     print(" ".join(f"{r['ticker']}{'*' if is_etf(r['ticker']) else ''}:{r['score']}" for r in ranked[:30]))
