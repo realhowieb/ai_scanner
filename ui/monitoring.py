@@ -20,6 +20,33 @@ _COOKIE_COMPONENT_BUILD_PATH = "streamlit_cookies_manager/build"
 # in Sentry. Real exceptions raised from yfinance calls are still reported.
 _IGNORED_LOGGERS = ("yfinance",)
 
+# The same expected yfinance lines, matched narrowly, are also dropped from the
+# process logs (Render tags them "error" and they bury real errors there).
+_YF_NOISE = ("Quote not found for symbol", "possibly delisted", "No data found, symbol may be delisted")
+
+
+class _YFinanceNoise:
+    """logging filter: drop yfinance's per-ticker 'not found' lines, keep everything else."""
+
+    def filter(self, record: Any) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return not any(n in msg for n in _YF_NOISE)
+
+
+def quiet_yfinance_noise() -> None:
+    """Install the filter once on the yfinance logger. Never raises."""
+    try:
+        import logging
+
+        lg = logging.getLogger("yfinance")
+        if not any(isinstance(f, _YFinanceNoise) for f in lg.filters):
+            lg.addFilter(_YFinanceNoise())
+    except Exception:
+        pass
+
 
 def _is_handled_cookie_component_directory_read(event: dict[str, Any]) -> bool:
     """Return whether *event* is Streamlit's harmless bare-component probe.
@@ -67,6 +94,7 @@ def _get_dsn() -> str | None:
 def init_sentry(component: str = "app") -> bool:
     """Initialize Sentry once. Returns True if active, False if not configured."""
     global _initialized
+    quiet_yfinance_noise()
     if _initialized:
         return True
     dsn = _get_dsn()
