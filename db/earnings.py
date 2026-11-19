@@ -620,6 +620,20 @@ def mark_earnings_refreshed_today(refresh_key: str, *, conn=None) -> None:
 # UI helpers (read-only)
 # -------------------------
 
+def _class_share_symbols(rows) -> Dict[str, str]:
+    """{MOGA: MOG-A} for calendar keys that are class shares (the keys drop the separator,
+    so without this MOG.A can't be priced or scored). Empty on any failure."""
+    keys = [_norm_symbol(str(r[0])) for r in rows if r and r[0] is not None]
+    if not keys:
+        return {}
+    try:
+        from api.symbol_search import class_share_symbols
+
+        return class_share_symbols(keys)
+    except Exception:
+        return {}
+
+
 def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7, start: Optional[date] = None):
     """Return upcoming earnings rows for the next N days (inclusive).
 
@@ -648,11 +662,13 @@ def fetch_earnings_this_week(*, conn=None, days_ahead: int = 7, start: Optional[
         cur.execute(sql, (utc_today, end_day))
         rows = cur.fetchall() or []
 
+    classes = _class_share_symbols(rows)
     out = []
     for (sym, d, t, upd) in rows:
+        key = _norm_symbol(str(sym)) if sym is not None else None
         out.append(
             {
-                "symbol": _norm_symbol(str(sym)) if sym is not None else None,
+                "symbol": classes.get(key, key) if key else key,
                 "earnings_date": d,
                 "earnings_time": t,
                 "updated_at": upd,

@@ -64,6 +64,29 @@ def names(tickers: list[str]) -> dict[str, str]:
     return out
 
 
+def class_share_symbols(keys: list[str]) -> dict[str, str]:
+    """{key: 'MOG-A'} for separator-free keys ('MOGA') that are really a class share in the
+    symbol directory. The earnings calendar strips the dot/dash from tickers for its joins,
+    so MOG.A arrives as MOGA and can't be priced or scored. A key that is itself a listed
+    ticker, or matches more than one class share, is left out. Empty when the directory
+    is unavailable."""
+    rows = _rows()
+    if not rows:
+        return {}
+    listed = {a["ticker"].replace(".", "-") for a in rows}
+    classes: dict[str, list[str]] = {}
+    for t in listed:
+        if "-" in t:
+            classes.setdefault(t.replace("-", ""), []).append(t)
+    out: dict[str, str] = {}
+    for k in keys:
+        key = str(k or "").strip().upper()
+        hits = classes.get(key)
+        if key and key not in listed and hits and len(hits) == 1:
+            out[key] = hits[0]
+    return out
+
+
 def lookup(ticker: str) -> dict | None:
     """{ticker, name} for an active US-listed symbol, else None."""
     t = ticker.strip().upper()
