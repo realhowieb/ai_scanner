@@ -559,6 +559,16 @@ class ScanAndStockApiTests(DataApiBase):
         self.assertIsNone(r["freshness"]["scan_completed_at"])
         self.assertIsNone(r["freshness"]["market_data_at"])
 
+    def test_latest_scan_stocks_only_leaves_etfs_out(self):
+        whole = self.client.get("/v1/scans/latest", headers=self.h).json()
+        etf = whole["setups"][0]["ticker"]
+        with mock.patch("api.sectors.sector_for", side_effect=lambda t: "ETF" if t == etf else "Technology"):
+            r = self.client.get("/v1/scans/latest?stocks_only=true", headers=self.h).json()
+            again = self.client.get("/v1/scans/latest", headers=self.h).json()
+        self.assertNotIn(etf, [s["ticker"] for s in r["setups"]])
+        self.assertEqual(r["total"], whole["total"] - 1)
+        self.assertIn(etf, [s["ticker"] for s in again["setups"]])  # the Scanner keeps every name
+
     def test_run_freshness_uses_the_runs_own_start_and_duration(self):
         import pandas as pd
 

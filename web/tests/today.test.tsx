@@ -8,7 +8,7 @@ const now = new Date().toISOString();
 const base: Schemas["Today"] = {
   as_of: now, market: { phase: "premarket" }, errors: [],
   before_open: { scan_at: now, locked: false, movers: [{ ticker: "AAA", pct: 4.2, last: 10, score: 70 }] },
-  top_setups: { state: "qualifying", threshold: 75, scan_at: now, setups: [{ ticker: "BBB", score: 81, primary_setup: "breakout", status: "STRONG", n_signals: 2, last: 20, chg_pct: 1, gap_pct: null, rvol: 2, prob: null }], also_ranked: [] },
+  top_setups: { state: "qualifying", threshold: 75, scan_at: now, setups: [{ ticker: "BBB", score: 81, primary_setup: "breakout", status: "STRONG", n_signals: 2, last: 20, chg_pct: 1, gap_pct: null, rvol: 2, prob: null }], also_ranked: [], etfs: [] },
   after_close: null,
   recap: { day: "2026-10-05", title: "Monday", scans: 3, premarket_scans: 1, postmarket_scans: 2, entered: ["CCC (65)"], left: [], standouts: [] },
 };
@@ -33,9 +33,9 @@ describe("Today", () => {
   });
 
   it("explains an empty scan and a scan with no qualifying setups", () => {
-    const { rerender } = render(<TodayView data={{ ...base, top_setups: { state: "empty_scan", threshold: null, scan_at: null, setups: [], also_ranked: [] } }} />);
+    const { rerender } = render(<TodayView data={{ ...base, top_setups: { state: "empty_scan", threshold: null, scan_at: null, setups: [], also_ranked: [], etfs: [] } }} />);
     expect(screen.getByText("No scan results yet.")).toBeInTheDocument();
-    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], also_ranked: [] } }} />);
+    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], also_ranked: [], etfs: [] } }} />);
     expect(screen.getByText("No setup reached HSF 75 in the latest scan.")).toBeInTheDocument();
   });
 
@@ -67,9 +67,21 @@ describe("Today", () => {
     expect(screen.getByText("Also ranked")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "DDD" }).closest("tr")).toHaveClass("row-muted");
     expect(screen.getByText("Strong setups score HSF 75+. Also ranked: HSF 40 to 74.")).toBeInTheDocument();
-    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], ranked_floor: 40, also_ranked: [also] } }} />);
+    rerender(<TodayView data={{ ...base, top_setups: { state: "no_qualifying", threshold: 75, scan_at: now, setups: [], ranked_floor: 40, also_ranked: [also], etfs: [] } }} />);
     expect(screen.getByText(/No setup reached HSF 75 in the latest scan. These are the highest ranked names./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "DDD" })).toBeInTheDocument();
+  });
+
+  it("lists ETFs on their own line under the stocks-only Top setups", () => {
+    const etf = { ...base.top_setups!.setups[0]!, ticker: "QID", score: 76, chg_pct: 4.2 };
+    const { rerender } = render(<TodayView data={{ ...base, top_setups: { ...base.top_setups!, etfs: [etf] } }} />);
+    const line = screen.getByTestId("etf-line");
+    expect(line).toHaveTextContent(/ETFs moving: QID HSF 76 \+4\.20%/);
+    expect(within(line).getByRole("link", { name: "QID" })).toHaveAttribute("href", "/stocks/QID");
+    expect(within(line).getByRole("link", { name: "All ETFs on the Scanner" })).toHaveAttribute("href", "/scanner?sector=ETF");
+    expect(screen.getByText(/Stocks only; ETFs are listed below\./)).toBeInTheDocument();
+    rerender(<TodayView data={base} />);
+    expect(screen.queryByTestId("etf-line")).not.toBeInTheDocument();
   });
 
   it("mutes HSF badges below the ranked list", () => {
