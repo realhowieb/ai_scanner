@@ -90,7 +90,13 @@ def class_share_symbols(keys: list[str]) -> dict[str, str]:
 def lookup(ticker: str) -> dict | None:
     """{ticker, name} for an active US-listed symbol, else None."""
     t = ticker.strip().upper()
-    return next((a for a in _rows() if a["ticker"] == t), None)
+    rows = _rows()
+    hit = next((a for a in rows if a["ticker"] == t), None)
+    if hit is None and "-" in t:
+        # Class shares arrive both ways (the Earnings tab uses MOG-A, the directory MOG.A).
+        dotted = t.replace("-", ".")
+        hit = next((a for a in rows if a["ticker"] == dotted), None)
+    return hit
 
 
 def search(query: str) -> dict:

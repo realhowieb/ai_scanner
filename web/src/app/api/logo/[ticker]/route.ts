@@ -1,7 +1,8 @@
 // Company logo for the Earnings calendar, fetched server-side from FMP's public image
 // URL so the browser stays same-origin (the CSP allows only 'self' images) and the
-// viewer's IP never reaches a third party. A missing logo answers 404 and the tile
-// shows the ticker's first letter instead.
+// viewer's IP never reaches a third party. A missing logo answers 204 (no body), which
+// still fires the img's error handler so the tile shows the ticker's first letter, but
+// doesn't log a "Failed to load resource" 404 in the console for every ETF without a logo.
 export const dynamic = "force-dynamic";
 
 const TICKER = /^[A-Z]{1,6}(-[A-Z]{1,2})?$/;
@@ -11,7 +12,7 @@ const TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 export async function GET(_req: Request, ctx: { params: Promise<{ ticker: string }> }): Promise<Response> {
   const ticker = decodeURIComponent((await ctx.params).ticker || "").toUpperCase().replace(".", "-");
-  const miss = () => new Response(null, { status: 404, headers: { "cache-control": "public, max-age=86400" } });
+  const miss = () => new Response(null, { status: 204, headers: { "cache-control": "public, max-age=86400" } });
   if (!TICKER.test(ticker)) return miss();
   try {
     const r = await fetch(`https://financialmodelingprep.com/image-stock/${ticker}.png`, {

@@ -1198,6 +1198,7 @@ p a:not(.btn), figcaption a { text-decoration: underline; text-decoration-thickn
 .news-list .cap, .filings-list .cap { margin: 2px 0 0; }
 .list-head { font-size: 13px; font-weight: 600; margin: 8px 0 0; color: var(--text-2); }
 .news-flag { margin-left: 4px; text-decoration: none; }
+.sc-tags .news-flag { margin-left: 0; } /* the badge row already spaces items with gap */
 .turnstile { min-height: 0; margin: 4px 0; }
 .chat-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 

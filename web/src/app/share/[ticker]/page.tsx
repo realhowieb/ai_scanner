@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const s = await loadPublicStock((await params).ticker);
-  if (!s) return { title: "Stock not found" };
+  if (!s) return { title: "Stock not found", robots: { index: false, follow: false } };
   const move = s.price != null ? ` ${price(s.price)} (${pct(s.change_pct)})` : "";
   const title = s.ranked && s.hsf_score != null
     ? `${s.ticker}: HSF Score ${s.hsf_score}, ${setupLabel(s.setup)} setup`

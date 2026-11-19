@@ -227,6 +227,18 @@ def test_class_share_symbols_maps_only_unambiguous_class_shares():
     assert got == {"MOGA": "MOG-A", "MOGB": "MOG-B", "BRKB": "BRK-B"}
 
 
+def test_lookup_accepts_dash_or_dot_for_class_shares():
+    # The Earnings tab links MOG-A; the directory lists MOG.A. Shared links must work both ways.
+    from api import symbol_search
+
+    rows = [{"ticker": t, "name": t} for t in ("MOG.A", "AAPL")]
+    with mock.patch.object(symbol_search, "_rows", return_value=rows):
+        assert symbol_search.lookup("MOG-A")["ticker"] == "MOG.A"
+        assert symbol_search.lookup("mog.a")["ticker"] == "MOG.A"
+        assert symbol_search.lookup("AAPL")["ticker"] == "AAPL"
+        assert symbol_search.lookup("MOGA") is None
+
+
 def test_class_share_symbols_empty_without_directory():
     from api import symbol_search
 
