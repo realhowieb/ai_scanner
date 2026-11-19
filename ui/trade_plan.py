@@ -76,20 +76,37 @@ def score_components(row: Mapping[str, Any]) -> Optional[Dict[str, float]]:
     return {k: round(v, 1) for k, v in parts.items()}
 
 
+THIN_DOLLAR_VOLUME = 5_000_000.0   # avg daily $ volume below this: fills can be slow and gaps bigger
+WIDE_SPREAD_PCT = 0.5              # live ask-bid above this % of price eats into a 2-8% stop
+MAX_POSITION_PCT_OF_VOLUME = 1.0   # a position above 1% of a day's dollar volume can move the price
+CHASE_R = 0.5                      # don't-chase line: scan price + half the planned risk per share
+
+
 def build_trade_plan(
     row: Mapping[str, Any],
     *,
     account_size: float = 10_000.0,
     risk_pct: float = 1.0,
+    live_price: Optional[float] = None,
+    bid: Optional[float] = None,
+    ask: Optional[float] = None,
+    live_at: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Plan dict for a result row, or None when there's no usable price.
 
     Stop: half the 20-day volatility below entry, clamped to 2-8%.
     Targets: 1.5R and 3R above entry. Size: risk budget / per-share risk.
+
+    With a live price the plan is built from it (the scan price can be hours old) and
+    reports how far price has moved since the scan, with a don't-chase line at the
+    scan price + CHASE_R x the scan's risk per share. Liquidity warnings come from the
+    scan's 20-day dollar volume and, with a live quote, the bid-ask spread.
     """
-    entry = _num(row, "Last", "Close")
-    if entry is None or entry <= 0:
+    scan_price = _num(row, "Last", "Close")
+    if scan_price is None or scan_price <= 0:
         return None
+    live = float(live_price) if live_price is not None and float(live_price) > 0 else None
+    entry = live if live is not None else scan_price
     vol = _num(row, "Volatility20D%")
     stop_pct = min(MAX_STOP_PCT, max(MIN_STOP_PCT, (vol or 6.0) * 0.5))
     stop = entry * (1 - stop_pct / 100.0)
@@ -98,8 +115,42 @@ def build_trade_plan(
         return None
     risk_budget = max(0.0, float(account_size)) * max(0.0, float(risk_pct)) / 100.0
     shares = int(math.floor(risk_budget / risk_per_share)) if risk_budget > 0 else 0
+
+    chase_limit = scan_price * (1 + CHASE_R * stop_pct / 100.0)
+    pos = _num(row, "BreakoutPos20D")
+    trigger = scan_price / pos if pos is not None and 0 < pos <= 1.0001 else None
+    moved = (live / scan_price - 1.0) * 100.0 if live is not None else None
+
+    warnings = []
+    if live is not None and live > chase_limit:
+        warnings.append(f"Price is {moved:.1f}% above the scan price, past the don't-chase line "
+                        f"({chase_limit:,.2f}). The best entry may have passed; the stop and size are "
+                        "recalculated from the live price.")
+    scan_stop = scan_price * (1 - stop_pct / 100.0)
+    if live is not None and live <= scan_stop:
+        warnings.append(f"Price is below the scan's stop level ({scan_stop:,.2f}): the setup has already failed "
+                        "by this plan's rule.")
+    dv = _num(row, "DollarVol20")
+    position_value = shares * entry
+    spread_pct = None
+    if bid and ask and bid > 0 and ask >= bid:
+        spread_pct = (ask - bid) / ((ask + bid) / 2.0) * 100.0
+    if dv is not None and dv < THIN_DOLLAR_VOLUME:
+        warnings.append(f"Thinly traded: about ${dv / 1e6:,.1f}M a day changes hands. Fills can be slow and "
+                        "prices can gap past your stop.")
+    pct_of_volume = position_value / dv * 100.0 if dv and dv > 0 else None
+    if pct_of_volume is not None and pct_of_volume > MAX_POSITION_PCT_OF_VOLUME:
+        warnings.append(f"This position would be {pct_of_volume:.1f}% of a normal day's dollar volume; "
+                        "a size this large can move the price against you.")
+    if spread_pct is not None and spread_pct > WIDE_SPREAD_PCT:
+        warnings.append(f"Wide spread: buyers and sellers are {spread_pct:.2f}% apart right now. Use a limit "
+                        "order; a market order can cost more than you expect.")
     return {
         "entry": round(entry, 2),
+        "entry_source": "live" if live is not None else "scan",
+        "scan_price": round(scan_price, 2),
+        "live_price": round(live, 2) if live is not None else None,
+        "live_at": live_at if live is not None else None,
         "stop": round(stop, 2),
         "stop_pct": round(stop_pct, 1),
         "targets": [round(entry + r * risk_per_share, 2) for r in TARGET_R],
@@ -107,6 +158,16 @@ def build_trade_plan(
         "risk_per_share": round(risk_per_share, 2),
         "shares": shares,
         "risk_budget": round(risk_budget, 2),
+        "trigger": round(trigger, 2) if trigger is not None else None,
+        "chase_limit": round(chase_limit, 2),
+        "moved_since_scan_pct": round(moved, 2) if moved is not None else None,
+        "liquidity": {
+            "dollar_volume_20d": round(dv, 0) if dv is not None else None,
+            "spread_pct": round(spread_pct, 3) if spread_pct is not None else None,
+            "position_value": round(position_value, 2),
+            "position_pct_of_volume": round(pct_of_volume, 3) if pct_of_volume is not None else None,
+        },
+        "warnings": warnings,
     }
 
 

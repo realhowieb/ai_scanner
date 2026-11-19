@@ -24,7 +24,7 @@ type Row = {
   enabled: boolean; lastFired: string | null; sub: string; email: boolean | null; fired: number;
 };
 
-const LEGACY_KIND: Record<string, string> = { breakout: "Breakout", watchlist: "Watchlist", price: "Price", move: "Move", rvol: "RVOL", ema_cross: "Technical", ewo_cross: "Technical" };
+const LEGACY_KIND: Record<string, string> = { breakout: "Breakout", watchlist: "Watchlist", price: "Price", move: "Move", rvol: "RVOL", trigger: "Trigger", ema_cross: "Technical", ewo_cross: "Technical" };
 function ruleKind(t: string): string {
   if (t === "SCAN_MATCH") return "Scan";
   if (t === "RVOL_ABOVE") return "RVOL";

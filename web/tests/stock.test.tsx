@@ -8,6 +8,9 @@ import { StockView } from "@/features/StockView";
 import { stockDetail } from "./fixtures";
 import { jsonResponse } from "./helpers";
 
+// The market badge loads its own data; these tests count the page's own requests.
+vi.mock("@/features/MarketCondition", async (orig) => ({ ...(await orig<typeof import("@/features/MarketCondition")>()), MarketConditionBadge: () => null }));
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),

@@ -7,6 +7,8 @@ Alert types (alert_type column):
                 latest scan results (i.e. it passed the scan).
 - 'price'     : fire when ticker's Last crosses `direction` ('above'/'below')
                 the `threshold` price.
+- 'trigger'   : fire when ticker trades at/above `threshold` (a breakout level) while
+                today's volume is running ahead of its normal pace (real-time worker).
 - 'ema_cross' : fire when EMA 9 crosses EMA 21 for `ticker`; direction is
                 'bullish' or 'bearish'.
 - 'ewo_cross' : fire when the Elliott Wave Oscillator (SMA5-SMA35) crosses the
@@ -24,7 +26,8 @@ from db.engine import get_neon_conn, schema_once
 
 # 'move' (abs % change today >= threshold) and 'rvol' (today's volume vs 20d
 # avg >= threshold) are evaluated by the real-time worker, not the cron.
-ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross")
+# 'trigger' (price at/above a breakout level on a strong volume pace) is real-time too.
+ALERT_TYPES = ("breakout", "watchlist", "price", "move", "rvol", "trigger", "ema_cross", "ewo_cross")
 
 
 @schema_once

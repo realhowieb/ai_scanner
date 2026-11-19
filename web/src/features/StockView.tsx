@@ -24,6 +24,7 @@ import { StockIndicatorEvidence } from "./IndicatorEvidence";
 import { SnapshotTime } from "./SnapshotTime";
 import { SimilarSetups, SymbolEvidence } from "./OutcomeEvidence";
 import { describeAlert } from "./AlertForm";
+import { MarketConditionBadge } from "./MarketCondition";
 import { PriceAlertButton } from "./PriceAlert";
 import { PickupLine } from "./Pickup";
 import { PriceChart, type ChartEvent } from "./PriceChart";
@@ -258,7 +259,9 @@ function BackLink() {
 const DEFAULT_ACCOUNT = 10_000;
 const DEFAULT_RISK = 1;
 
-/** Pro: the API's trade plan for a name in the latest scan (stop from volatility, 1.5R and 3R targets). */
+/** Pro: the API's trade plan for a name in the latest scan, rebuilt from the live price when
+ * there is one (stop from volatility, 1.5R and 3R targets), with the breakout trigger, a
+ * don't-chase line and plain execution warnings (chasing, thin trading, wide spread, size). */
 function TradePlan({ s }: { s: Stock }) {
   const [size, setSize] = useState(String(DEFAULT_ACCOUNT));
   const [risk, setRisk] = useState(String(DEFAULT_RISK));
@@ -273,8 +276,10 @@ function TradePlan({ s }: { s: Stock }) {
     if (valid) setQ({ size: nSize, risk: nRisk });
   };
   const p = plan.data;
+  const liq = p?.liquidity;
   return (
     <div className="stack-sm">
+      <MarketConditionBadge compact />
       <form className="inline-form" onSubmit={submit} aria-label="Trade plan settings">
         <label className="field"><span>Account size ($)</span><input inputMode="decimal" value={size} onChange={(e) => setSize(e.target.value)} /></label>
         <label className="field"><span>Risk per trade (%)</span><input inputMode="decimal" value={risk} onChange={(e) => setRisk(e.target.value)} /></label>
@@ -283,14 +288,32 @@ function TradePlan({ s }: { s: Stock }) {
       {!valid && <p className="form-error">Account size from $100 and risk above 0% up to 10%.</p>}
       {plan.error && !p ? (plan.error.status === 404 ? <p className="cap">{plan.error.message}</p> : <ErrorState error={plan.error} onRetry={plan.reload} what="the trade plan" />)
         : !p ? <Skeleton rows={3} label="Loading the trade plan" /> : (
-          <dl className="kv">
-            <div><dt>Entry (scan price)</dt><dd className="mono">{price(p.entry)}</dd></div>
-            <div><dt>Stop</dt><dd className="mono">{price(p.stop)} <span className="cap">(−{p.stop_pct.toFixed(1)}%)</span></dd></div>
-            {p.targets.map((t, i) => <div key={t}><dt>Target {i + 1}</dt><dd className="mono">{price(t)} <span className="cap">({p.target_r[i]}R)</span></dd></div>)}
-            <div><dt>Shares</dt><dd className="mono">{p.shares.toLocaleString()} <span className="cap">risking {price(p.risk_budget)}</span></dd></div>
-          </dl>
+          <>
+            {(p.warnings ?? []).length > 0 && (
+              <ul className="plan-warnings" aria-label="Before you trade">
+                {p.warnings!.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
+            <dl className="kv">
+              <div><dt>{p.entry_source === "live" ? "Entry (live price)" : "Entry (scan price)"}</dt><dd className="mono">{price(p.entry)}
+                {p.entry_source === "live" && p.scan_price != null && <span className="cap"> scan {price(p.scan_price)}{p.moved_since_scan_pct != null ? `, ${p.moved_since_scan_pct >= 0 ? "+" : ""}${p.moved_since_scan_pct.toFixed(1)}%` : ""}</span>}</dd></div>
+              {p.trigger != null && <div><dt>Breakout trigger</dt><dd className="mono">{price(p.trigger)} <span className="cap">(20-day high)</span></dd></div>}
+              {p.chase_limit != null && <div><dt>Don&apos;t chase above</dt><dd className="mono">{price(p.chase_limit)}</dd></div>}
+              <div><dt>Stop</dt><dd className="mono">{price(p.stop)} <span className="cap">(−{p.stop_pct.toFixed(1)}%)</span></dd></div>
+              {p.targets.map((t, i) => <div key={t}><dt>Target {i + 1}</dt><dd className="mono">{price(t)} <span className="cap">({p.target_r[i]}R)</span></dd></div>)}
+              <div><dt>Shares</dt><dd className="mono">{p.shares.toLocaleString()} <span className="cap">risking {price(p.risk_budget)}</span></dd></div>
+              {liq?.dollar_volume_20d != null && <div><dt>Avg daily $ volume</dt><dd className="mono">${(liq.dollar_volume_20d / 1e6).toFixed(1)}M
+                {liq.position_pct_of_volume != null && <span className="cap"> · you&apos;d be {liq.position_pct_of_volume.toFixed(2)}%</span>}</dd></div>}
+              {liq?.spread_pct != null && <div><dt>Bid-ask spread</dt><dd className="mono">{liq.spread_pct.toFixed(2)}%</dd></div>}
+            </dl>
+            <div className="row-actions">
+              {p.trigger != null && <PriceAlertButton type="trigger" ticker={s.ticker} at={p.trigger} label="Alert me at the trigger"
+                note="Fires within about a minute when price reaches the trigger on strong volume, during market hours." />}
+              <PriceAlertButton ticker={s.ticker} at={p.stop} direction="below" label="Alert me at the stop" />
+            </div>
+          </>
         )}
-      <p className="cap">Stop at half the 20-day volatility (2–8%), targets at 1.5R and 3R. Educational only, not advice.</p>
+      <p className="cap">Stop at half the 20-day volatility (2–8%), targets at 1.5R and 3R. Don&apos;t chase above the scan price plus half the planned risk. Prices are from a single exchange feed and can lag the full market by a moment. Educational only, not advice.</p>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { ScannerDataStatus } from "@/features/ScannerDataStatus";
+import { MarketConditionBadge } from "@/features/MarketCondition";
 import { api, unwrap } from "@/api/client";
 import { Card, Empty, ErrorState, Locked, Skeleton, UpgradeButton } from "@/components/ui";
 import { AIScanPanel } from "@/features/AIScanPanel";
@@ -172,6 +173,7 @@ export function ScannerView() {
       </section>
       {data && !lockedSignal && <ScannerDataStatus info={data.freshness} scanAt={data.scan_at} stale={data.stale}
         checkedAt={updatedAt} refreshing={refreshing} error={error} reload={reload} liveAt={ownRows ? null : live.updatedAt} />}
+      {!lockedSignal && <MarketConditionBadge />}
 
       {leader && !ownRows && <p className="scanner-leader cap"><Link href={`/stocks/${encodeURIComponent(leader.ticker)}`}>Review {leader.ticker}</Link> · HSF {leader.score} · leads the current ranked view</p>}
 

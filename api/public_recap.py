@@ -7,8 +7,13 @@ week, plus the biggest earnings reports of the week after.
     Earnings next week      the biggest TEASER_PER_DAY reporters a day (api.earnings_week),
                             with how many more report; scores stay in the app
 
-No returns or results are shown: a single week of picks says nothing about an edge, and
-the page must not read as a performance claim.
+    How last week's picks did   the week before's daily top picks over their 5 trading
+                            days vs SPY (api.public_record.week_outcomes), losers shown
+                            next to winners. This week's picks haven't finished their 5
+                            days yet, so they're never scored here.
+
+One week of results says nothing about an edge; the page says so and links the full
+public track record.
 
 A week is published once it is over (Saturday 00:00 ET). Its recap is built on the first
 request and stored in hsf_public_recaps, so it never changes afterwards; the earnings
@@ -146,6 +151,7 @@ def build(key: str, now: dt.datetime) -> Dict[str, Any]:
             r["name"] = names.get(r["ticker"])
     except Exception as _ignored:
         swallowed("api.public_recap.build", _ignored)
+    payload["last_week"] = _last_week(monday)
     payload["earnings"] = None
     today = now.astimezone(_et()).date()
     if today <= monday + dt.timedelta(days=7):  # the week after hasn't started trading yet (Mon counts)
@@ -158,6 +164,16 @@ def build(key: str, now: dt.datetime) -> Dict[str, Any]:
         except Exception as _ignored:
             swallowed("api.public_recap.build", _ignored)
     return payload
+
+
+def _last_week(monday: dt.date) -> Optional[Dict[str, Any]]:
+    try:
+        from api.public_record import week_outcomes
+
+        return week_outcomes(monday - dt.timedelta(days=7))
+    except Exception as _ignored:
+        swallowed("api.public_recap._last_week", _ignored)
+        return None
 
 
 # ---- stored snapshots -------------------------------------------------------------------------
@@ -244,6 +260,13 @@ def recap(key: Optional[str] = None, *, now: Optional[dt.datetime] = None) -> Op
         except Exception:
             found = None
         if found and found.get("v") == VERSION:
+            if "last_week" not in found:  # stored before last week's results were added
+                found["last_week"] = _last_week(week_monday(key))
+                try:
+                    if found["last_week"] is not None:  # a failed lookup is retried next time
+                        _store(found)
+                except Exception as _ignored:
+                    swallowed("api.public_recap.recap.backfill", _ignored)
             return found
         payload = build(key, now)
         if not payload["ranked"]:

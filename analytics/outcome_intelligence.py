@@ -593,16 +593,23 @@ def by_horizon(records: Sequence[Dict[str, Any]], filters: Dict[str, Any], *,
 
 
 def by_group(records: Sequence[Dict[str, Any]], filters: Dict[str, Any], *, horizon: int = DEFAULT_HORIZON,
-             unit: str = DEFAULT_UNIT, group_by: str = "setup") -> Dict[str, Any]:
-    """Per canonical setup (primary_setup) or per signal label. Ordered by sample
-    size, then name; never by performance. A record carries several signals, so
-    signal groups overlap (stated in the response)."""
-    if group_by not in ("setup", "signal"):
-        raise ValueError("group_by must be setup or signal")
+             unit: str = DEFAULT_UNIT, group_by: str = "setup",
+             condition_of: Optional[Any] = None) -> Dict[str, Any]:
+    """Per canonical setup (primary_setup), per signal label, or per market condition
+    on the entry day (`condition_of(entry_day)`, see analytics.market_condition; days
+    it can't place are "unknown"). Ordered by sample size, then name; never by
+    performance. A record carries several signals, so signal groups overlap."""
+    if group_by not in ("setup", "signal", "condition"):
+        raise ValueError("group_by must be setup, signal or condition")
+    if group_by == "condition" and condition_of is None:
+        raise ValueError("market condition history is unavailable")
     chosen = select(records, filters, unit=unit, horizon=horizon)
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for r in chosen:
-        keys = [r.get("setup") or "unlabeled"] if group_by == "setup" else (r["signals"] or ["none"])
+        if group_by == "condition":
+            keys = [condition_of(r.entry_day) or "unknown"]
+        else:
+            keys = [r.get("setup") or "unlabeled"] if group_by == "setup" else (r["signals"] or ["none"])
         for k in keys:
             groups.setdefault(str(k), []).append(r)
     rows = []

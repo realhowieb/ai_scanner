@@ -245,7 +245,7 @@ export function TickerLink({ ticker, named = false, logo = true, scanId }: { tic
 export function ResearchNotice({ compact = false }: { compact?: boolean }) {
   return (
     <p className={compact ? "cap" : "notice"} role={compact ? undefined : "note"}>
-      HSF highlights research signals from the available scan data. It does not predict profit, recommend entries or exits, or replace your own risk review.
+      HSF highlights research signals from the available scan data. It does not predict profit or tell you to buy or sell. Pro trade plans turn your own account size and risk into entry, stop and size levels; they are a risk-planning tool and don&apos;t replace your own review.
     </p>
   );
 }

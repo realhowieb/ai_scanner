@@ -504,7 +504,7 @@ class WatchlistRef(BaseModel):
 
 class Alert(BaseModel):
     id: int
-    type: Literal["breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross"]
+    type: Literal["breakout", "watchlist", "price", "move", "rvol", "trigger", "ema_cross", "ewo_cross"]
     ticker: Optional[str] = None
     threshold: Optional[float] = None
     direction: Optional[str] = None
@@ -645,7 +645,7 @@ class AlertThreshold(BaseModel):
 
 
 class AlertType(BaseModel):
-    type: Literal["breakout", "watchlist", "price", "move", "rvol", "ema_cross", "ewo_cross"]
+    type: Literal["breakout", "watchlist", "price", "move", "rvol", "trigger", "ema_cross", "ewo_cross"]
     label: str
     description: str
     needs_ticker: bool
@@ -1469,9 +1469,20 @@ class JournalInsights(BaseModel):
     by_source: List[JournalGroup] = []
 
 
+class TradePlanLiquidity(BaseModel):
+    dollar_volume_20d: Optional[float] = Field(default=None, description="Average daily dollar volume over 20 sessions, from the scan")
+    spread_pct: Optional[float] = Field(default=None, description="Live ask minus bid as % of the mid price; null without a quote")
+    position_value: float = Field(description="Shares x entry")
+    position_pct_of_volume: Optional[float] = Field(default=None, description="Position value as % of the 20-day average dollar volume")
+
+
 class TradePlan(BaseModel):
     ticker: str
     entry: float
+    entry_source: Literal["live", "scan"] = Field(default="scan", description="live: the latest trade (the scan's levels are recalculated from it); scan: the scan price")
+    scan_price: Optional[float] = Field(default=None, description="The price when the scan ran")
+    live_price: Optional[float] = None
+    live_at: Optional[str] = Field(default=None, description="Time of the live trade")
     stop: float
     stop_pct: float
     targets: List[float]
@@ -1479,6 +1490,11 @@ class TradePlan(BaseModel):
     risk_per_share: float
     shares: int
     risk_budget: float
+    trigger: Optional[float] = Field(default=None, description="Breakout level: the 20-day high when the scan has it, else null")
+    chase_limit: Optional[float] = Field(default=None, description="Don't-chase price: scan price + half the planned risk per share")
+    moved_since_scan_pct: Optional[float] = Field(default=None, description="Live price vs scan price, %")
+    liquidity: Optional[TradePlanLiquidity] = None
+    warnings: List[str] = Field(default=[], description="Plain-language execution warnings: chasing, thin trading, wide spread, large position vs volume")
 
 
 class PaperStatus(BaseModel):
@@ -1695,7 +1711,7 @@ class OutcomeGroup(OutcomeMetrics):
 
 
 class OutcomeGroups(_OutcomeEnvelope):
-    group_by: Literal["setup", "signal"]
+    group_by: Literal["setup", "signal", "condition"]
     groups_overlap: bool = Field(description="True for signals: one record can carry several")
     groups: List[OutcomeGroup]
 
@@ -2296,6 +2312,29 @@ class RecapEarnings(BaseModel):
     days: List[RecapEarningsDay] = []
 
 
+class RecapPickResult(BaseModel):
+    ticker: str
+    day: str
+    score: int
+    return_5d: float = Field(description="Fraction, close to close over 5 trading days")
+    spy_5d: Optional[float] = None
+    excess_5d: Optional[float] = None
+
+
+class RecapLastWeek(BaseModel):
+    start: str
+    end: str
+    picks: int = Field(description="Matured daily top picks that week")
+    pending: int
+    avg_return: Optional[float] = None
+    avg_spy: Optional[float] = None
+    avg_excess: Optional[float] = None
+    beat_rate: Optional[float] = None
+    up_rate: Optional[float] = None
+    best: List[RecapPickResult] = []
+    worst: List[RecapPickResult] = []
+
+
 class PublicRecap(BaseModel):
     week: str
     start: str
@@ -2304,7 +2343,81 @@ class PublicRecap(BaseModel):
     scan_days: int
     ranked_names: int
     ranked: List[RecapName] = []
+    last_week: Optional[RecapLastWeek] = Field(default=None, description="How the week before's daily top picks did over 5 trading days vs SPY")
     earnings: Optional[RecapEarnings] = None
+
+
+class MarketCondition(BaseModel):
+    available: bool
+    condition: Optional[Literal["trending_up", "choppy", "risk_off"]] = None
+    label: Optional[str] = None
+    advice: Optional[str] = Field(default=None, description="What the condition means for setups, in plain words")
+    why: Optional[str] = Field(default=None, description="The numbers behind it, in one sentence")
+    as_of: Optional[str] = Field(default=None, description="SPY daily bar the condition is based on")
+    spy_close: Optional[float] = None
+    spy_vs_sma20_pct: Optional[float] = None
+    spy_vs_sma50_pct: Optional[float] = None
+    sma20_rising: Optional[bool] = None
+    volatility_20d_pct: Optional[float] = None
+    rule: str
+
+
+class RecordInterval(BaseModel):
+    low: float
+    high: float
+
+
+class RecordSummary(BaseModel):
+    picks: int = Field(description="Matured picks")
+    days: int
+    pending: int = Field(description="Picks still inside their 5 trading days")
+    unavailable: int = Field(description="Matured but no price was available; excluded")
+    first_day: Optional[str] = None
+    last_day: Optional[str] = None
+    avg_return: Optional[float] = None
+    median_return: Optional[float] = None
+    avg_spy: Optional[float] = None
+    avg_excess: Optional[float] = None
+    median_excess: Optional[float] = None
+    beat_rate: Optional[float] = None
+    up_rate: Optional[float] = None
+    excess_ci95: Optional[RecordInterval] = Field(default=None, description="Day-clustered bootstrap interval of avg_excess")
+
+
+class RecordCondition(BaseModel):
+    condition: Literal["trending_up", "choppy", "risk_off"]
+    label: str
+    picks: int
+    days: int
+    avg_return: Optional[float] = None
+    avg_excess: Optional[float] = None
+    median_excess: Optional[float] = None
+    beat_rate: Optional[float] = None
+
+
+class RecordPick(BaseModel):
+    ticker: str
+    day: str
+    score: int
+    setup: Optional[str] = None
+    status: str
+    return_5d: Optional[float] = None
+    spy_5d: Optional[float] = None
+    excess_5d: Optional[float] = None
+    condition: Optional[str] = None
+
+
+class PublicRecord(BaseModel):
+    horizon_days: int
+    top_per_day: int
+    min_score: int
+    summary: RecordSummary
+    verdict: Literal["ahead", "behind", "no_edge_yet"]
+    verdict_text: str
+    min_days: int
+    by_condition: List[RecordCondition] = []
+    recent: List[RecordPick] = Field(default=[], description="Newest matured picks first")
+    generated_at: str
 
 
 class RecapWeek(BaseModel):
