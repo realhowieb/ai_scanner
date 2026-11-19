@@ -92,7 +92,9 @@ def register(app: FastAPI) -> None:
              summary="Outcome Intelligence: by setup or signal (Pro)")
     def outcomes_setups(account: Dict[str, Any] = Depends(current_account), p: OutcomeParams = Depends(),
                         horizon: int = HORIZON,
-                        group_by: Literal["setup", "signal"] = Query("setup")) -> Dict[str, Any]:
+                        group_by: Literal["setup", "signal", "condition"] = Query(
+                            "setup", description="condition: the market condition (Trending up / Choppy / Risk-off) at the close before each entry day")
+                        ) -> Dict[str, Any]:
         """Groups ordered by sample size (never by performance), each with its counts."""
         require_feature(account, "can_track_record")
         h = _horizon(horizon)

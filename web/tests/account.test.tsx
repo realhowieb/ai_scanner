@@ -299,7 +299,8 @@ describe("Track record: HSF evidence (Outcome Intelligence)", () => {
     expect(card).toHaveTextContent("Insufficient sample coverage");
     expect(card).toHaveTextContent("1 matured signal has no SPY comparison yet");
     // No hidden filters on the overview (the explorer and through-time cards send their own choices).
-    for (const c of calls.filter((x) => /^\/v1\/outcomes\/(summary|scores|horizons|setups)$/.test(x.path))) expect(c.search).toBe("");
+    // The market-condition card asks for a grouping, never a filter.
+    for (const c of calls.filter((x) => /^\/v1\/outcomes\/(summary|scores|horizons|setups)$/.test(x.path))) expect(["", "?group_by=condition"]).toContain(c.search);
   });
 
   it("shows every score bucket (weak ones included), every horizon and every setup", async () => {

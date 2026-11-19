@@ -3477,6 +3477,7 @@
        "price",
        "move",
        "rvol",
+       "trigger",
        "ema_cross",
        "ewo_cross"
       ],
@@ -3535,7 +3536,7 @@
       "title": "Ticker"
      },
      "type": {
-      "description": "breakout, watchlist, price, move, rvol, ema_cross or ewo_cross",
+      "description": "breakout, watchlist, price, move, rvol, trigger, ema_cross or ewo_cross",
       "title": "Type",
       "type": "string"
      },
@@ -4252,6 +4253,7 @@
        "price",
        "move",
        "rvol",
+       "trigger",
        "ema_cross",
        "ewo_cross"
       ],
@@ -9944,6 +9946,142 @@
     "title": "Market",
     "type": "object"
    },
+   "MarketCondition": {
+    "properties": {
+     "advice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "What the condition means for setups, in plain words",
+      "title": "Advice"
+     },
+     "as_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "SPY daily bar the condition is based on",
+      "title": "As Of"
+     },
+     "available": {
+      "title": "Available",
+      "type": "boolean"
+     },
+     "condition": {
+      "anyOf": [
+       {
+        "enum": [
+         "trending_up",
+         "choppy",
+         "risk_off"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Condition"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     },
+     "rule": {
+      "title": "Rule",
+      "type": "string"
+     },
+     "sma20_rising": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sma20 Rising"
+     },
+     "spy_close": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spy Close"
+     },
+     "spy_vs_sma20_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spy Vs Sma20 Pct"
+     },
+     "spy_vs_sma50_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spy Vs Sma50 Pct"
+     },
+     "volatility_20d_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Volatility 20D Pct"
+     },
+     "why": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The numbers behind it, in one sentence",
+      "title": "Why"
+     }
+    },
+    "required": [
+     "available",
+     "rule"
+    ],
+    "title": "MarketCondition",
+    "type": "object"
+   },
    "MarketingCampaign": {
     "properties": {
      "accounts": {
@@ -11665,7 +11803,8 @@
      "group_by": {
       "enum": [
        "setup",
-       "signal"
+       "signal",
+       "condition"
       ],
       "title": "Group By",
       "type": "string"
@@ -14498,6 +14637,17 @@
       "title": "End",
       "type": "string"
      },
+     "last_week": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecapLastWeek"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "How the week before's daily top picks did over 5 trading days vs SPY"
+     },
      "ranked": {
       "default": [],
       "items": {
@@ -14556,6 +14706,75 @@
      }
     },
     "title": "PublicRecapIndex",
+    "type": "object"
+   },
+   "PublicRecord": {
+    "properties": {
+     "by_condition": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecordCondition"
+      },
+      "title": "By Condition",
+      "type": "array"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     },
+     "horizon_days": {
+      "title": "Horizon Days",
+      "type": "integer"
+     },
+     "min_days": {
+      "title": "Min Days",
+      "type": "integer"
+     },
+     "min_score": {
+      "title": "Min Score",
+      "type": "integer"
+     },
+     "recent": {
+      "default": [],
+      "description": "Newest matured picks first",
+      "items": {
+       "$ref": "#/components/schemas/RecordPick"
+      },
+      "title": "Recent",
+      "type": "array"
+     },
+     "summary": {
+      "$ref": "#/components/schemas/RecordSummary"
+     },
+     "top_per_day": {
+      "title": "Top Per Day",
+      "type": "integer"
+     },
+     "verdict": {
+      "enum": [
+       "ahead",
+       "behind",
+       "no_edge_yet"
+      ],
+      "title": "Verdict",
+      "type": "string"
+     },
+     "verdict_text": {
+      "title": "Verdict Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "horizon_days",
+     "top_per_day",
+     "min_score",
+     "summary",
+     "verdict",
+     "verdict_text",
+     "min_days",
+     "generated_at"
+    ],
+    "title": "PublicRecord",
     "type": "object"
    },
    "PublicSocialPost": {
@@ -15380,6 +15599,106 @@
     "title": "RecapEarningsName",
     "type": "object"
    },
+   "RecapLastWeek": {
+    "properties": {
+     "avg_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Excess"
+     },
+     "avg_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Return"
+     },
+     "avg_spy": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Spy"
+     },
+     "beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Beat Rate"
+     },
+     "best": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapPickResult"
+      },
+      "title": "Best",
+      "type": "array"
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "pending": {
+      "title": "Pending",
+      "type": "integer"
+     },
+     "picks": {
+      "description": "Matured daily top picks that week",
+      "title": "Picks",
+      "type": "integer"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     },
+     "up_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Up Rate"
+     },
+     "worst": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/RecapPickResult"
+      },
+      "title": "Worst",
+      "type": "array"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "picks",
+     "pending"
+    ],
+    "title": "RecapLastWeek",
+    "type": "object"
+   },
    "RecapName": {
     "properties": {
      "best_score": {
@@ -15431,6 +15750,57 @@
     "title": "RecapName",
     "type": "object"
    },
+   "RecapPickResult": {
+    "properties": {
+     "day": {
+      "title": "Day",
+      "type": "string"
+     },
+     "excess_5d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Excess 5D"
+     },
+     "return_5d": {
+      "description": "Fraction, close to close over 5 trading days",
+      "title": "Return 5D",
+      "type": "number"
+     },
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "spy_5d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spy 5D"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "day",
+     "score",
+     "return_5d"
+    ],
+    "title": "RecapPickResult",
+    "type": "object"
+   },
    "RecapWeek": {
     "properties": {
      "end": {
@@ -15452,6 +15822,325 @@
      "end"
     ],
     "title": "RecapWeek",
+    "type": "object"
+   },
+   "RecordCondition": {
+    "properties": {
+     "avg_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Excess"
+     },
+     "avg_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Return"
+     },
+     "beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Beat Rate"
+     },
+     "condition": {
+      "enum": [
+       "trending_up",
+       "choppy",
+       "risk_off"
+      ],
+      "title": "Condition",
+      "type": "string"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "median_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess"
+     },
+     "picks": {
+      "title": "Picks",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "condition",
+     "label",
+     "picks",
+     "days"
+    ],
+    "title": "RecordCondition",
+    "type": "object"
+   },
+   "RecordInterval": {
+    "properties": {
+     "high": {
+      "title": "High",
+      "type": "number"
+     },
+     "low": {
+      "title": "Low",
+      "type": "number"
+     }
+    },
+    "required": [
+     "low",
+     "high"
+    ],
+    "title": "RecordInterval",
+    "type": "object"
+   },
+   "RecordPick": {
+    "properties": {
+     "condition": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Condition"
+     },
+     "day": {
+      "title": "Day",
+      "type": "string"
+     },
+     "excess_5d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Excess 5D"
+     },
+     "return_5d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Return 5D"
+     },
+     "score": {
+      "title": "Score",
+      "type": "integer"
+     },
+     "setup": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Setup"
+     },
+     "spy_5d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spy 5D"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "day",
+     "score",
+     "status"
+    ],
+    "title": "RecordPick",
+    "type": "object"
+   },
+   "RecordSummary": {
+    "properties": {
+     "avg_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Excess"
+     },
+     "avg_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Return"
+     },
+     "avg_spy": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Spy"
+     },
+     "beat_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Beat Rate"
+     },
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     },
+     "excess_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecordInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Day-clustered bootstrap interval of avg_excess"
+     },
+     "first_day": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "First Day"
+     },
+     "last_day": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Day"
+     },
+     "median_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Excess"
+     },
+     "median_return": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Median Return"
+     },
+     "pending": {
+      "description": "Picks still inside their 5 trading days",
+      "title": "Pending",
+      "type": "integer"
+     },
+     "picks": {
+      "description": "Matured picks",
+      "title": "Picks",
+      "type": "integer"
+     },
+     "unavailable": {
+      "description": "Matured but no price was available; excluded",
+      "title": "Unavailable",
+      "type": "integer"
+     },
+     "up_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Up Rate"
+     }
+    },
+    "required": [
+     "picks",
+     "days",
+     "pending",
+     "unavailable"
+    ],
+    "title": "RecordSummary",
     "type": "object"
    },
    "Referrals": {
@@ -19544,9 +20233,76 @@
    },
    "TradePlan": {
     "properties": {
+     "chase_limit": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Don't-chase price: scan price + half the planned risk per share",
+      "title": "Chase Limit"
+     },
      "entry": {
       "title": "Entry",
       "type": "number"
+     },
+     "entry_source": {
+      "default": "scan",
+      "description": "live: the latest trade (the scan's levels are recalculated from it); scan: the scan price",
+      "enum": [
+       "live",
+       "scan"
+      ],
+      "title": "Entry Source",
+      "type": "string"
+     },
+     "liquidity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TradePlanLiquidity"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "live_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Time of the live trade",
+      "title": "Live At"
+     },
+     "live_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Live Price"
+     },
+     "moved_since_scan_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Live price vs scan price, %",
+      "title": "Moved Since Scan Pct"
      },
      "risk_budget": {
       "title": "Risk Budget",
@@ -19555,6 +20311,18 @@
      "risk_per_share": {
       "title": "Risk Per Share",
       "type": "number"
+     },
+     "scan_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The price when the scan ran",
+      "title": "Scan Price"
      },
      "shares": {
       "title": "Shares",
@@ -19585,6 +20353,27 @@
      "ticker": {
       "title": "Ticker",
       "type": "string"
+     },
+     "trigger": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Breakout level: the 20-day high when the scan has it, else null",
+      "title": "Trigger"
+     },
+     "warnings": {
+      "default": [],
+      "description": "Plain-language execution warnings: chasing, thin trading, wide spread, large position vs volume",
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
      }
     },
     "required": [
@@ -19599,6 +20388,56 @@
      "risk_budget"
     ],
     "title": "TradePlan",
+    "type": "object"
+   },
+   "TradePlanLiquidity": {
+    "properties": {
+     "dollar_volume_20d": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Average daily dollar volume over 20 sessions, from the scan",
+      "title": "Dollar Volume 20D"
+     },
+     "position_pct_of_volume": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Position value as % of the 20-day average dollar volume",
+      "title": "Position Pct Of Volume"
+     },
+     "position_value": {
+      "description": "Shares x entry",
+      "title": "Position Value",
+      "type": "number"
+     },
+     "spread_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Live ask minus bid as % of the mid price; null without a quote",
+      "title": "Spread Pct"
+     }
+    },
+    "required": [
+     "position_value"
+    ],
+    "title": "TradePlanLiquidity",
     "type": "object"
    },
    "UnreadAlerts": {
@@ -28050,6 +28889,38 @@
     "summary": "Terms of Service status (public)"
    }
   },
+  "/v1/market/condition": {
+   "get": {
+    "description": "One transparent rule from SPY's daily closes (20- and 50-day averages and 20-day\nvolatility), the same one the Track record splits results by. available=false when\nSPY prices can't be loaded; it is never guessed.",
+    "operationId": "market_condition_v1_market_condition_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MarketCondition"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests"
+     }
+    },
+    "summary": "Market condition: Trending up, Choppy or Risk-off (public)"
+   }
+  },
   "/v1/market/tape": {
    "get": {
     "description": "SPY, QQQ, IWM, DIA, AAPL, MSFT, NVDA and TSLA: last price and change vs the previous close.",
@@ -30031,14 +30902,17 @@
       }
      },
      {
+      "description": "condition: the market condition (Trending up / Choppy / Risk-off) at the close before each entry day",
       "in": "query",
       "name": "group_by",
       "required": false,
       "schema": {
        "default": "setup",
+       "description": "condition: the market condition (Trending up / Choppy / Risk-off) at the close before each entry day",
        "enum": [
         "setup",
-        "signal"
+        "signal",
+        "condition"
        ],
        "title": "Group By",
        "type": "string"
@@ -31914,6 +32788,41 @@
      }
     },
     "summary": "The latest scan's top setups, for the landing page (signed out)"
+   }
+  },
+  "/v1/public/track-record": {
+   "get": {
+    "description": "Each trading day's first scan, its top 10 by HSF Score, frozen when the scan ran,\nshown once its 5 trading days are over: return, SPY over the same days, and the\ndifference, losers included. The verdict is computed from a day-clustered bootstrap\nand says \"no edge proven yet\" unless the evidence clearly says otherwise.",
+    "operationId": "public_track_record_v1_public_track_record_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PublicRecord"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests"
+     },
+     "503": {
+      "description": "Results unavailable"
+     }
+    },
+    "summary": "Every HSF daily top pick and how it did vs the S&P 500 (public)"
    }
   },
   "/v1/public/weekly": {

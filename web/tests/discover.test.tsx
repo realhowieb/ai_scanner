@@ -14,6 +14,9 @@ import { jsonResponse } from "./helpers";
 
 let search = new URLSearchParams();
 const replace = vi.fn();
+// The market badge loads its own data; these tests count the page's own requests.
+vi.mock("@/features/MarketCondition", async (orig) => ({ ...(await orig<typeof import("@/features/MarketCondition")>()), MarketConditionBadge: () => null }));
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => search,
   useRouter: () => ({ replace, push: vi.fn(), back: vi.fn() }),

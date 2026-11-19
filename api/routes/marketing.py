@@ -9,6 +9,7 @@ from fastapi.responses import Response
 
 from api import models, ratelimit
 from api.deps import _ADMIN
+from api.scans import json_safe
 from api.routes.admin import _admin, _analytics
 
 _TAG = "admin (admins only)"
@@ -100,6 +101,32 @@ def register(app: FastAPI) -> None:
         if not found:
             raise HTTPException(404, "There's no recap for that week yet.")
         return found
+
+    @app.get("/v1/public/track-record", response_model=models.PublicRecord,
+             responses={429: {"description": "Too many requests"}, 503: {"description": "Results unavailable"}},
+             summary="Every HSF daily top pick and how it did vs the S&P 500 (public)")
+    def public_track_record(_l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        """Each trading day's first scan, its top 10 by HSF Score, frozen when the scan ran,
+        shown once its 5 trading days are over: return, SPY over the same days, and the
+        difference, losers included. The verdict is computed from a day-clustered bootstrap
+        and says "no edge proven yet" unless the evidence clearly says otherwise."""
+        from api.public_record import public_record
+
+        try:
+            return json_safe(public_record())
+        except Exception:
+            raise HTTPException(503, "The track record isn't available right now.") from None
+
+    @app.get("/v1/market/condition", response_model=models.MarketCondition,
+             responses={429: {"description": "Too many requests"}},
+             summary="Market condition: Trending up, Choppy or Risk-off (public)")
+    def market_condition(_l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        """One transparent rule from SPY's daily closes (20- and 50-day averages and 20-day
+        volatility), the same one the Track record splits results by. available=false when
+        SPY prices can't be loaded; it is never guessed."""
+        from api.market_condition import current
+
+        return current()
 
     @app.get("/v1/admin/marketing", response_model=models.AdminMarketing, responses=_ADMIN, tags=[_TAG],
              openapi_extra=_EXTRA, summary="Where visitors, list sign-ups, accounts and sales come from")

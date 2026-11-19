@@ -10,6 +10,7 @@ import { Fragment, useState } from "react";
 import { watchlists } from "@/api/userData";
 import { useScannerWatchlists } from "@/features/WatchlistScanner";
 
+import { MarketConditionBadge } from "@/features/MarketCondition";
 import { DataFreshness } from "@/features/DataFreshness";
 import { api, unwrap } from "@/api/client";
 import type { Schemas } from "@/api/client";
@@ -239,6 +240,7 @@ export function BriefView() {
         </div>
       </section>
       <DataFreshness info={b?.freshness} />
+      <MarketConditionBadge />
       {brief.error && b && <ErrorLine error={brief.error} />}
       {brief.error && !b ? <ErrorState error={brief.error} onRetry={brief.reload} what="the Market Brief" />
         : !b ? <div className="brief-center"><Card title="Market Pulse" id="pulse"><Skeleton rows={6} label="Loading Market Pulse" /></Card><Card title="HSF Opportunity Radar" id="opps"><Skeleton rows={6} label="Loading Opportunity Radar" brand={false} /></Card></div>

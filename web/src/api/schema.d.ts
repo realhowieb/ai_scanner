@@ -2096,6 +2096,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/market/condition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market condition: Trending up, Choppy or Risk-off (public)
+         * @description One transparent rule from SPY's daily closes (20- and 50-day averages and 20-day
+         *     volatility), the same one the Track record splits results by. available=false when
+         *     SPY prices can't be loaded; it is never guessed.
+         */
+        get: operations["market_condition_v1_market_condition_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/market/tape": {
         parameters: {
             query?: never;
@@ -3046,6 +3068,29 @@ export interface paths {
          *     day change) and how many more a free account sees. Everything else needs an account.
          */
         get: operations["public_top_setups_v1_public_top_setups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/track-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every HSF daily top pick and how it did vs the S&P 500 (public)
+         * @description Each trading day's first scan, its top 10 by HSF Score, frozen when the scan ran,
+         *     shown once its 5 trading days are over: return, SPY over the same days, and the
+         *     difference, losers included. The verdict is computed from a day-clustered bootstrap
+         *     and says "no edge proven yet" unless the evidence clearly says otherwise.
+         */
+        get: operations["public_track_record_v1_public_track_record_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4898,7 +4943,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "breakout" | "watchlist" | "price" | "move" | "rvol" | "ema_cross" | "ewo_cross";
+            type: "breakout" | "watchlist" | "price" | "move" | "rvol" | "trigger" | "ema_cross" | "ewo_cross";
             /**
              * Watchlist Only
              * @default false
@@ -4915,7 +4960,7 @@ export interface components {
             ticker?: string | null;
             /**
              * Type
-             * @description breakout, watchlist, price, move, rvol, ema_cross or ewo_cross
+             * @description breakout, watchlist, price, move, rvol, trigger, ema_cross or ewo_cross
              */
             type: string;
             /**
@@ -5176,7 +5221,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "breakout" | "watchlist" | "price" | "move" | "rvol" | "ema_cross" | "ewo_cross";
+            type: "breakout" | "watchlist" | "price" | "move" | "rvol" | "trigger" | "ema_cross" | "ewo_cross";
             /**
              * Watchlist Only Option
              * @description True when `watchlist_only` applies (breakout)
@@ -7389,6 +7434,42 @@ export interface components {
              */
             stale?: boolean | null;
         };
+        /** MarketCondition */
+        MarketCondition: {
+            /**
+             * Advice
+             * @description What the condition means for setups, in plain words
+             */
+            advice?: string | null;
+            /**
+             * As Of
+             * @description SPY daily bar the condition is based on
+             */
+            as_of?: string | null;
+            /** Available */
+            available: boolean;
+            /** Condition */
+            condition?: ("trending_up" | "choppy" | "risk_off") | null;
+            /** Label */
+            label?: string | null;
+            /** Rule */
+            rule: string;
+            /** Sma20 Rising */
+            sma20_rising?: boolean | null;
+            /** Spy Close */
+            spy_close?: number | null;
+            /** Spy Vs Sma20 Pct */
+            spy_vs_sma20_pct?: number | null;
+            /** Spy Vs Sma50 Pct */
+            spy_vs_sma50_pct?: number | null;
+            /** Volatility 20D Pct */
+            volatility_20d_pct?: number | null;
+            /**
+             * Why
+             * @description The numbers behind it, in one sentence
+             */
+            why?: string | null;
+        };
         /** MarketingCampaign */
         MarketingCampaign: {
             /** Accounts */
@@ -8080,7 +8161,7 @@ export interface components {
              * Group By
              * @enum {string}
              */
-            group_by: "setup" | "signal";
+            group_by: "setup" | "signal" | "condition";
             /** Groups */
             groups: components["schemas"]["OutcomeGroup"][];
             /**
@@ -9183,6 +9264,8 @@ export interface components {
             earnings?: components["schemas"]["RecapEarnings"] | null;
             /** End */
             end: string;
+            /** @description How the week before's daily top picks did over 5 trading days vs SPY */
+            last_week?: components["schemas"]["RecapLastWeek"] | null;
             /**
              * Ranked
              * @default []
@@ -9205,6 +9288,38 @@ export interface components {
              * @default []
              */
             weeks: components["schemas"]["RecapWeek"][];
+        };
+        /** PublicRecord */
+        PublicRecord: {
+            /**
+             * By Condition
+             * @default []
+             */
+            by_condition: components["schemas"]["RecordCondition"][];
+            /** Generated At */
+            generated_at: string;
+            /** Horizon Days */
+            horizon_days: number;
+            /** Min Days */
+            min_days: number;
+            /** Min Score */
+            min_score: number;
+            /**
+             * Recent
+             * @description Newest matured picks first
+             * @default []
+             */
+            recent: components["schemas"]["RecordPick"][];
+            summary: components["schemas"]["RecordSummary"];
+            /** Top Per Day */
+            top_per_day: number;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "ahead" | "behind" | "no_edge_yet";
+            /** Verdict Text */
+            verdict_text: string;
         };
         /** PublicSocialPost */
         PublicSocialPost: {
@@ -9566,6 +9681,40 @@ export interface components {
             /** Time */
             time?: string | null;
         };
+        /** RecapLastWeek */
+        RecapLastWeek: {
+            /** Avg Excess */
+            avg_excess?: number | null;
+            /** Avg Return */
+            avg_return?: number | null;
+            /** Avg Spy */
+            avg_spy?: number | null;
+            /** Beat Rate */
+            beat_rate?: number | null;
+            /**
+             * Best
+             * @default []
+             */
+            best: components["schemas"]["RecapPickResult"][];
+            /** End */
+            end: string;
+            /** Pending */
+            pending: number;
+            /**
+             * Picks
+             * @description Matured daily top picks that week
+             */
+            picks: number;
+            /** Start */
+            start: string;
+            /** Up Rate */
+            up_rate?: number | null;
+            /**
+             * Worst
+             * @default []
+             */
+            worst: components["schemas"]["RecapPickResult"][];
+        };
         /** RecapName */
         RecapName: {
             /** Best Score */
@@ -9584,6 +9733,24 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** RecapPickResult */
+        RecapPickResult: {
+            /** Day */
+            day: string;
+            /** Excess 5D */
+            excess_5d?: number | null;
+            /**
+             * Return 5D
+             * @description Fraction, close to close over 5 trading days
+             */
+            return_5d: number;
+            /** Score */
+            score: number;
+            /** Spy 5D */
+            spy_5d?: number | null;
+            /** Ticker */
+            ticker: string;
+        };
         /** RecapWeek */
         RecapWeek: {
             /** End */
@@ -9592,6 +9759,96 @@ export interface components {
             start: string;
             /** Week */
             week: string;
+        };
+        /** RecordCondition */
+        RecordCondition: {
+            /** Avg Excess */
+            avg_excess?: number | null;
+            /** Avg Return */
+            avg_return?: number | null;
+            /** Beat Rate */
+            beat_rate?: number | null;
+            /**
+             * Condition
+             * @enum {string}
+             */
+            condition: "trending_up" | "choppy" | "risk_off";
+            /** Days */
+            days: number;
+            /** Label */
+            label: string;
+            /** Median Excess */
+            median_excess?: number | null;
+            /** Picks */
+            picks: number;
+        };
+        /** RecordInterval */
+        RecordInterval: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
+        /** RecordPick */
+        RecordPick: {
+            /** Condition */
+            condition?: string | null;
+            /** Day */
+            day: string;
+            /** Excess 5D */
+            excess_5d?: number | null;
+            /** Return 5D */
+            return_5d?: number | null;
+            /** Score */
+            score: number;
+            /** Setup */
+            setup?: string | null;
+            /** Spy 5D */
+            spy_5d?: number | null;
+            /** Status */
+            status: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** RecordSummary */
+        RecordSummary: {
+            /** Avg Excess */
+            avg_excess?: number | null;
+            /** Avg Return */
+            avg_return?: number | null;
+            /** Avg Spy */
+            avg_spy?: number | null;
+            /** Beat Rate */
+            beat_rate?: number | null;
+            /** Days */
+            days: number;
+            /** @description Day-clustered bootstrap interval of avg_excess */
+            excess_ci95?: components["schemas"]["RecordInterval"] | null;
+            /** First Day */
+            first_day?: string | null;
+            /** Last Day */
+            last_day?: string | null;
+            /** Median Excess */
+            median_excess?: number | null;
+            /** Median Return */
+            median_return?: number | null;
+            /**
+             * Pending
+             * @description Picks still inside their 5 trading days
+             */
+            pending: number;
+            /**
+             * Picks
+             * @description Matured picks
+             */
+            picks: number;
+            /**
+             * Unavailable
+             * @description Matured but no price was available; excluded
+             */
+            unavailable: number;
+            /** Up Rate */
+            up_rate?: number | null;
         };
         /** Referrals */
         Referrals: {
@@ -11287,12 +11544,42 @@ export interface components {
         };
         /** TradePlan */
         TradePlan: {
+            /**
+             * Chase Limit
+             * @description Don't-chase price: scan price + half the planned risk per share
+             */
+            chase_limit?: number | null;
             /** Entry */
             entry: number;
+            /**
+             * Entry Source
+             * @description live: the latest trade (the scan's levels are recalculated from it); scan: the scan price
+             * @default scan
+             * @enum {string}
+             */
+            entry_source: "live" | "scan";
+            liquidity?: components["schemas"]["TradePlanLiquidity"] | null;
+            /**
+             * Live At
+             * @description Time of the live trade
+             */
+            live_at?: string | null;
+            /** Live Price */
+            live_price?: number | null;
+            /**
+             * Moved Since Scan Pct
+             * @description Live price vs scan price, %
+             */
+            moved_since_scan_pct?: number | null;
             /** Risk Budget */
             risk_budget: number;
             /** Risk Per Share */
             risk_per_share: number;
+            /**
+             * Scan Price
+             * @description The price when the scan ran
+             */
+            scan_price?: number | null;
             /** Shares */
             shares: number;
             /** Stop */
@@ -11305,6 +11592,40 @@ export interface components {
             targets: number[];
             /** Ticker */
             ticker: string;
+            /**
+             * Trigger
+             * @description Breakout level: the 20-day high when the scan has it, else null
+             */
+            trigger?: number | null;
+            /**
+             * Warnings
+             * @description Plain-language execution warnings: chasing, thin trading, wide spread, large position vs volume
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** TradePlanLiquidity */
+        TradePlanLiquidity: {
+            /**
+             * Dollar Volume 20D
+             * @description Average daily dollar volume over 20 sessions, from the scan
+             */
+            dollar_volume_20d?: number | null;
+            /**
+             * Position Pct Of Volume
+             * @description Position value as % of the 20-day average dollar volume
+             */
+            position_pct_of_volume?: number | null;
+            /**
+             * Position Value
+             * @description Shares x entry
+             */
+            position_value: number;
+            /**
+             * Spread Pct
+             * @description Live ask minus bid as % of the mid price; null without a quote
+             */
+            spread_pct?: number | null;
         };
         /** UnreadAlerts */
         UnreadAlerts: {
@@ -17948,6 +18269,42 @@ export interface operations {
             };
         };
     };
+    market_condition_v1_market_condition_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketCondition"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     market_tape_v1_market_tape_get: {
         parameters: {
             query?: never;
@@ -19370,7 +19727,8 @@ export interface operations {
             query?: {
                 /** @description Trading days: 1, 3 or 5. 5 is the pre-declared primary horizon, not a data-chosen one */
                 horizon?: number;
-                group_by?: "setup" | "signal";
+                /** @description condition: the market condition (Trending up / Choppy / Risk-off) at the close before each entry day */
+                group_by?: "setup" | "signal" | "condition";
                 /** @description Canonical setup (primary_setup), e.g. breakout */
                 setup?: string | null;
                 /** @description Signal label, e.g. golden_cross */
@@ -20532,6 +20890,49 @@ export interface operations {
             };
             /** @description Too many requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    public_track_record_v1_public_track_record_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicRecord"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Results unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

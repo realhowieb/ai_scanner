@@ -136,6 +136,18 @@ await step("Scanner quick view opens a setup without leaving the page", async ()
   check("Scanner quick view opens a setup without leaving the page", /\/scanner/.test(page.url()), ticker);
 });
 
+await step("Scanner shows the market condition (Trending up / Choppy / Risk-off)", async () => {
+  // GET /v1/market/condition; the badge is left out only when SPY prices can't be loaded.
+  const badge = page.getByRole("note", { name: /^Market condition: (Trending up|Choppy|Risk-off)$/ });
+  try {
+    await badge.waitFor({ timeout: 8000 });
+  } catch {
+    check("Scanner shows the market condition (Trending up / Choppy / Risk-off)", false, "no badge (SPY closes unavailable?)");
+    return;
+  }
+  check("Scanner shows the market condition (Trending up / Choppy / Risk-off)", true, await badge.getAttribute("aria-label"));
+});
+
 await step("Scanner shows when HSF picked up each setup", async () => {
   // "Picked up" column: the first scan of the stock's current run, with the price then (pickup in /v1/scans/latest).
   await page.getByRole("columnheader", { name: /Picked up/ }).first().waitFor();
@@ -354,6 +366,25 @@ if (email2) {
 
 // Clean up from a fresh sign-in, so a step that failed half way (signed out, closed page)
 // doesn't also leave this run's records behind.
+await step("public track record and market explainer load signed out", async () => {
+  const anon = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ap = await anon.newPage();
+  await ap.goto(`${BASE}/results`);
+  await ap.getByRole("heading", { level: 1, name: "Every top pick, and how it did" }).waitFor();
+  const verdict = ap.getByRole("heading", { name: /^(No proven edge yet|Ahead of the S&P 500 so far|Behind the S&P 500 so far)$/ });
+  const ok = await verdict.waitFor({ timeout: 15000 }).then(() => true, () => false);
+  const verdictText = ok ? await verdict.textContent() : "no verdict (API answered nothing?)";
+  const rows = ok ? await ap.locator("#picks-h ~ .table-wrap tbody tr").count() : 0;
+  const overflow = await ap.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  await shot(ap, "journey-results-phone");
+  await ap.goto(`${BASE}/how-hsf-works#method-market`);
+  const market = await ap.locator("#method-market").getByRole("heading", { name: "Market conditions" }).count();
+  const speed = await ap.locator("#method-freshness").count();
+  await anon.close();
+  check("public track record and market explainer load signed out", ok && rows > 0 && !overflow && market === 1 && speed === 1,
+    `${verdictText}; ${rows} picks listed${overflow ? "; page scrolls sideways on a phone" : ""}`);
+});
+
 await step("sign-up form is short and keeps a plan picked on Pricing", async () => {
   const anon = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const ap = await anon.newPage();

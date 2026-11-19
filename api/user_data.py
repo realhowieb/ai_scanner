@@ -193,6 +193,7 @@ ALERT_RULES: Dict[str, Dict[str, Any]] = {
     "price": {"ticker": True, "threshold_min": 0.0, "threshold_gt": True, "directions": ("above", "below")},
     "move": {"ticker": True, "threshold_min": 0.5, "directions": None},
     "rvol": {"ticker": True, "threshold_min": 1.0, "directions": None},
+    "trigger": {"ticker": True, "threshold_min": 0.0, "threshold_gt": True, "directions": None},
     "ema_cross": {"ticker": True, "threshold_min": None, "directions": ("bullish", "bearish")},
     "ewo_cross": {"ticker": True, "threshold_min": None, "directions": ("up", "down")},
 }
@@ -215,6 +216,10 @@ ALERT_COPY: Dict[str, Dict[str, Any]] = {
     "rvol": {"label": "Relative volume", "threshold_label": "Times 20-day average volume", "default_threshold": 2.0,
              "description": "Fires when a ticker trades at X times its 20-day average volume. Checked live "
                             "(about every 60 s) during extended hours."},
+    "trigger": {"label": "Breakout trigger", "threshold_label": "Trigger price ($)", "default_threshold": None,
+                "description": "Fires when a ticker trades at or above your trigger price while today's volume is "
+                               "running at least 1.2x its normal pace, so a quiet drift through the level doesn't "
+                               "count. Checked live (about every 60 s) during regular market hours."},
     "ema_cross": {"label": "EMA cross", "description": "Fires when EMA 9 crosses EMA 21. Bullish is a short-term "
                                                        "Golden Cross; bearish is a short-term Death Cross."},
     "ewo_cross": {"label": "EWO cross", "description": "Fires when the Elliott Wave Oscillator (SMA 5 − SMA 35 of "

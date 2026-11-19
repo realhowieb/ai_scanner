@@ -158,8 +158,17 @@ def horizons(filters: Dict[str, Any], unit: str) -> Dict[str, Any]:
 
 
 def setups(filters: Dict[str, Any], horizon: int, unit: str, group_by: str) -> Dict[str, Any]:
+    condition_of = None
+    if group_by == "condition":
+        from api.market_condition import condition_of as lookup, labels_by_day
+
+        labels = labels_by_day()
+        if not labels:
+            raise ValueError("Market condition history is unavailable right now. Try again later.")
+        condition_of = lookup(labels)
     return view("setups", {"f": filters, "h": horizon, "u": unit, "g": group_by},
-                lambda recs: oi.by_group(recs, filters, horizon=horizon, unit=unit, group_by=group_by))
+                lambda recs: oi.by_group(recs, filters, horizon=horizon, unit=unit, group_by=group_by,
+                                         condition_of=condition_of))
 
 
 def timeseries(filters: Dict[str, Any], horizon: int, unit: str, period: str) -> Dict[str, Any]:

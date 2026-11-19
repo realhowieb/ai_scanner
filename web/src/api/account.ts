@@ -75,6 +75,8 @@ export const outcomes = {
   similar: (q: { setup?: string | null; min_score: number; max_score: number }, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/outcomes/horizons", { params: { query: { setup: q.setup || undefined, min_score: q.min_score, max_score: q.max_score } }, signal })),
   setups: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/setups", { signal })),
+  /** The same metrics split by the market condition (Trending up / Choppy / Risk-off) before each entry day. */
+  conditions: (signal?: AbortSignal) => unwrap(api.GET("/v1/outcomes/setups", { params: { query: { group_by: "condition" } }, signal })),
   /** This ticker's aggregates plus its newest signals (records at every horizon). */
   symbol: (ticker: string, pageSize = 10, signal?: AbortSignal) =>
     unwrap(api.GET("/v1/outcomes/symbols/{ticker}", { params: { path: { ticker }, query: { page_size: pageSize } }, signal })),

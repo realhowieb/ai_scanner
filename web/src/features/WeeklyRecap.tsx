@@ -1,8 +1,8 @@
 "use client";
 
 // The public weekly recap (/weekly and /weekly/2026-W44): what HSF's scanner ranked most in a
-// finished week and the biggest earnings of the week after. A record of rankings, never
-// results: no returns are shown, so the page can't read as a performance claim.
+// finished week, how the week before's top picks did over their 5 trading days (losers shown
+// beside winners, linked to the full public track record), and the biggest earnings ahead.
 import Link from "@/components/Link";
 
 import type { Schemas } from "@/api/client";
@@ -21,6 +21,40 @@ const DAY = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short",
 const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
 
 const TIME: Record<string, string> = { bmo: "before open", amc: "after close" };
+
+const pct = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`);
+const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "");
+
+function LastWeek({ lw }: { lw: NonNullable<Recap["last_week"]> }) {
+  const row = (p: (typeof lw.best)[number]) => (
+    <tr key={`${p.day}-${p.ticker}`}>
+      <th scope="row"><TickerLogo ticker={p.ticker} size={16} /> <span className="mono strong">{p.ticker}</span></th>
+      <td className="cap">{DAY.format(d(p.day))}</td>
+      <td className={`num mono ${tone(p.return_5d)}`}>{pct(p.return_5d)}</td>
+      <td className={`num mono ${tone(p.excess_5d)}`}>{pct(p.excess_5d)}</td>
+    </tr>
+  );
+  return (
+    <section className="card stack-sm" aria-labelledby="lastweek-h">
+      <h2 id="lastweek-h" className="h2">How last week&apos;s top picks did</h2>
+      <p className="body-sm">
+        The {lw.picks} daily top-10 picks from {weekRange(lw.start, lw.end)}, each over the 5 trading days after it was picked:
+        average <span className={`mono ${tone(lw.avg_return)}`}>{pct(lw.avg_return)}</span> against <span className="mono">{pct(lw.avg_spy)}</span> for
+        the S&amp;P 500 (<span className={`mono ${tone(lw.avg_excess)}`}>{pct(lw.avg_excess)}</span> difference). {lw.beat_rate != null && `${Math.round(lw.beat_rate * 100)}% beat the S&P 500.`}
+      </p>
+      <div className="grid2">
+        {[["Best", lw.best], ["Worst", lw.worst]].map(([label, list]) => (
+          <div key={label as string} className="table-wrap"><table className="table">
+            <caption className="cap">{label as string} three</caption>
+            <thead><tr><th scope="col">Stock</th><th scope="col">Picked</th><th scope="col" className="num">5 days</th><th scope="col" className="num">vs S&amp;P</th></tr></thead>
+            <tbody>{(list as typeof lw.best).map(row)}</tbody>
+          </table></div>
+        ))}
+      </div>
+      <p className="cap">One week says very little about whether HSF has an edge. <Link href="/results">See every pick on the track record</Link>, losers included. No trading costs applied; not a recommendation.</p>
+    </section>
+  );
+}
 
 export function RecapBody({ recap }: { recap: Recap }) {
   return (
@@ -49,6 +83,7 @@ export function RecapBody({ recap }: { recap: Recap }) {
         </table></div>
         <p className="cap">HSF Score (0–100) ranks how strongly the technical evidence lined up at scan time. It is not a probability of profit, and a ranking is not a recommendation to buy or sell.</p>
       </section>
+      {recap.last_week && recap.last_week.picks > 0 && <LastWeek lw={recap.last_week} />}
       {recap.earnings && (
         <section className="card stack-sm" aria-labelledby="earn-h">
           <h2 id="earn-h" className="h2">Biggest earnings next week</h2>

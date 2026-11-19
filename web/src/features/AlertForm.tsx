@@ -28,6 +28,7 @@ export function describeAlert(a: Pick<Alert, "type" | "ticker" | "threshold" | "
     case "price": return `${t} price ${a.direction === "below" ? "falls below" : "rises above"} $${money(n)}`;
     case "move": return `${t} moves ±${n}% in a day`;
     case "rvol": return `${t} trades at ${n}× its average volume`;
+    case "trigger": return `${t} breaks above $${money(n)} on strong volume`;
     case "ema_cross": return `${t} EMA 9/21 ${a.direction === "bearish" ? "bearish" : "bullish"} cross`;
     case "ewo_cross": return `${t} EWO crosses ${a.direction === "down" ? "down" : "up"} through zero`;
     default: return a.type;
