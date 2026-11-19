@@ -101,7 +101,7 @@ function Picks({ picks, perDay }: { picks: Pick[]; perDay: number }) {
   return (
     <section className="card stack-sm" aria-labelledby="picks-h">
       <h2 id="picks-h" className="h2">Every recent pick</h2>
-      <p className="body-sm">The newest {picks.length} scored picks: each trading day&apos;s first scan, its top {perDay} by HSF Score.</p>
+      <p className="body-sm">The newest {picks.length} scored picks: each trading day&apos;s first scan, its top {perDay} by HSF Score (fewer on days when fewer score 40 or higher).</p>
       <div className="chips" role="group" aria-label="Sort picks">
         {(["newest", "best", "worst"] as const).map((k) => (
           <button key={k} type="button" className="chip" aria-pressed={sort === k} onClick={() => setSort(k)}>
@@ -140,7 +140,7 @@ export function PublicTrackRecordView({ record }: { record: Rec | null }) {
           <p className="eyebrow">HSF track record</p>
           <h1 className="h1">Every top pick, and how it did</h1>
           <p className="body-sm">
-            Each trading day, HSF saves the top {record?.top_per_day ?? 10} setups from its first scan the moment the scan runs. Five trading days later
+            Each trading day, HSF saves up to {record?.top_per_day ?? 10} top setups (HSF Score {record?.min_score ?? 40} or higher) from its first scan the moment the scan runs. Five trading days later
             we record how each one did against the S&amp;P 500. Nothing is picked or removed afterwards, and losers stay on the list.
           </p>
         </header>

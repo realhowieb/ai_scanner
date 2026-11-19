@@ -38,7 +38,7 @@ function LastWeek({ lw }: { lw: NonNullable<Recap["last_week"]> }) {
     <section className="card stack-sm" aria-labelledby="lastweek-h">
       <h2 id="lastweek-h" className="h2">How last week&apos;s top picks did</h2>
       <p className="body-sm">
-        The {lw.picks} daily top-10 picks from {weekRange(lw.start, lw.end)}, each over the 5 trading days after it was picked:
+        The {lw.picks} daily top picks from {weekRange(lw.start, lw.end)}, each over the 5 trading days after it was picked:
         average <span className={`mono ${tone(lw.avg_return)}`}>{pct(lw.avg_return)}</span> against <span className="mono">{pct(lw.avg_spy)}</span> for
         the S&amp;P 500 (<span className={`mono ${tone(lw.avg_excess)}`}>{pct(lw.avg_excess)}</span> difference). {lw.beat_rate != null && `${Math.round(lw.beat_rate * 100)}% beat the S&P 500.`}
       </p>

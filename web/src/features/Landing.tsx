@@ -38,7 +38,7 @@ export const FEATURES: [string, string][] = [
   ["Watchlists", "Save the stocks you follow, see how they move against the S&P 500 and get alerts when a price, score or setup changes."],
   ["Momentum and Breakout Discovery", "Day Trader ranks intraday movers with live quotes every 15 seconds, and early breakout and steady stair-step setups flag stocks while they are still building."],
   ["Trade Plans and Live Alerts", "Pro turns a setup into entry, stop, targets and share size from your own account and risk, warns when price has run or liquidity is thin, and sets a live alert at the trigger in one tap."],
-  ["Public Track Record", "Every day's top 10 picks, saved when the scan ran, with how each did over the next 5 trading days against the S&P 500. Losers included, open to everyone."],
+  ["Public Track Record", "Every day's top picks, saved when the scan ran, with how each did over the next 5 trading days against the S&P 500. Losers included, open to everyone."],
 ];
 const HOW: [string, string][] = [
   ["Discover stocks", "Start from the ranked Scanner, the Market Brief or your own custom scan."],
