@@ -62,11 +62,16 @@ def pct(v: Any, *, zero_is_missing: bool = False) -> str:
 
 
 def score_badge(score: Any) -> str:
-    """HSF Score as a small colored badge: green 60+, amber 40-59, grey below."""
+    """HSF Score as a small colored badge: green 60+, amber 40-59, grey below. A score of
+    0 means no setup fired (the raw score went negative), shown as a muted "No setup"."""
     try:
         s = float(score)
     except (TypeError, ValueError):
         return f"<span style='color:{FAINT}'>—</span>"
+    if s <= 0:
+        return (f"<span style='display:inline-block;white-space:nowrap;border-radius:6px;padding:1px 6px;"
+                f"font-size:11px;font-weight:600;background:#f8fafc;color:{FAINT};border:1px solid #e2e8f0'>"
+                f"No setup</span>")
     bg, fg = ("#dcfce7", "#166534") if s >= 60 else (("#fef9c3", "#854d0e") if s >= 40 else ("#f1f5f9", "#475569"))
     return (f"<span style='display:inline-block;min-width:26px;text-align:center;border-radius:6px;"
             f"padding:1px 6px;font-weight:700;font-size:13px;background:{bg};color:{fg}'>{s:g}</span>")

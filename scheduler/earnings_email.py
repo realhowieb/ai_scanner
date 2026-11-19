@@ -25,6 +25,11 @@ def _key(ticker: Any) -> str:
     return "".join(ch for ch in str(ticker or "").upper() if ch.isalnum())
 
 
+def _shown(ticker: Any) -> str:
+    """Class shares the way people write them: MOG-A -> MOG.A."""
+    return str(ticker or "").replace("-", ".")
+
+
 def _time(raw: Any) -> Optional[str]:
     t = str(raw or "").strip().lower()
     return t if t in ("bmo", "amc") else None
@@ -158,15 +163,23 @@ def _table(rows: List[Dict[str, Any]], *, price_label: str, pct_label: str, watc
     for r in rows:
         mine = _key(r["ticker"]) in watched
         score = r.get("score")
-        body.append([k.ticker(r["ticker"], extra=k.tag("Watchlist", "watch") if mine else ""),
+        body.append([k.ticker(_shown(r["ticker"]), extra=k.tag("Watchlist", "watch") if mine else ""),
                      k.num(r.get("last")), k.pct(r.get("chg_pct"), zero_is_missing=zero_is_missing),
                      k.score_badge(score)])
         pct, _ = _fmt_pct(r.get("chg_pct"))
         if zero_is_missing and r.get("chg_pct") == 0:
             pct = "—"
-        text.append(f"  {r['ticker']}{' *' if mine else ''}"
-                    f"  score {score if score is not None else '—'}  {_fmt_price(r.get('last'))}  {pct}")
+        text.append(f"  {_shown(r['ticker'])}{' *' if mine else ''}"
+                    f"  {_score_text(score)}  {_fmt_price(r.get('last'))}  {pct}")
     return k.table(["Ticker", price_label, pct_label, "HSF Score"], body), text
+
+
+def _score_text(score: Any) -> str:
+    try:
+        s = float(score)
+    except (TypeError, ValueError):
+        return "score —"
+    return "no setup" if s <= 0 else f"score {s:g}"
 
 
 def _groups(rows: List[Dict[str, Any]], order: List[Tuple[dt.date, Optional[str], str]]):
@@ -238,7 +251,7 @@ def compose_section(
     sub = ""
     if total:
         sub = f"{total} compan{'y' if total == 1 else 'ies'} report" + (f" · {sub_suffix}" if sub_suffix else "")
-    return k.card(f"📅 {_html.escape(title)}", "".join(html), sub=sub), "\n".join(text)
+    return k.card(f"🗓️ {_html.escape(title)}", "".join(html), sub=sub), "\n".join(text)
 
 
 def _strip_tags(s: str) -> str:

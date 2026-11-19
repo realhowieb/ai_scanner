@@ -214,3 +214,52 @@ def test_friday_wrap_says_monday_and_small_moves_keep_two_decimals():
     assert "Monday's setups" in html and "Tomorrow's setups" not in html
     with mock.patch("scheduler.morning_digest.et_now", return_value=dt.datetime(2026, 10, 22, 17, 0)):
         assert "Top setup for tomorrow" in ew.wrap_glance([], top_setups=[("X", 1)])
+
+
+# ---- class shares + "No setup" (2026-11-19: MOGA/MOGB showed dashes, 0 scores read as bugs) ----
+def test_class_share_symbols_maps_only_unambiguous_class_shares():
+    from api import symbol_search
+
+    rows = [{"ticker": t, "name": t} for t in ("MOG.A", "MOG.B", "NVDA", "BRK.B", "ABC.A", "ABCA")]
+    with mock.patch.object(symbol_search, "_rows", return_value=rows):
+        got = symbol_search.class_share_symbols(["MOGA", "MOGB", "NVDA", "BRKB", "ABCA", "ZZZZ"])
+    # ABCA is itself listed, so it stays; NVDA and unknowns are untouched.
+    assert got == {"MOGA": "MOG-A", "MOGB": "MOG-B", "BRKB": "BRK-B"}
+
+
+def test_class_share_symbols_empty_without_directory():
+    from api import symbol_search
+
+    with mock.patch.object(symbol_search, "_rows", return_value=[]):
+        assert symbol_search.class_share_symbols(["MOGA"]) == {}
+
+
+def test_calendar_rows_carry_tradable_class_share_symbol():
+    from db import earnings
+
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a): pass
+        def fetchall(self): return [("MOGA", TODAY, "BMO", None), ("AAPL", TODAY, None, None)]
+
+    class Conn:
+        def cursor(self): return Cur()
+
+    with mock.patch.object(earnings, "ensure_earnings_table"), \
+         mock.patch("api.symbol_search.class_share_symbols", return_value={"MOGA": "MOG-A"}):
+        rows = earnings.fetch_earnings_this_week(conn=Conn(), start=TODAY)
+    assert [r["symbol"] for r in rows] == ["MOG-A", "AAPL"]
+
+
+def test_zero_score_reads_no_setup_and_class_share_shows_dot():
+    from ui import email_kit as k
+
+    assert "No setup" in k.score_badge(0) and "No setup" not in k.score_badge(12)
+    rows = [{"ticker": "MOG-A", "date": FRI, "time": "bmo", "score": 0, "last": 150.0, "chg_pct": -1.0},
+            {"ticker": "AXP", "date": FRI, "time": "bmo", "score": 30, "last": 300.0, "chg_pct": 1.0}]
+    html, text = ee.compose_section(rows, title="Earnings tonight & tomorrow morning",
+                                    order=[(FRI, "bmo", "Before the open")], price_label="Close",
+                                    pct_label="Today %", link="https://x", link_label="Earnings scanner")
+    assert "MOG.A" in html and "No setup" in html and "🗓️" in html and "📅" not in html
+    assert "MOG.A" in text and "no setup" in text and "score 30" in text
