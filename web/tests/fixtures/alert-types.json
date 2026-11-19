@@ -72,6 +72,21 @@
   "watchlist_only_option": false
  },
  {
+  "type": "trigger",
+  "label": "Breakout trigger",
+  "description": "Fires when a ticker trades at or above your trigger price while today's volume is running at least 1.2x its normal pace, so a quiet drift through the level doesn't count. Checked live (about every 60 s) during regular market hours.",
+  "needs_ticker": true,
+  "threshold": {
+   "min": 0.0,
+   "min_exclusive": true,
+   "max": 1000000.0,
+   "label": "Trigger price ($)",
+   "default": null
+  },
+  "directions": [],
+  "watchlist_only_option": false
+ },
+ {
   "type": "ema_cross",
   "label": "EMA cross",
   "description": "Fires when EMA 9 crosses EMA 21. Bullish is a short-term Golden Cross; bearish is a short-term Death Cross.",
