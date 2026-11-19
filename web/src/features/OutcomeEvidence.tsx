@@ -211,12 +211,39 @@ function SetupsCard({ d }: { d: OutcomeGroups }) {
   );
 }
 
+const CONDITION_ORDER = ["trending_up", "choppy", "risk_off", "unknown"];
+const CONDITION_NAME: Record<string, string> = { trending_up: "Trending up", choppy: "Choppy", risk_off: "Risk-off", unknown: "Not enough SPY history" };
+
+/** The same evidence split by the market condition at the close before each entry day. */
+function ConditionsCard({ d }: { d: OutcomeGroups }) {
+  const groups = [...d.groups].sort((a, b) => CONDITION_ORDER.indexOf(a.name) - CONDITION_ORDER.indexOf(b.name));
+  return (
+    <Card title="By market condition" id="conditions">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by market condition table; scroll sideways for more columns">
+        <table className="table">
+          <MetricHead first="Market" />
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.name} className={g.evidence_quality === "INSUFFICIENT" ? "row-muted" : undefined}>
+                <th scope="row" className="row-h">{CONDITION_NAME[g.name] ?? g.name}</th>
+                <MetricCells m={g} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="cap">Each signal is placed by the market condition at the close before it was saved (SPY against its 20- and 50-day averages and its 20-day volatility), the same rule as the Market badge on the Scanner. Thin groups are muted; a few weeks of one condition say little about the next.</p>
+    </Card>
+  );
+}
+
 /** Track Record's evidence section: the complete dataset, then its breakdowns. */
 export function OutcomeEvidence() {
   const sum = useApi("outcomes:summary", (signal) => outcomes.summary(signal));
   const scores = useApi(sum.data ? "outcomes:scores" : null, (signal) => outcomes.scores(signal));
   const hz = useApi(sum.data ? "outcomes:horizons" : null, (signal) => outcomes.horizons(signal));
   const setups = useApi(sum.data ? "outcomes:setups" : null, (signal) => outcomes.setups(signal));
+  const conds = useApi(sum.data ? "outcomes:conditions" : null, (signal) => outcomes.conditions(signal));
   if (sum.error && !sum.data) {
     if (sum.error.status === 404) return null;   // an API that predates /v1/outcomes: the ranking study still shows
     return <ErrorState error={sum.error} onRetry={sum.reload} what="the HSF evidence" />;
@@ -231,6 +258,7 @@ export function OutcomeEvidence() {
       {scores.data ? <ScoresCard d={scores.data} /> : scores.error ? <ErrorState error={scores.error} onRetry={scores.reload} what="score buckets" /> : <Skeleton rows={6} label="Loading score buckets" />}
       {hz.data ? <HorizonsCard d={hz.data} /> : hz.error ? <ErrorState error={hz.error} onRetry={hz.reload} what="holding periods" /> : <Skeleton rows={3} label="Loading holding periods" />}
       {setups.data ? <SetupsCard d={setups.data} /> : setups.error ? <ErrorState error={setups.error} onRetry={setups.reload} what="setups" /> : <Skeleton rows={4} label="Loading setups" />}
+      {conds.data ? <ConditionsCard d={conds.data} /> : conds.error ? (conds.error.status === 422 ? null : <ErrorState error={conds.error} onRetry={conds.reload} what="market conditions" />) : <Skeleton rows={3} label="Loading market conditions" />}
       <ThroughTimeCard />
       <ExplorerCard setups={(setups.data?.groups ?? []).map((g) => g.name).filter((n) => n !== "unlabeled")} />
       <p className="cap">{sum.data.disclaimer}</p>

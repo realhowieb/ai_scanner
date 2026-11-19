@@ -62,6 +62,40 @@ function DemoStock({ leader }: { leader: SampleSetup }) {
   );
 }
 
+const SAMPLE_STOP_PCT = 4;   // half of an 8% 20-day volatility, inside the 2-8% clamp
+
+/** The Pro trade plan for the selected sample, with the same rules as the real one. */
+export function samplePlan(s: SampleSetup, account = 10_000, riskPct = 1) {
+  const entry = Number(s.last.replace(/[^0-9.]/g, ""));
+  const stop = entry * (1 - SAMPLE_STOP_PCT / 100);
+  const r = entry - stop;
+  return {
+    entry, stop, trigger: entry * 1.012, chase: entry * (1 + (0.5 * SAMPLE_STOP_PCT) / 100),
+    targets: [entry + 1.5 * r, entry + 3 * r], shares: Math.floor((account * riskPct) / 100 / r),
+  };
+}
+
+const usd = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function DemoTradePlan({ s }: { s: SampleSetup }) {
+  const p = samplePlan(s);
+  return (
+    <div id="demo-plan" tabIndex={-1}><Card title="Trade plan" id="demo-plan" aside="Pro sample">
+      <p className="cap">For a $10,000 account risking 1% per trade. In the app you enter your own numbers, and the plan uses the live price.</p>
+      <p className="cap">Market <Pill tone="warn">Choppy</Pill> Breakouts fail more often when the market has no clear trend.</p>
+      <dl className="kv">
+        <div><dt>Entry</dt><dd className="mono">{usd(p.entry)}</dd></div>
+        <div><dt>Breakout trigger</dt><dd className="mono">{usd(p.trigger)} <span className="cap">(20-day high)</span></dd></div>
+        <div><dt>Don&apos;t chase above</dt><dd className="mono">{usd(p.chase)}</dd></div>
+        <div><dt>Stop</dt><dd className="mono">{usd(p.stop)} <span className="cap">(−{SAMPLE_STOP_PCT}%)</span></dd></div>
+        <div><dt>Targets</dt><dd className="mono">{usd(p.targets[0]!)} · {usd(p.targets[1]!)} <span className="cap">(1.5R, 3R)</span></dd></div>
+        <div><dt>Shares</dt><dd className="mono">{p.shares} <span className="cap">risking $100</span></dd></div>
+      </dl>
+      <p className="cap">Warnings appear when price has run past the don&apos;t-chase line, the stock trades thinly, the spread is wide or the position is large next to daily volume. One tap sets a live alert at the trigger or the stop.</p>
+    </Card></div>
+  );
+}
+
 function DemoWatchlist() {
   return (
     <div id="demo-watchlist" tabIndex={-1}><Card title="Watchlist intelligence" id="demo-watchlist" aside="Sample activity">
@@ -114,7 +148,7 @@ export function DemoPage() {
         </section>
 
         <div className="demo-dashboard">
-          <div className="demo-primary"><DemoScanner selected={selected.ticker} onSelect={setSelected} /><DemoStock leader={selected} /></div>
+          <div className="demo-primary"><DemoScanner selected={selected.ticker} onSelect={setSelected} /><DemoStock leader={selected} /><DemoTradePlan s={selected} /></div>
           <div className="demo-secondary"><DemoWatchlist /><DemoAlerts /></div>
         </div>
 

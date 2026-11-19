@@ -58,7 +58,7 @@ class NoteBody(BaseModel):
 
 
 class AlertCreate(BaseModel):
-    type: str = Field(description="breakout, watchlist, price, move, rvol, ema_cross or ewo_cross")
+    type: str = Field(description="breakout, watchlist, price, move, rvol, trigger, ema_cross or ewo_cross")
     ticker: Optional[str] = Field(default=None, max_length=12)
     threshold: Optional[float] = None
     direction: Optional[str] = Field(default=None, max_length=12)

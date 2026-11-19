@@ -36,8 +36,9 @@ export const FEATURES: [string, string][] = [
   ["Market Intelligence", "The Market Brief shows indexes, breadth, sectors, pre-market movers and the earnings calendar before you look at a single setup."],
   ["Technical Analysis", "Interactive price charts with moving averages, RSI and volume, plus the evidence behind every score: relative volume, gaps, trend and strength against the S&P 500."],
   ["Watchlists", "Save the stocks you follow, see how they move against the S&P 500 and get alerts when a price, score or setup changes."],
-  ["Momentum and Breakout Discovery", "Day Trader ranks intraday movers, and early breakout and steady stair-step setups flag stocks while they are still building."],
-  ["Historical Signal Tracking", "Score history and the Track record show how saved setups developed. Historical rankings use the scores and predictions saved with each scan."],
+  ["Momentum and Breakout Discovery", "Day Trader ranks intraday movers with live quotes every 15 seconds, and early breakout and steady stair-step setups flag stocks while they are still building."],
+  ["Trade Plans and Live Alerts", "Pro turns a setup into entry, stop, targets and share size from your own account and risk, warns when price has run or liquidity is thin, and sets a live alert at the trigger in one tap."],
+  ["Public Track Record", "Every day's top picks, saved when the scan ran, with how each did over the next 5 trading days against the S&P 500. Losers included, open to everyone."],
 ];
 const HOW: [string, string][] = [
   ["Discover stocks", "Start from the ranked Scanner, the Market Brief or your own custom scan."],
@@ -48,7 +49,9 @@ const TRUST: [string, string][] = [
   ["Fresh market data", "Every result shows when it was scanned."],
   ["Transparent explanations", "Each setup lists the evidence that put it there."],
   ["Saved scan evidence", "Historical rankings use saved scores and prediction evidence. Daily snapshots can refresh, and evaluation methods are versioned."],
-  ["Research-first methodology", "HSF measures its own methods forward before making claims about them."],
+  ["Research-first methodology", "HSF measures its own methods forward and publishes every top pick's result, including the losers. So far that shows no proven edge over the market, and we say so."],
+  ["Clear about speed", "Hourly scans, prices every minute, Day Trader every 15 seconds and alerts within about a minute. No level 2 and no tick data, so HSF suits swing trading and intraday watchlists, not scalping."],
+  ["Market conditions", "A Trending up / Choppy / Risk-off label from one SPY rule shows on the Scanner and every trade plan, because setups fail more often in choppy markets."],
   ["Estimates are not outcomes", "Model outputs such as breakout or outcome probabilities are research estimates for defined events. They are not profits, returns or trading results."],
 ];
 const VIEWS = [
@@ -85,6 +88,7 @@ export function PublicHeader() {
       <nav aria-label="Site" className="pub-nav">
         <Link href="/how-hsf-works">How it works</Link>
         <Link href="/demo">Demo</Link>
+        <Link href="/results">Track record</Link>
         <Link href="/pricing">Pricing</Link>
         <a href={MUSIC_ORIGIN}>Music &amp; Shop</a>
         {signedIn ? <Link href="/today" className="btn btn-primary btn-sm">Open HSF</Link> : <>
@@ -102,7 +106,7 @@ export function PublicFooter() {
   return (
     <footer className="pub-foot">
       <p className="cap">{DISCLAIMER}</p>
-      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/weekly">Weekly recap</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
+      <p className="cap"><Link href="/how-hsf-works">How HSF works</Link> · <Link href="/demo">Demo</Link> · <Link href="/results">Track record</Link> · <Link href="/pricing">Pricing</Link> · <Link href="/weekly">Weekly recap</Link> · {signedIn ? <Link href="/today">Open HSF</Link> : <Link href="/login">Sign in</Link>}</p>
       <p className="cap"><LegalLinks refunds={!!founding} /></p>
       <p className="cap">Also from HSF: <a href={MUSIC_ORIGIN}>High Society&apos;s Finest music &amp; community</a></p>
     </footer>
@@ -315,7 +319,7 @@ export function Landing() {
           <div className="feature-grid">
             {TRUST.map(([t, d]) => <div key={t} className="card tile"><p className="strong">{t}</p><p className="body-sm">{d}</p></div>)}
           </div>
-          <p className="cap">{SCORE_LINE} <Link href="/how-hsf-works">How HSF works, in full</Link></p>
+          <p className="cap">{SCORE_LINE} <Link href="/results">See every pick and how it did</Link> · <Link href="/how-hsf-works">How HSF works, in full</Link></p>
         </section>
 
         <EmailSignup surface="landing" title="Not ready to sign up? Get the weekly setups by email" />

@@ -253,8 +253,36 @@ def plan(ticker: str, account_size: float, risk_pct: float) -> Optional[Dict[str
     row = latest_row(ticker)
     if row is None:
         return None
-    p = build_trade_plan(row, account_size=account_size, risk_pct=risk_pct)
+    quote = live_quote(ticker)
+    p = build_trade_plan(row, account_size=account_size, risk_pct=risk_pct, **quote)
     return None if p is None else {"ticker": ticker, **p}
+
+
+def live_quote(ticker: str) -> Dict[str, Any]:
+    """{live_price, bid, ask, live_at} from one Alpaca snapshot, or {} when there is
+    no quote (no keys, provider down): the plan then uses the scan price, as before."""
+    try:
+        from market_data import fetch_alpaca_snapshots
+
+        snap = (fetch_alpaca_snapshots([ticker]) or {}).get(ticker)
+    except Exception:
+        return {}
+    if not isinstance(snap, dict):
+        return {}
+    trade, quote = snap.get("latestTrade") or {}, snap.get("latestQuote") or {}
+
+    def num(v: Any) -> Optional[float]:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    price = num(trade.get("p"))
+    if price is None:
+        return {}
+    return {"live_price": price, "bid": num(quote.get("bp")), "ask": num(quote.get("ap")),
+            "live_at": trade.get("t") if isinstance(trade.get("t"), str) else None}
 
 
 # ---- paper trading --------------------------------------------------------------------------------

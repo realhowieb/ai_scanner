@@ -131,7 +131,7 @@ def _due_price_alerts(conn) -> List[Dict[str, Any]]:
         LEFT JOIN users u ON u.username = a.user_id
         {prefs_join}
         WHERE a.enabled
-          AND a.alert_type IN ('price', 'move', 'rvol')
+          AND a.alert_type IN ('price', 'move', 'rvol', 'trigger')
           AND a.ticker IS NOT NULL
           AND a.threshold IS NOT NULL
           AND (a.last_fired_at IS NULL
@@ -440,8 +440,29 @@ def _avg_volume(ticker: str) -> Optional[float]:
     return None
 
 
+TRIGGER_PACE = 1.2          # today's volume vs a normal day's volume by this time
+TRIGGER_MIN_MINUTES = 5     # the opening minutes' pace is noise
+
+
+def volume_pace(volume: Any, avg_volume: Any, now_utc: Optional[datetime] = None) -> Optional[float]:
+    """Today's volume so far vs the 20-day average scaled to the share of the regular
+    session (9:30-16:00 ET) that has passed. None outside regular hours, in the first
+    TRIGGER_MIN_MINUTES, or without volumes."""
+    try:
+        vol, avg = float(volume), float(avg_volume)
+    except (TypeError, ValueError):
+        return None
+    if not (vol > 0 and avg > 0):
+        return None
+    et = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    minutes = et.hour * 60 + et.minute - (9 * 60 + 30)
+    if et.weekday() >= 5 or minutes < TRIGGER_MIN_MINUTES or minutes > 390:
+        return None
+    return vol / (avg * minutes / 390.0)
+
+
 def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Any],
-                   today: Optional[str] = None) -> Optional[str]:
+                   today: Optional[str] = None, now_utc: Optional[datetime] = None) -> Optional[str]:
     """Message when the alert condition is met against a snapshot, else None.
 
     Only this session's prints count: before the first trade of the day (e.g. 4:00 ET
@@ -479,6 +500,18 @@ def evaluate_alert(alert: Dict[str, Any], snap: Dict[str, Any],
                 f"(last {last:,.2f}, threshold ±{threshold:g}%)"
             )
         return None
+    if atype == "trigger":
+        if last < threshold:
+            return None
+        if daily_day and daily_day != today:
+            return None  # no bar for today yet: nothing to measure the pace against
+        pace = volume_pace(snap.get("volume"), _avg_volume(alert["ticker"]), now_utc)
+        if pace is None or pace < TRIGGER_PACE:
+            return None
+        return (
+            f"Trigger alert: {alert['ticker']} {last:,.2f} broke above your {threshold:,.2f} "
+            f"trigger on {pace:.1f}x its normal volume pace (live)"
+        )
     if atype == "rvol":
         volume = snap.get("volume")
         if daily_day and daily_day != today:

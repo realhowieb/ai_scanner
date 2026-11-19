@@ -12,8 +12,11 @@ import { useApi } from "@/hooks/useApi";
 
 import { AlertForm, TYPES_UNAVAILABLE, describeAlert, typesUnavailable } from "./AlertForm";
 
-export function PriceAlertButton({ ticker, at, note, label, compact = false, onCreated }: {
+export function PriceAlertButton({ ticker, at, note, label, compact = false, onCreated, type = "price", direction = "above" }: {
   ticker: string; at: number | null | undefined; note?: string; label: string; compact?: boolean; onCreated?: () => void;
+  /** trigger: a live breakout alert (price at/above `at` on a strong volume pace). */
+  type?: "price" | "trigger";
+  direction?: "above" | "below";
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -30,7 +33,7 @@ export function PriceAlertButton({ ticker, at, note, label, compact = false, onC
       ) : (
         <button type="button" className="btn" onClick={() => setOpen(true)}>{label}</button>
       )}
-      <Dialog open={open} title={`Price alert for ${ticker}`} onClose={close}>
+      <Dialog open={open} title={`${type === "trigger" ? "Breakout trigger alert" : "Price alert"} for ${ticker}`} onClose={close}>
         {done ? (
           <div className="stack-sm">
             <p className="notice" role="status">Created: {done}.</p>
@@ -45,7 +48,7 @@ export function PriceAlertButton({ ticker, at, note, label, compact = false, onC
         ) : (
           <>
             <p className="cap">Using {quota.data.used} of {quota.data.limit} alerts.{note ? ` ${note}` : ""}</p>
-            <AlertForm types={types.data} lockType prefill={{ type: "price", ticker, threshold: at != null ? Math.round(at * 100) / 100 : undefined, direction: "above" }}
+            <AlertForm types={types.data} lockType prefill={{ type, ticker, threshold: at != null ? Math.round(at * 100) / 100 : undefined, direction: type === "price" ? direction : undefined }}
               onCreated={(a) => { setDone(describeAlert(a)); onCreated?.(); }} />
           </>
         )}
