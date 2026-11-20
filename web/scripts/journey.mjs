@@ -206,6 +206,7 @@ await step("Day Trader shows Moving now (stocks spotted as a move starts)", asyn
   await page.goto(`${BASE}/day-trader`);
   const card = page.locator("#moving-now");
   await card.waitFor({ timeout: 60_000 });
+  await card.locator(".mn-row, .empty").first().waitFor({ timeout: 60_000 });   // past "Loading…"
   const title = (await card.locator("h2").textContent()) ?? "";
   const rows = await card.locator(".mn-row").count();
   const empty = await card.locator(".empty").count();
