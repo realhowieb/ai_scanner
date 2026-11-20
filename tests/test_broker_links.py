@@ -43,8 +43,9 @@ class WebullUrlTests(unittest.TestCase):
         resp = mock.Mock(status_code=200, json=lambda: {"symbol": "BRK.B", "exchange": "NYSE"})
         with mock.patch("data.alpaca_config.get_alpaca_config", return_value={"base_url": "https://x"}), \
              mock.patch("data.alpaca_config.get_alpaca_headers", return_value={"k": "v"}), \
-             mock.patch("requests.get", return_value=resp) as get:
+             mock.patch.dict("sys.modules", {"requests": mock.Mock(get=mock.Mock(return_value=resp))}) as mods:
             self.assertEqual(bl._fetch_exchange("BRK-B"), "NYSE")
+            get = mods["requests"].get
         self.assertEqual(get.call_args[0][0], "https://x/v2/assets/BRK.B")
 
 
