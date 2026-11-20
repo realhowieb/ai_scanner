@@ -135,6 +135,16 @@ def register(app: FastAPI) -> None:
             log.warning(json.dumps({"event": "public_top_setups_failed", "error": type(e).__name__}))
             raise HTTPException(503, "The live preview isn't available right now.") from None
 
+    @app.get("/v1/public/webull-link/{ticker}", response_model=models.BrokerLink,
+             responses={429: {"description": "Too many requests"}},
+             summary="Where 'Open in Webull' goes for a stock (signed out)")
+    def public_webull_link(ticker: str = TICKER, _l: None = Depends(ratelimit.limit("share"))) -> Dict[str, Any]:
+        """The stock's Webull quote page (which needs the listing exchange), or Webull's U.S.
+        markets page when the exchange can't be found. A link only: nothing is sent to Webull."""
+        from data import broker_links
+
+        return broker_links.webull_link(ticker)
+
     @app.get("/v1/public/stocks/{ticker}", response_model=models.PublicStock,
              responses={404: {"description": "Not a listed US stock"}, 429: {"description": "Too many requests"}},
              summary="A stock's public snapshot for shared links (signed out)")

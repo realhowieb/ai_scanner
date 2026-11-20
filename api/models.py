@@ -2278,6 +2278,13 @@ class PublicTopSetups(BaseModel):
     free_rows: int = Field(description="How many of them a free Starter account sees in the Scanner")
 
 
+class BrokerLink(BaseModel):
+    ticker: str
+    exchange: Optional[str] = Field(default=None, description="Listing exchange code from the market-data provider (NASDAQ, NYSE, ARCA, ...)")
+    url: str = Field(description="Where the button opens: the stock's Webull quote page, or Webull's markets page when the exchange is unknown")
+    exact: bool = Field(description="True when url is the stock's own Webull page")
+
+
 class PublicStock(BaseModel):
     ticker: str
     name: Optional[str] = None
