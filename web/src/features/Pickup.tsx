@@ -31,11 +31,23 @@ export function sincePickup(p: PickupInfo | null | undefined, last: number | nul
   return (last / p.price - 1) * 100;
 }
 
+/** "9:42 AM ET" when Day Trader's Moving now spotted it that day; "" when it didn't. */
+export function spottedWhen(p: PickupInfo | null | undefined): string {
+  if (!p?.spotted_at) return "";
+  const d = new Date(p.spotted_at);
+  return Number.isNaN(d.getTime()) ? "" : `${d.toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" })} ET`;
+}
+
+function spottedText(p: PickupInfo): string {
+  const when = spottedWhen(p);
+  return when ? ` Day Trader's Moving now spotted it at ${when}${p.spotted_price != null ? ` at ${price(p.spotted_price)}` : ""}.` : "";
+}
+
 function explain(p: PickupInfo, nowMs?: number): string {
   const when = pickupWhen(p.at, nowMs);
   const head = p.open_ended ? `In every HSF scan since at least the ${when} scan` : `First picked up by HSF in the ${when} scan`;
   const rank = p.rank != null ? `, ranked #${p.rank}` : "";
-  return `${head}${p.price != null ? ` at ${price(p.price)}` : ""}${rank}. Exact to that scan; HSF scans the market about hourly in market hours.`;
+  return `${head}${p.price != null ? ` at ${price(p.price)}` : ""}${rank}. Exact to that scan; HSF scans the market about hourly in market hours.${spottedText(p)}`;
 }
 
 /** Scanner table cell / phone card fact: the time, then the price then and the move since. */
@@ -45,6 +57,7 @@ export function PickedCell({ pickup, last, nowMs }: { pickup: PickupInfo | null 
   return <span className="picked-cell" title={explain(pickup, nowMs)}>
     <span className="mono">{pickup.open_ended ? "≤ " : ""}{pickupWhen(pickup.at, nowMs)}</span>
     {pickup.price != null && <span className="cap mono">{price(pickup.price)}{move != null && Math.abs(move) >= 0.05 && <> · <span className={upDown(move)}>{pct(move, 1)}</span></>}</span>}
+    {spottedWhen(pickup) && <span className="cap spotted">Day Trader {spottedWhen(pickup)}</span>}
   </span>;
 }
 
@@ -58,5 +71,6 @@ export function PickupLine({ pickup, last, nowMs }: { pickup: PickupInfo | null 
     {pickup.price != null && <> at <span className="mono">{price(pickup.price)}</span></>}
     {pickup.rank != null && <> (#{pickup.rank} then)</>}
     {move != null && Math.abs(move) >= 0.05 && <> · <span className={`mono ${upDown(move)}`}>{pct(move, 1)}</span> since</>}
+    {spottedWhen(pickup) && <> · Spotted in Day Trader at <strong>{spottedWhen(pickup)}</strong>{pickup.spotted_price != null && <> at <span className="mono">{price(pickup.spotted_price)}</span></>}</>}
   </p>;
 }

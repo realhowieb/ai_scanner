@@ -360,6 +360,9 @@ class Pickup(BaseModel):
     open_ended: bool = Field(default=False, description=(
         "True when the stock is in every scan HSF keeps for this (about two sessions), so it was "
         "picked up at or before `at`"))
+    spotted_at: Optional[str] = Field(default=None, description=(
+        "When Day Trader's Moving now first spotted the stock on the ET day of `at` (ISO); display only"))
+    spotted_price: Optional[float] = Field(default=None, description="Price when Moving now spotted it")
 
 
 class ScanSetup(Setup):
@@ -1192,6 +1195,32 @@ class PremarketGappers(BaseModel):
     as_of: str
     feed: str = Field(description="Market data feed: iex (partial pre-market volume) or sip")
     rows: List[PremarketGapper] = []
+
+class MovingNowRow(BaseModel):
+    ticker: str
+    spotted_at: str = Field(description="When HSF first spotted the stock today (ISO time)")
+    spotted_price: Optional[float] = Field(default=None, description="Price when first spotted")
+    spotted_chg_pct: Optional[float] = Field(default=None, description="Chg % vs yesterday's close when first spotted")
+    last: Optional[float] = Field(default=None, description="Latest price; null when no live quote")
+    chg_pct: Optional[float] = Field(default=None, description="Today's Chg % vs yesterday's close now")
+    since_spotted_pct: Optional[float] = Field(default=None, description="Move since first spotted, percent")
+    volume_pace: Optional[float] = Field(default=None, description=(
+        "Today's volume vs the 20-day average daily volume for the share of the session gone (2.0 = twice usual)"))
+
+
+class MovingNow(BaseModel):
+    """Day Trader "Moving now" (Pro): stocks spotted as an intraday move starts today, with
+    when and where they were first spotted. `active` is true while new stocks can be spotted
+    (regular session from 9:40 AM ET); after that the day's list stays until the next session.
+    Descriptive only; no proven multi-day edge, and it never feeds the HSF Score."""
+    active: bool
+    state: Literal["premarket", "open", "afterhours", "closed"]
+    as_of: str
+    session_date: str = Field(description="ET date the list belongs to")
+    spotted_count: int = Field(description="Stocks spotted so far today (rows holds the top ones)")
+    rule: str
+    rows: List[MovingNowRow] = []
+
 
 class DayTrader(BaseModel):
     state: Literal["premarket", "open", "afterhours", "closed"]

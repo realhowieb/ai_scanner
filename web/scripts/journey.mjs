@@ -201,6 +201,22 @@ await step("Day Trader shows each name's move vs SPY today", async () => {
   check("Day Trader shows each name's move vs SPY today", !table || header > 0, table ? `vs SPY header ${header}` : "no rows right now");
 });
 
+await step("Day Trader shows Moving now (stocks spotted as a move starts)", async () => {
+  // /v1/day-trader/moving-now; titled "Spotted today" outside spotting hours. Empty lists show the rule.
+  await page.goto(`${BASE}/day-trader`);
+  const card = page.locator("#moving-now");
+  await card.waitFor({ timeout: 60_000 });
+  await card.locator(".mn-row, .empty").first().waitFor({ timeout: 60_000 });   // past "Loading…"
+  const title = (await card.locator("h2").textContent()) ?? "";
+  const rows = await card.locator(".mn-row").count();
+  const empty = await card.locator(".empty").count();
+  await shot(page, "journey-1d-day-trader-moving-now");
+  await page.goto(`${BASE}/scanner`);
+  await page.locator("table .tk").first().waitFor();
+  check("Day Trader shows Moving now (stocks spotted as a move starts)", /Moving now|Spotted today/.test(title) && (rows > 0 || empty > 0),
+    `${title.trim()}: ${rows} rows${empty ? ", empty state" : ""}`);
+});
+
 await step("Stock Intelligence shows the watchlist; saving again reports already present", async () => {
   await page.locator(`table a.tk[href="/stocks/${encodeURIComponent(ticker)}"]`).first().click();
   await page.waitForURL(new RegExp(`/stocks/${ticker}`));

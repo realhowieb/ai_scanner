@@ -1667,6 +1667,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/day-trader/moving-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stocks spotted as a move starts (Pro)
+         * @description Stocks HSF spotted today as an intraday move started: the first time (from 9:40 AM ET)
+         *     a liquid U.S. stock trades 3%+ above yesterday's close on at least 2x its usual volume for
+         *     the time of day, with that time and price, the live price and the move since. Strongest
+         *     volume pace first; checked about every 2 minutes. Not a prediction.
+         */
+        get: operations["day_trader_moving_now_v1_day_trader_moving_now_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/day-trader/sparklines": {
         parameters: {
             query?: never;
@@ -7699,6 +7722,81 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /**
+         * MovingNow
+         * @description Day Trader "Moving now" (Pro): stocks spotted as an intraday move starts today, with
+         *     when and where they were first spotted. `active` is true while new stocks can be spotted
+         *     (regular session from 9:40 AM ET); after that the day's list stays until the next session.
+         *     Descriptive only; no proven multi-day edge, and it never feeds the HSF Score.
+         */
+        MovingNow: {
+            /** Active */
+            active: boolean;
+            /** As Of */
+            as_of: string;
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["MovingNowRow"][];
+            /** Rule */
+            rule: string;
+            /**
+             * Session Date
+             * @description ET date the list belongs to
+             */
+            session_date: string;
+            /**
+             * Spotted Count
+             * @description Stocks spotted so far today (rows holds the top ones)
+             */
+            spotted_count: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "premarket" | "open" | "afterhours" | "closed";
+        };
+        /** MovingNowRow */
+        MovingNowRow: {
+            /**
+             * Chg Pct
+             * @description Today's Chg % vs yesterday's close now
+             */
+            chg_pct?: number | null;
+            /**
+             * Last
+             * @description Latest price; null when no live quote
+             */
+            last?: number | null;
+            /**
+             * Since Spotted Pct
+             * @description Move since first spotted, percent
+             */
+            since_spotted_pct?: number | null;
+            /**
+             * Spotted At
+             * @description When HSF first spotted the stock today (ISO time)
+             */
+            spotted_at: string;
+            /**
+             * Spotted Chg Pct
+             * @description Chg % vs yesterday's close when first spotted
+             */
+            spotted_chg_pct?: number | null;
+            /**
+             * Spotted Price
+             * @description Price when first spotted
+             */
+            spotted_price?: number | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Volume Pace
+             * @description Today's volume vs the 20-day average daily volume for the share of the session gone (2.0 = twice usual)
+             */
+            volume_pace?: number | null;
+        };
         /** MyRefunds */
         MyRefunds: {
             /** Guarantee Days */
@@ -8966,6 +9064,16 @@ export interface components {
              * @description HSF rank in that scan (1 = best)
              */
             rank?: number | null;
+            /**
+             * Spotted At
+             * @description When Day Trader's Moving now first spotted the stock on the ET day of `at` (ISO); display only
+             */
+            spotted_at?: string | null;
+            /**
+             * Spotted Price
+             * @description Price when Moving now spotted it
+             */
+            spotted_price?: number | null;
         };
         /** PlanRow */
         PlanRow: {
@@ -17189,6 +17297,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DayTrader"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro feature */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+        };
+    };
+    day_trader_moving_now_v1_day_trader_moving_now_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovingNow"];
                 };
             };
             /** @description Not signed in */
