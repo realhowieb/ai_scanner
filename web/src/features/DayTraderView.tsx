@@ -91,7 +91,7 @@ const COLS: { key: SortKey; label: string; narrow?: boolean; get: (r: Row) => nu
   { key: "ticker", label: "Ticker", get: (r) => r.ticker },
   { key: "score", label: "DT score", get: (r) => r.day_trade_score },
   { key: "last", label: "Last", get: (r) => r.last },
-  { key: "chg", label: "Chg %", get: (r) => r.session_chg_pct ?? r.chg_pct },
+  { key: "chg", label: "Chg %", get: (r) => r.session_chg_pct ?? r.chg_pct ?? r.prior_ah_chg_pct },
   { key: "spy", label: "vs SPY", get: (r) => r.vs_spy_pct },
   { key: "gap", label: "Gap %", narrow: true, get: (r) => r.gap_pct },
   { key: "vwap", label: "vs VWAP", narrow: true, get: (r) => r.vs_vwap_pct },
@@ -243,6 +243,15 @@ function Flags({ r }: { r: Row }) {
 }
 
 function Change({ r, offHours }: { r: Row; offHours: boolean }) {
+  // Pre-market before the first print today: last night's after-hours move and yesterday's session.
+  if (r.traded_today === false && (r.prior_ah_chg_pct != null || r.prior_session_chg_pct != null)) {
+    return (
+      <span className="dt-chg dt-chg-waiting" title="No trade yet today. AH is last night's after-hours move vs yesterday's close; Yest. is yesterday's regular session.">
+        {r.prior_ah_chg_pct != null && <span className={tone(r.prior_ah_chg_pct)}>AH {pct(r.prior_ah_chg_pct)}</span>}
+        {r.prior_session_chg_pct != null && <span className="cap">Yest. {pct(r.prior_session_chg_pct)}</span>}
+      </span>
+    );
+  }
   if (!offHours || r.session_chg_pct == null) return <span className={tone(r.chg_pct)}>{pct(r.chg_pct)}</span>;
   return (
     <span className="dt-chg">
@@ -566,7 +575,9 @@ function Live() {
         </div>
       )}
       {d && all.length > 0 && <FilterBar f={filters} set={setFilters} shown={rows.length} total={all.length} narrow={narrow} />}
-      {d?.state === "premarket" && all.length > 0 && <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>}
+      {d?.state === "premarket" && all.length > 0 && (all.every((r) => r.traded_today === false)
+        ? <p className="cap" data-testid="dt-premarket-waiting">No pre-market trades yet: quotes start around 8:00 AM ET. Until a stock trades today, Chg % shows last night&apos;s after-hours move (AH) and yesterday&apos;s session (Yest.), and DT score shows Waiting.</p>
+        : <p className="cap">Pre-market: Chg % is the latest trade today vs yesterday&apos;s close, and Volume and VWAP count pre-market trading only.{all.some((r) => r.traded_today === false) ? " Waiting rows show last night's after-hours move (AH) until their first trade today." : ""}{source.startsWith("movers") ? " Movers lists today's pre-market gappers until the open." : ""}</p>)}
       {offHours && all.length > 0 && <p className="cap">Market is {d!.state === "afterhours" ? "in after hours" : "closed"}: last prices can be from an earlier session. Checked time is the request time, not the last trade time. The API does not supply the session date or individual trade timestamps; they cannot be verified here. Chg % and DT score use the regular session; AH shows the move since the close. Candidate highlights are relative rankings, not minimum-quality guarantees.</p>}
       {needTickers ? <Card><Empty title="Type the tickers you want to watch.">Separate them with commas or spaces, up to {MAX_CUSTOM}, then press Show. We&apos;ll remember them on this device.</Empty></Card>
         : dt.error && !d ? <ErrorState error={dt.error} onRetry={dt.reload} what="Day Trader" />

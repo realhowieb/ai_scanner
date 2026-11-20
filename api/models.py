@@ -1166,6 +1166,10 @@ class DayTraderRow(BaseModel):
                                    "VWAP, Stale quote. Flagged rows rank last.")
     traded_today: Optional[bool] = Field(default=None, description="Pre-market only: false until the name trades "
                                          "today; such rows have no change and no DT score")
+    prior_session_chg_pct: Optional[float] = Field(default=None, description="Pre-market only: yesterday's "
+                                                   "regular-session change (close vs the close before it)")
+    prior_ah_chg_pct: Optional[float] = Field(default=None, description="Pre-market only, before today's first "
+                                              "trade: last night's after-hours move (latest trade vs yesterday's close)")
     earnings_date: Optional[str] = Field(default=None, description="Next earnings date (ISO) when it is today "
                                          "through 3 days out (ET)")
     earnings_time: Optional[Literal["bmo", "amc"]] = Field(default=None, description="bmo = before the open, "
