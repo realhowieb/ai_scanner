@@ -18,6 +18,7 @@ import { pct, price, setupLabel } from "@/lib/format";
 import { PickupLine } from "./Pickup";
 import { PriceChart } from "./PriceChart";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { OpenInWebull } from "./OpenInWebull";
 import { RankMove, sinceScan } from "./SetupTable";
 import { earningsDate, movementText, signalEvents } from "./StockView";
 
@@ -59,6 +60,7 @@ function Body({ row, s, pro, compared }: { row: Row; s: Stock; pro: boolean; com
       Earnings {s.earnings_days === 0 ? "today" : s.earnings_days === 1 ? "tomorrow" : `in ${s.earnings_days} days`}.</p>}
     <div className="row-actions">
       <SaveToWatchlistButton ticker={row.ticker} />
+      <OpenInWebull ticker={row.ticker} small />
       <Link className="btn btn-sm" href={`${href}#plan`}>{pro ? "Trade plan" : "Trade plan (Pro)"}</Link>
       <Link className="btn btn-sm btn-primary" href={href}>Open full page</Link>
     </div>

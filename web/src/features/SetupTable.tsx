@@ -16,6 +16,7 @@ import { num, pct, price, setupLabel } from "@/lib/format";
 
 import { PickedCell } from "./Pickup";
 import { SaveToWatchlistButton } from "./SaveToWatchlist";
+import { OpenInWebull } from "./OpenInWebull";
 import { DailySpark, PreBreakoutMeter, RvolMeter, useDailySparks, useNewsFlags } from "./Sparks";
 
 /** `scan_last`: the scan's price when Last comes from a live trade (withLiveQuotes). */
@@ -105,6 +106,7 @@ function ActionsCell({ row }: { row: { original: Row } }) {
   return <span className="row-tools">
     {c.onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${t}`} onClick={() => c.onView?.(row.original)}>View</button>}
     <SaveToWatchlistButton ticker={t} compact />
+    <OpenInWebull ticker={t} compact />
   </span>;
 }
 
@@ -269,6 +271,7 @@ export function SetupTable({ rows, offset = 0, premium, numbered = true, sparks 
               <TickerLink ticker={r.ticker} named scanId={scanId} />
               {onView && <button type="button" className="btn btn-sm quick-view-btn" aria-label={`Quick view ${r.ticker}`} onClick={() => onView(r)}>View</button>}
               <SaveToWatchlistButton ticker={r.ticker} compact />
+              <OpenInWebull ticker={r.ticker} compact />
             </div>
             <div className="sc-tags">
               {visible("setup") && !isUnranked(ranks, r.ticker, auto) && <Pill>{setupLabel(r.primary_setup)}</Pill>}
