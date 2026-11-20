@@ -10574,6 +10574,152 @@
     "title": "Mover",
     "type": "object"
    },
+   "MovingNow": {
+    "description": "Day Trader \"Moving now\" (Pro): stocks spotted as an intraday move starts today, with\nwhen and where they were first spotted. `active` is true while new stocks can be spotted\n(regular session from 9:40 AM ET); after that the day's list stays until the next session.\nDescriptive only; no proven multi-day edge, and it never feeds the HSF Score.",
+    "properties": {
+     "active": {
+      "title": "Active",
+      "type": "boolean"
+     },
+     "as_of": {
+      "title": "As Of",
+      "type": "string"
+     },
+     "rows": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/MovingNowRow"
+      },
+      "title": "Rows",
+      "type": "array"
+     },
+     "rule": {
+      "title": "Rule",
+      "type": "string"
+     },
+     "session_date": {
+      "description": "ET date the list belongs to",
+      "title": "Session Date",
+      "type": "string"
+     },
+     "spotted_count": {
+      "description": "Stocks spotted so far today (rows holds the top ones)",
+      "title": "Spotted Count",
+      "type": "integer"
+     },
+     "state": {
+      "enum": [
+       "premarket",
+       "open",
+       "afterhours",
+       "closed"
+      ],
+      "title": "State",
+      "type": "string"
+     }
+    },
+    "required": [
+     "active",
+     "state",
+     "as_of",
+     "session_date",
+     "spotted_count",
+     "rule"
+    ],
+    "title": "MovingNow",
+    "type": "object"
+   },
+   "MovingNowRow": {
+    "properties": {
+     "chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Today's Chg % vs yesterday's close now",
+      "title": "Chg Pct"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Latest price; null when no live quote",
+      "title": "Last"
+     },
+     "since_spotted_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Move since first spotted, percent",
+      "title": "Since Spotted Pct"
+     },
+     "spotted_at": {
+      "description": "When HSF first spotted the stock today (ISO time)",
+      "title": "Spotted At",
+      "type": "string"
+     },
+     "spotted_chg_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Chg % vs yesterday's close when first spotted",
+      "title": "Spotted Chg Pct"
+     },
+     "spotted_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Price when first spotted",
+      "title": "Spotted Price"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "volume_pace": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Today's volume vs the 20-day average daily volume for the share of the session gone (2.0 = twice usual)",
+      "title": "Volume Pace"
+     }
+    },
+    "required": [
+     "ticker",
+     "spotted_at"
+    ],
+    "title": "MovingNowRow",
+    "type": "object"
+   },
    "MyRefunds": {
     "properties": {
      "guarantee_days": {
@@ -13872,6 +14018,30 @@
       ],
       "description": "HSF rank in that scan (1 = best)",
       "title": "Rank"
+     },
+     "spotted_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "When Day Trader's Moving now first spotted the stock on the ET day of `at` (ISO); display only",
+      "title": "Spotted At"
+     },
+     "spotted_price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Price when Moving now spotted it",
+      "title": "Spotted Price"
      }
     },
     "required": [
@@ -27689,6 +27859,60 @@
      }
     ],
     "summary": "Live Day Trader monitor (Pro)"
+   }
+  },
+  "/v1/day-trader/moving-now": {
+   "get": {
+    "description": "Stocks HSF spotted today as an intraday move started: the first time (from 9:40 AM ET)\na liquid U.S. stock trades 3%+ above yesterday's close on at least 2x its usual volume for\nthe time of day, with that time and price, the live price and the move since. Strongest\nvolume pace first; checked about every 2 minutes. Not a prediction.",
+    "operationId": "day_trader_moving_now_v1_day_trader_moving_now_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 10,
+       "maximum": 40,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MovingNow"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "Not signed in"
+     },
+     "403": {
+      "description": "Pro feature"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Stocks spotted as a move starts (Pro)"
    }
   },
   "/v1/day-trader/sparklines": {

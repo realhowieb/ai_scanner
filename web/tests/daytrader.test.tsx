@@ -26,12 +26,20 @@ const ROWS = [
 const fetchMock = vi.fn();
 // The Symbols menu loads the user's watchlists; answered here so tests count only quote calls.
 let watchlists: unknown[] = [];
+// Day Trader's Moving now card; answered here so tests count only quote calls.
+const NO_SPOTS = { active: false, state: "closed", as_of: new Date().toISOString(), session_date: "2026-11-19", spotted_count: 0, rule: "", rows: [] };
+let movingNow: unknown = NO_SPOTS;
 beforeEach(() => {
   fetchMock.mockReset();
   watchlists = [];
+  movingNow = NO_SPOTS;
   localStorage.clear();
-  vi.stubGlobal("fetch", (req: Request) =>
-    new URL(req.url).pathname.endsWith("/v1/watchlists") ? Promise.resolve(jsonResponse(watchlists)) : fetchMock(req));
+  vi.stubGlobal("fetch", (req: Request) => {
+    const path = new URL(req.url).pathname;
+    if (path.endsWith("/v1/watchlists")) return Promise.resolve(jsonResponse(watchlists));
+    if (path.endsWith("/v1/day-trader/moving-now")) return Promise.resolve(jsonResponse(movingNow));
+    return fetchMock(req);
+  });
   fetchMock.mockImplementation(async (req: Request) => {
     if (new URL(req.url).pathname.endsWith("/sparklines")) return jsonResponse({ checked: ["VEEA"], series: { VEEA: [5, 5.2, 5.65] } });
     return jsonResponse({ state: "closed", source: "movers", symbols: ROWS.map((r) => r.ticker), missing: 0, as_of: new Date().toISOString(), rows: ROWS });
@@ -407,5 +415,28 @@ describe("Day Trader sparklines", () => {
     await waitFor(() => expect(asked.at(-1)).toEqual(many.slice(35).map((r) => r.ticker)));
     const s49 = screen.getAllByRole("row").find((r) => within(r).queryByRole("link", { name: /S49/ }))!;
     await waitFor(() => expect(within(s49).getByRole("img", { name: /S49 today/ })).toBeInTheDocument());
+  });
+});
+
+describe("Moving now", () => {
+  it("lists spotted stocks with when and where they were spotted, and checks them in the table", async () => {
+    movingNow = { active: true, state: "open", as_of: new Date().toISOString(), session_date: "2026-11-19", spotted_count: 2, rule: "",
+      rows: [{ ticker: "UP", spotted_at: "2026-11-19T15:05:00Z", spotted_price: 10.3, spotted_chg_pct: 3.1, last: 10.82, chg_pct: 8.2, since_spotted_pct: 5.05, volume_pace: 3.4 },
+             { ticker: "ALSO", spotted_at: "2026-11-19T15:30:00Z", spotted_price: 20, spotted_chg_pct: 3.0, last: null, chg_pct: null, since_spotted_pct: null, volume_pace: 2.1 }] };
+    const u = userEvent.setup();
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    const card = await screen.findByRole("region", { name: "Moving now" });
+    await waitFor(() => expect(within(card).getByText(/2 spotted today/)).toBeInTheDocument());
+    expect(within(card).getByText(/spotted 10:05 AM ET at/)).toBeInTheDocument();
+    expect(within(card).getByText("+5.05% since")).toBeInTheDocument();
+    expect(within(card).getByText("3.4x vol")).toBeInTheDocument();
+    await u.click(within(card).getByRole("button", { name: "Check these in the table" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => new URL((c[0] as Request).url).searchParams.get("symbols") === "UP,ALSO")).toBe(true));
+  });
+
+  it("says when spotting starts before 9:40 AM ET", async () => {
+    movingNow = { ...NO_SPOTS, state: "premarket" };
+    render(<SessionProvider initialMe={me("pro")}><DayTraderView /></SessionProvider>);
+    expect(await screen.findByText("Spotting starts at 9:40 AM ET.")).toBeInTheDocument();
   });
 });

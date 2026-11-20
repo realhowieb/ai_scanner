@@ -258,6 +258,12 @@ a.tk:hover .tk-name { color: var(--text-2); }
   .mix-row .mix-top { flex-basis: 100%; justify-content: flex-start; }
 }
 .row:first-child { border-top: 0; }
+/* Day Trader "Moving now": on a phone the spotted line and live numbers wrap under the ticker. */
+@media (max-width: 640px) {
+  .mn-row { flex-wrap: wrap; row-gap: 4px; }
+  .mn-row > .grow { display: none; }
+  .mn-row > .cap:first-of-type { flex-basis: 100%; order: 5; }
+}
 .move { min-width: 80px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .chips-block { display: flex; flex-direction: column; gap: 8px; }
@@ -554,6 +560,7 @@ select, .field input { min-height: 40px; border-radius: var(--radius-md); backgr
 .sc-grid .sc-sector dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picked-cell { display: inline-flex; flex-direction: column; gap: 2px; white-space: nowrap; }
 .picked-cell .cap { font-size: 11px; }
+.picked-cell .spotted { color: var(--accent, var(--text-2)); }
 .sc-grid .picked-cell { white-space: normal; }
 .pickup-line strong { color: var(--text); font-weight: 600; }
 .sc-bottom { display: flex; align-items: center; gap: 12px; }

@@ -15,6 +15,7 @@ import type { Schemas } from "@/api/client";
 import { Card, Empty, ErrorState, Locked, Pill, Skeleton, TickerLink } from "@/components/ui";
 import { PriceAlertButton } from "@/features/PriceAlert";
 import { SaveToWatchlistButton } from "@/features/SaveToWatchlist";
+import { MovingNow } from "@/features/MovingNow";
 import { StairSteppers } from "@/features/StairSteppers";
 import { useApi } from "@/hooks/useApi";
 import { compact, etTime, num, pct, price } from "@/lib/format";
@@ -450,6 +451,12 @@ function Live() {
     setDraft(list.join(", "));
     setCustom(list);
   };
+  const checkSpotted = (list: string[]) => {
+    const clean = parseTickers(list.join(","));
+    setCustom(clean);
+    setDraft(clean.join(", "));
+    setSource("custom");
+  };
   const [open, setOpen] = useState<string | null>(null);
   const [held, setHeld] = useState<string[] | null>(null);
   const narrow = useNarrow();
@@ -548,6 +555,7 @@ function Live() {
           title="Keep rows in place while you work; prices still update">{held ? "Resume order" : "Pause order"}</button>}
         <button type="button" className="btn btn-sm" onClick={() => setTick((n) => n + 1)} disabled={dt.loading}>Refresh</button>
       </section>
+      <MovingNow onCheck={checkSpotted} />
       {d && all.length > 0 && (
         <div className="metric-strip" aria-label="Day Trader summary">
           <span><strong>{metric(d.summary?.strong, all.filter((r) => r.dt_quality === "strong").length)}</strong> strong</span>

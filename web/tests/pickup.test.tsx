@@ -35,4 +35,14 @@ describe("pickup", () => {
     rerender(<PickupLine pickup={null} last={100} nowMs={NOW} />);
     expect(container.textContent).toBe("");
   });
+
+  it("adds when Day Trader's Moving now spotted it that day", () => {
+    const spotted = { ...pickup, at: "2026-11-12T17:35:00+00:00", spotted_at: "2026-11-12T14:47:00+00:00", spotted_price: 97.5 };
+    const { container } = render(<><PickedCell pickup={spotted} last={103} nowMs={NOW} /><PickupLine pickup={spotted} last={103} nowMs={NOW} /></>);
+    expect(screen.getByText("Day Trader 9:47 AM ET")).toBeTruthy();
+    expect(container.textContent).toContain("Spotted in Day Trader at 9:47 AM ET at $97.50");
+    render(<PickedCell pickup={pickup} last={103} nowMs={NOW} />);
+    expect(screen.queryAllByText(/Day Trader/).length).toBe(2);        // the plain pickup adds no third
+  });
 });
+

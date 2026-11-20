@@ -154,7 +154,6 @@ def main() -> int:
     # ---- simulate per day ----
     flags = {"T1": [], "T2": []}
     first_flag = {}  # (day, sym) -> {rule: (time, price)}
-    rest_high = {}   # (day, sym, time) handled inline
     pickup_keys = defaultdict(list)
     for p in pickups:
         pickup_keys[p["day"]].append(p)

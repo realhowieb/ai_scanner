@@ -227,7 +227,7 @@ def _movers_list(universe_fn) -> List[str]:
     if premarket_session_date() is not None:
         return dtm._top_movers_symbols(universe=universe_fn() if universe_fn else None)
     try:
-        scored = _cached("dt_movers_scored", lambda: dtm._movers_scored(dtm._movers_universe()),
+        scored = _cached("dt_movers_scored", lambda: dtm._movers_scored([], rows=dt_universe_rows()),
                          ttl_s=DT_MOVERS_TTL_S, stale_s=DT_MOVERS_STALE_S) or []
     except Exception:
         return []
@@ -236,6 +236,26 @@ def _movers_list(universe_fn) -> List[str]:
     members = universe_fn()
     # No universe file (e.g. other_listed.txt missing): fall back to the whole market, as before.
     return dtm._rank_movers(scored, members=members) if members else dtm._rank_movers(scored)
+
+
+# The snapshot fields the movers ranking and Moving now read; the rest of each
+# whole-market row is dropped so the shared pass stays small in memory.
+DT_UNIVERSE_FIELDS = ("ticker", "last", "previous_close", "volume", "chg_pct", "gap_pct", "rvol",
+                      "vs_vwap_pct", "trade_ts")
+
+
+def dt_universe_rows() -> List[Dict[str, Any]]:
+    """One whole-market snapshot pass (regular session), slimmed, shared by the movers
+    lists and Moving now (DT_MOVERS_TTL_S, stale-while-reloading)."""
+    from api.today import _cached
+    from market_data import build_day_trader_metrics
+    from ui import day_trader as dtm
+
+    def load():
+        rows = build_day_trader_metrics(dtm._movers_universe(), with_rvol=False) or []
+        return [{k: r.get(k) for k in DT_UNIVERSE_FIELDS} for r in rows]
+
+    return _cached("dt_universe_rows", load, ttl_s=DT_MOVERS_TTL_S, stale_s=DT_MOVERS_STALE_S) or []
 
 
 DT_EARNINGS_DAYS = 3        # tag names that report today through 3 days out
@@ -366,6 +386,12 @@ def keep_day_trader_warm_once(now: Optional[dt.datetime] = None) -> bool:
         except Exception as e:  # one list failing shouldn't leave the others cold
             logging.getLogger("hsf_api.market").warning("day trader keep-warm %s failed: %s", source,
                                                         type(e).__name__)
+    try:  # spot stocks as moves start even while nobody has Day Trader open
+        from api.moving_now import moving_now
+
+        moving_now(now=now)
+    except Exception as e:
+        logging.getLogger("hsf_api.market").warning("moving now keep-warm failed: %s", type(e).__name__)
     return True
 
 
