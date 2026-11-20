@@ -202,6 +202,13 @@ def latest_scan(entitlements: Dict[str, bool], tier: str, *, limit: int, offset:
     if sector:
         opps = [o for o in opps if sector_of[id(o)] == sector]
     visible = opps[:cap]
+    try:  # when Day Trader's Moving now spotted a pickup first that day (display only)
+        from api.moving_now import with_spotted
+
+        pickup_of = {**pickup_of, **with_spotted({t: pickup_of.get(t) for t in
+                                                  {str(o.get("ticker") or "").upper() for o in visible[offset:offset + limit]}})}
+    except Exception as exc:
+        swallowed("api.scans.spotted", exc)
     if sort != "score":
         # Re-orders only the rows the plan already sees (its top HSF-ranked setups); missing values last.
         def key(o: Dict[str, Any]) -> Any:
@@ -1042,12 +1049,26 @@ def pickup_text(p: Optional[Dict[str, Any]]) -> Optional[str]:
         text += f" at ${float(p['price']):.2f}"
     if p.get("rank") is not None:
         text += f" (rank #{int(p['rank'])} then)"
+    spotted = et_scan_label(p.get("spotted_at"), with_day=False)
+    if spotted:
+        text += f"; Day Trader's Moving now spotted it at {spotted}"
+        if p.get("spotted_price") is not None:
+            text += f" at ${float(p['spotted_price']):.2f}"
     return text
 
 
 def pickup_for(ticker: Any) -> Optional[Dict[str, Any]]:
     try:
-        return pickups().get(str(ticker or "").strip().upper())
+        t = str(ticker or "").strip().upper()
+        p = pickups().get(t)
+        if p:
+            try:  # Day Trader's Moving now may have spotted it earlier that day (display only)
+                from api.moving_now import with_spotted
+
+                p = with_spotted({t: p})[t]
+            except Exception as exc:
+                swallowed("api.scans.spotted", exc)
+        return p
     except Exception as exc:
         swallowed("api.scans.pickup_for", exc)
         return None

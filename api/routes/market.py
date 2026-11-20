@@ -77,6 +77,19 @@ def register(app: FastAPI) -> None:
         require_feature(account, "can_premarket")
         return json_safe(market.premarket_gappers(limit))
 
+    @app.get("/v1/day-trader/moving-now", response_model=models.MovingNow, responses=_DT,
+             summary="Stocks spotted as a move starts (Pro)")
+    def day_trader_moving_now(account: Dict[str, Any] = Depends(current_account),
+                              limit: int = Query(10, ge=1, le=40)) -> Dict[str, Any]:
+        """Stocks HSF spotted today as an intraday move started: the first time (from 9:40 AM ET)
+        a liquid U.S. stock trades 3%+ above yesterday's close on at least 2x its usual volume for
+        the time of day, with that time and price, the live price and the move since. Strongest
+        volume pace first; checked about every 2 minutes. Not a prediction."""
+        require_feature(account, "can_day_trader")
+        from api.moving_now import moving_now
+
+        return json_safe(moving_now(limit))
+
     @app.get("/v1/day-trader/sparklines", response_model=models.DayTraderSparklines, responses=_DT,
              summary="Intraday sparklines (Pro)")
     def day_trader_sparklines(account: Dict[str, Any] = Depends(current_account),

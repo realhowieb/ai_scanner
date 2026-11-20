@@ -458,14 +458,15 @@ def _is_stale(trade_ts, max_days: int = _MOVERS_MAX_STALE_DAYS) -> bool:
         return False
 
 
-def _movers_scored(universe: List[str]) -> List[tuple]:
+def _movers_scored(universe: List[str], rows: Optional[List[Dict[str, Any]]] = None) -> List[tuple]:
     """(day-trade score, TICKER) for every liquid, live, moving name in ``universe``
     during the regular session, best first. One snapshot pass; any subset's movers
     can then be cut from it with _rank_movers, so the S&P 500, NASDAQ and NYSE lists
     share the whole-market pass instead of each sweeping its own exchange."""
-    from market_data import build_day_trader_metrics
+    if rows is None:  # callers that already hold the whole-market pass pass it in
+        from market_data import build_day_trader_metrics
 
-    rows = build_day_trader_metrics(universe, with_rvol=False) or []
+        rows = build_day_trader_metrics(universe, with_rvol=False) or []
     scored: List[tuple] = []
     for r in rows:
         t = r.get("ticker")
