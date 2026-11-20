@@ -230,6 +230,17 @@ await step("Stock Intelligence shows the watchlist; saving again reports already
   check("Stock Intelligence shows the watchlist; saving again reports already present", /Already in it/.test(label), label.replace(/\s+/g, " "));
 });
 
+await step("Open in Webull goes to the stock's Webull page", async () => {
+  // Stock page header button -> /go/webull/{ticker}, which redirects to webull.com/quote/{exchange}-{ticker}.
+  const link = page.getByRole("link", { name: "Open in Webull" }).first();
+  await link.waitFor();
+  const href = await link.getAttribute("href");
+  const res = await page.request.get(new URL(href, BASE).toString(), { maxRedirects: 0 });
+  const to = res.headers()["location"] ?? "";
+  const want = `-${ticker.toLowerCase().replace(".", "-")}`;
+  check("Open in Webull goes to the stock's Webull page", res.status() === 302 && to.startsWith("https://www.webull.com/quote/") && to.endsWith(want), `${href} -> ${to}`);
+});
+
 await step("create a non-firing price alert from Stock Intelligence", async () => {
   await page.getByRole("button", { name: ALERT_BTN }).click();
   const dlg = page.getByRole("dialog", { name: `Price alert for ${ticker}` });

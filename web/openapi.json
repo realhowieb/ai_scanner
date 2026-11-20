@@ -5257,6 +5257,43 @@
     "title": "BriefingSent",
     "type": "object"
    },
+   "BrokerLink": {
+    "properties": {
+     "exact": {
+      "description": "True when url is the stock's own Webull page",
+      "title": "Exact",
+      "type": "boolean"
+     },
+     "exchange": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Listing exchange code from the market-data provider (NASDAQ, NYSE, ARCA, ...)",
+      "title": "Exchange"
+     },
+     "ticker": {
+      "title": "Ticker",
+      "type": "string"
+     },
+     "url": {
+      "description": "Where the button opens: the stock's Webull quote page, or Webull's markets page when the exchange is unknown",
+      "title": "Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ticker",
+     "url",
+     "exact"
+    ],
+    "title": "BrokerLink",
+    "type": "object"
+   },
    "Capabilities": {
     "properties": {
      "alert_rule_types": {
@@ -33047,6 +33084,52 @@
      }
     },
     "summary": "Every HSF daily top pick and how it did vs the S&P 500 (public)"
+   }
+  },
+  "/v1/public/webull-link/{ticker}": {
+   "get": {
+    "description": "The stock's Webull quote page (which needs the listing exchange), or Webull's U.S.\nmarkets page when the exchange can't be found. A link only: nothing is sent to Webull.",
+    "operationId": "public_webull_link_v1_public_webull_link__ticker__get",
+    "parameters": [
+     {
+      "description": "Ticker symbol, e.g. AAPL or BRK.B",
+      "in": "path",
+      "name": "ticker",
+      "required": true,
+      "schema": {
+       "description": "Ticker symbol, e.g. AAPL or BRK.B",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]{0,9}$",
+       "title": "Ticker",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BrokerLink"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ValidationErrorResponse"
+        }
+       }
+      },
+      "description": "Invalid request fields"
+     },
+     "429": {
+      "description": "Too many requests"
+     }
+    },
+    "summary": "Where 'Open in Webull' goes for a stock (signed out)"
    }
   },
   "/v1/public/weekly": {

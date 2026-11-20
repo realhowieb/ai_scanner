@@ -3122,6 +3122,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/webull-link/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where 'Open in Webull' goes for a stock (signed out)
+         * @description The stock's Webull quote page (which needs the listing exchange), or Webull's U.S.
+         *     markets page when the exchange can't be found. A link only: nothing is sent to Webull.
+         */
+        get: operations["public_webull_link_v1_public_webull_link__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/weekly": {
         parameters: {
             query?: never;
@@ -5638,6 +5659,26 @@ export interface components {
             month: string;
             /** Sent */
             sent: number;
+        };
+        /** BrokerLink */
+        BrokerLink: {
+            /**
+             * Exact
+             * @description True when url is the stock's own Webull page
+             */
+            exact: boolean;
+            /**
+             * Exchange
+             * @description Listing exchange code from the market-data provider (NASDAQ, NYSE, ARCA, ...)
+             */
+            exchange?: string | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Url
+             * @description Where the button opens: the stock's Webull quote page, or Webull's markets page when the exchange is unknown
+             */
+            url: string;
         };
         /** Capabilities */
         Capabilities: {
@@ -21086,6 +21127,45 @@ export interface operations {
             };
             /** @description Results unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    public_webull_link_v1_public_webull_link__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticker symbol, e.g. AAPL or BRK.B */
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerLink"];
+                };
+            };
+            /** @description Invalid request fields */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
