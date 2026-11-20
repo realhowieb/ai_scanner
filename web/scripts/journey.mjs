@@ -201,6 +201,20 @@ await step("Day Trader shows each name's move vs SPY today", async () => {
   check("Day Trader shows each name's move vs SPY today", !table || header > 0, table ? `vs SPY header ${header}` : "no rows right now");
 });
 
+await step("Day Trader fills pre-market Waiting rows with last night's move", async () => {
+  // Before ~8 AM ET no pre-market prints: Waiting rows show AH / Yest. in Chg %, and an all-Waiting list says when quotes start.
+  await page.goto(`${BASE}/day-trader`);
+  await page.locator(".dt-table, .dt-cards, .empty").first().waitFor({ timeout: 60_000 });
+  const waiting = await page.locator("td .cap", { hasText: /^Waiting$/ }).count();
+  const filled = await page.locator(".dt-chg-waiting").count();
+  const note = await page.getByTestId("dt-premarket-waiting").count();
+  if (waiting) await shot(page, "journey-1c2-day-trader-premarket-waiting");
+  await page.goto(`${BASE}/scanner`);
+  await page.locator("table .tk").first().waitFor();
+  check("Day Trader fills pre-market Waiting rows with last night's move", !waiting || filled > 0,
+    waiting ? `${waiting} waiting, ${filled} with AH/Yest.${note ? ", quotes-start note" : ""}` : "no Waiting rows right now");
+});
+
 await step("Day Trader shows Moving now (stocks spotted as a move starts)", async () => {
   // /v1/day-trader/moving-now; titled "Spotted today" outside spotting hours. Empty lists show the rule.
   await page.goto(`${BASE}/day-trader`);

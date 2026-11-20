@@ -6006,6 +6006,16 @@ export interface components {
             /** Previous Close */
             previous_close?: number | null;
             /**
+             * Prior Ah Chg Pct
+             * @description Pre-market only, before today's first trade: last night's after-hours move (latest trade vs yesterday's close)
+             */
+            prior_ah_chg_pct?: number | null;
+            /**
+             * Prior Session Chg Pct
+             * @description Pre-market only: yesterday's regular-session change (close vs the close before it)
+             */
+            prior_session_chg_pct?: number | null;
+            /**
              * Quote Flags
              * @description Why the quote may be wrong: Extreme move, Far from VWAP, Stale quote. Flagged rows rank last.
              * @default []

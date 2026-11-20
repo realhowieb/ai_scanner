@@ -627,6 +627,41 @@ def premarket_quote(snapshot: object, day) -> Optional[Dict[str, Any]]:
     return {"last": last, "prev_close": prev, "trade_ts": trade.get("t")}
 
 
+def after_hours_move(snapshot: object, prev_close: Optional[float], day) -> Optional[float]:
+    """Last night's after-hours move in % (latest trade vs the last close), or None.
+
+    Pre-market before a name's first print today, its latest trade is last
+    night's after-hours print. Only a trade dated after 16:00 ET on a day before
+    `day` counts; a 15:59 print is the close, not an after-hours move."""
+    if not isinstance(snapshot, dict) or not prev_close or prev_close <= 0:
+        return None
+    trade = snapshot.get("latestTrade") or {}
+    if not isinstance(trade, dict):
+        return None
+    t_day = _et_date(trade.get("t"))
+    if t_day is None or t_day >= day:
+        return None
+    import datetime as _dt
+    import re
+    from zoneinfo import ZoneInfo
+
+    txt = re.sub(r"(\.\d{6})\d+", r"\1", str(trade.get("t"))).replace("Z", "+00:00")
+    try:
+        et = _dt.datetime.fromisoformat(txt).astimezone(ZoneInfo("America/New_York"))
+    except ValueError:
+        return None
+    if et.hour < 16:
+        return None
+    # Only last night's prints: a print from days ago is stale, not an after-hours move.
+    bar = snapshot.get("dailyBar") or {}
+    if _et_date(bar.get("t") if isinstance(bar, dict) else None) != t_day:
+        return None
+    last = _sf(trade.get("p"))
+    if not last or last <= 0:
+        return None
+    return round((last - prev_close) / prev_close * 100.0, 2)
+
+
 def fetch_premarket_volume(symbols: List[str], day, now=None) -> Optional[Dict[str, Dict[str, float]]]:
     """Per symbol: pre-market volume, dollar volume, VWAP, high and low from today's
     1-minute bars since 4:00 ET. None when the bars can't be fetched (callers then
@@ -838,6 +873,9 @@ def build_day_trader_metrics(
             prior_chg_pct = (
                 (prev_close - day_before) / day_before * 100.0 if (prev_close and day_before) else None
             )
+            # Before the first print today (IEX has none until ~8:00 ET) show last
+            # night's after-hours move instead of a blank row.
+            prior_ah_chg_pct = None if q else after_hours_move(snap, prev_close, pm_day)
 
         row = {
                 "ticker": sym,
@@ -887,6 +925,9 @@ def build_day_trader_metrics(
             row.update({"session": "premarket", "traded_today": traded_today,
                         # Yesterday's full-session move (close vs the close before it).
                         "prior_session_chg_pct": round(prior_chg_pct, 2) if prior_chg_pct is not None else None,
+                        # Last night's after-hours move (latest trade vs yesterday's close)
+                        # while no trade has printed today.
+                        "prior_ah_chg_pct": prior_ah_chg_pct,
                         "previous_close_timeframe": "last_regular_session_daily_bar",
                         "vwap_timeframe": "premarket_1min_bars", "vwap_formula": "sum(c*v)/sum(v) since 04:00 ET",
                         "volume_timeframe": "premarket_1min_bars_since_0400_et"})

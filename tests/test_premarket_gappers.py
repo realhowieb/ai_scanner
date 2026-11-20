@@ -67,6 +67,22 @@ class DayTraderPremarketTests(unittest.TestCase):
         self.assertFalse(r["traded_today"])
         self.assertIsNone(r["volume"])
 
+    def test_waiting_row_shows_last_nights_after_hours_move(self):
+        """Before IEX prints (~8:00 ET) the row shows last night's after-hours move, not blanks."""
+        ah = "2026-10-13T22:15:00.123456789Z"           # 6:15 PM ET yesterday
+        r = self.rows({"AH": snap(103.0, ah)}, WED_8_ET)["AH"]
+        self.assertFalse(r["traded_today"])
+        self.assertIsNone(r["chg_pct"])
+        self.assertEqual(r["prior_ah_chg_pct"], 3.0)          # 103 vs yesterday's 100 close
+
+    def test_after_hours_move_needs_a_print_after_the_close(self):
+        r = self.rows({"OLD": snap(100.5, YDAY_TRADE)}, WED_8_ET)["OLD"]   # 3:59 PM print
+        self.assertIsNone(r["prior_ah_chg_pct"])
+        stale = self.rows({"S": snap(90.0, "2026-10-09T22:00:00Z")}, WED_8_ET)["S"]   # days-old print
+        self.assertIsNone(stale["prior_ah_chg_pct"])
+        today = self.rows({"GAP": snap(111.0, TODAY_TRADE)}, WED_8_ET)["GAP"]
+        self.assertIsNone(today["prior_ah_chg_pct"])         # traded today: Chg % is today's move
+
     def test_premarket_row_carries_yesterdays_session_move(self):
         r = self.rows({"OLD": snap(100.0, YDAY_TRADE)}, WED_8_ET)["OLD"]
         self.assertEqual(r["prior_session_chg_pct"], 25.0)     # yesterday 100 vs 80
