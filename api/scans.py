@@ -468,16 +468,29 @@ def watchlist_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {"at": stamp.get("created_at"), "rows": _autoscore_rows(stamp, entitlements)}
 
 
-def watchlist_autoscore_pair(entitlements: Dict[str, bool]) -> Optional[Dict[str, Any]]:
-    """The two newest auto-score passes ({at, rows, previous_at, previous_rows}) so the
-    Watchlists "Since last scan" can compare unranked stocks too; None without two passes."""
+def watchlist_autoscore_pair(entitlements: Dict[str, bool], scan_at: Any) -> Optional[Dict[str, Any]]:
+    """The auto-score pass for the latest market scan and the one for the scan before it
+    ({at, rows, previous_at, previous_rows}), so the Watchlists "Since last scan" compares
+    unranked stocks over the same span as ranked ones. "For a scan" = the newest pass made
+    at or after it. Passes also run after session (after-hours) scans, so the two newest
+    passes can both postdate the latest market scan; those are never compared with each
+    other. None while the latest scan's pass is still running or no earlier pass exists."""
     from api.today import _cached
-    from db.watchlist_autoscore import recent_stamps
+    from db.watchlist_autoscore import KEEP_ROWS, recent_stamps
 
-    stamps = _cached("watchlist_autoscore_stamps2", lambda: recent_stamps(AUTOSCORE_MAX_AGE_S, 2))
-    if len(stamps) < 2:
+    def aware(v: Any) -> Optional[dt.datetime]:
+        if isinstance(v, str):
+            v = dt.datetime.fromisoformat(v)
+        return (v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)) if isinstance(v, dt.datetime) else None
+
+    at = aware(scan_at)
+    stamps = _cached("watchlist_autoscore_stamps", lambda: recent_stamps(AUTOSCORE_MAX_AGE_S, KEEP_ROWS))
+    if at is None or not stamps or (aware(stamps[0].get("created_at")) or at) < at:
         return None
-    cur, prev = stamps[0], stamps[1]
+    prev = next((st for st in stamps if (aware(st.get("created_at")) or at) < at), None)
+    if prev is None:
+        return None
+    cur = stamps[0]
     return {"at": cur.get("created_at"), "rows": _autoscore_rows(cur, entitlements),
             "previous_at": prev.get("created_at"), "previous_rows": _autoscore_rows(prev, entitlements)}
 
