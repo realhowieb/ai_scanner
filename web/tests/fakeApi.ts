@@ -20,6 +20,8 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
   rules?: boolean;
   /** Serve GET /v1/quotes with these latest trades (else 404, like an older API). */
   quotes?: Record<string, { last: number; chg_pct: number | null; at: string }>;
+  /** Serve GET /v1/watchlists/{id}/changes with this body (else 404). */
+  changes?: Record<string, unknown>;
   /** GET /v1/alerts/events returns these (newest first). */
   events?: Record<string, unknown>[] } = {}) {
   let nextId = 1;
@@ -57,6 +59,7 @@ export function fakeApi(opts: { alertLimit?: number; emailEnabled?: boolean; sca
       return jsonResponse(x!.body, x!.status, { "x-request-id": "srv-injected", ...(x!.headers ?? {}) });
     }
     let m: RegExpMatchArray | null;
+    if (opts.changes && /^\/v1\/watchlists\/\d+\/changes$/.test(path)) return jsonResponse(opts.changes);
     if (path === "/v1/quotes" && opts.quotes) {
       const want = (url.searchParams.get("symbols") ?? "").split(",");
       return jsonResponse({ feed: "iex", quotes: Object.fromEntries(Object.entries(opts.quotes).filter(([t]) => want.includes(t))) });

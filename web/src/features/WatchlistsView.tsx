@@ -304,34 +304,77 @@ function changeTone(t: string): "up" | "down" | undefined {
   return undefined;
 }
 
+/** "Since last scan" summary chips: each filters the change chips below (alerts lists the alerts). */
+type ChangeFilter = "all" | "new" | "rising" | "falling" | "alerts";
+const CHANGE_MATCH: Record<Exclude<ChangeFilter, "all" | "alerts">, (c: Change) => boolean> = {
+  new: (c) => c.event_type === "NEW_OPPORTUNITY",
+  rising: (c) => c.event_type === "RISING",
+  falling: (c) => c.event_type === "FALLING",
+};
+const CHANGES_SHOWN = 12;
+
 function WatchlistChangesCard({ id }: { id: number }) {
   const changes = useApi(`wl-changes:${id}`, (signal) => watchlists.changes(id, signal));
+  const [filter, setFilterState] = useState<ChangeFilter>("all");
+  const [showAll, setShowAll] = useState(false);
   if (changes.error || !changes.data) return null;
   const data = changes.data;
   const s = data.summary ?? {};
   if (data.changes.length === 0 && data.alerts.length === 0 && data.headline.length === 0 && !Number(s.total_changes)) {
     return <p className="cap watchlist-quiet" role="status">{data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list."}</p>;
   }
+  const setFilter = (f: ChangeFilter) => { setFilterState(f === filter ? "all" : f); setShowAll(false); };
+  const chips: { f: ChangeFilter; n: number; label: string; tip: string }[] = [
+    { f: "all", n: Number(metric(s.total_changes, data.changes.length)), label: "changes", tip: "Every change since the previous scan. Click to show them all." },
+    { f: "new", n: Number(metric(s.new, 0)), label: "new", tip: "Newly made the ranked list." },
+    { f: "rising", n: Number(metric(s.rising, 0)), label: "rising", tip: "HSF Score up 3 or more." },
+    { f: "falling", n: Number(metric(s.falling, 0)), label: "falling", tip: "HSF Score down 3 or more." },
+    { f: "alerts", n: Number(metric(s.alerts, data.alerts.length)), label: "alerts", tip: "Your alerts on these tickers that fired since the previous scan." },
+  ];
+  const list = filter === "all" || filter === "alerts" ? data.changes : data.changes.filter(CHANGE_MATCH[filter]);
+  const shown = showAll ? list : list.slice(0, CHANGES_SHOWN);
+  const empty = data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list.";
   return (
     <Card title="Since last scan" id="wl-changes" aside={data.has_baseline ? undefined : "Waiting for a baseline"}>
-      <div className="metric-strip" aria-label="Watchlist changes summary">
-        <span><strong>{metric(s.total_changes, data.changes.length)}</strong> changes</span>
-        <span><strong>{metric(s.new, 0)}</strong> new</span>
-        <span><strong>{metric(s.rising, 0)}</strong> rising</span>
-        <span><strong>{metric(s.falling, 0)}</strong> falling</span>
-        <span><strong>{metric(s.alerts, data.alerts.length)}</strong> alerts</span>
+      <div className="wl-summary" aria-label="Watchlist changes summary">
+        {chips.map((c) => (
+          <button key={c.f} type="button" className={`wl-chip${filter === c.f && c.f !== "all" ? " on" : ""}`}
+            aria-pressed={c.f === "all" ? filter === "all" : filter === c.f} title={c.tip}
+            aria-label={`${c.n} ${c.label}. ${c.tip}`} disabled={c.f !== "all" && c.n === 0 && filter !== c.f}
+            onClick={() => setFilter(c.f)}>
+            <strong>{c.n}</strong> {c.label}
+          </button>
+        ))}
       </div>
-      {data.changes.length ? (<>
+      {filter === "alerts" ? (
+        data.alerts.length ? (
+          <ul className="wl-change-alerts">
+            {data.alerts.map((a) => (
+              <li key={a.event_id}>{a.ticker && <><TickerLink ticker={a.ticker} logo={false} />{" "}</>}{a.message}
+                {(a.triggered_at ?? a.fired_at) && <span className="cap"> · {etTime(a.triggered_at ?? a.fired_at)}</span>}</li>
+            ))}
+          </ul>
+        ) : <p className="cap">No alerts on these tickers since the previous scan.</p>
+      ) : list.length ? (<>
         <div className="chips">
-          {data.changes.slice(0, 12).map((c, i) => <Pill key={`${c.ticker}-${c.event_type}-${i}`} tone={changeTone(c.event_type)}>{describeChange(c)}{c.source === "auto" && <span className="wl-auto" title="Auto-scored: not in the ranked list, so compared with the previous auto-score pass">A</span>}</Pill>)}
-          {data.changes.length > 12 && <span className="cap">+{data.changes.length - 12} more</span>}
+          {shown.map((c, i) => (
+            <Link key={`${c.ticker}-${c.event_type}-${i}`} href={`/stocks/${encodeURIComponent(c.ticker)}`}
+              className={`pill pill-link${changeTone(c.event_type) ? ` pill-${changeTone(c.event_type)}` : ""}`} title={`Open ${c.ticker}`}>
+              {describeChange(c)}{c.source === "auto" && <span className="wl-auto" title="Auto-scored: not in the ranked list, so compared with the previous auto-score pass">A</span>}
+            </Link>
+          ))}
+          {list.length > CHANGES_SHOWN && (
+            <button type="button" className="link-btn cap" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Show fewer" : `+${list.length - CHANGES_SHOWN} more`}
+            </button>
+          )}
         </div>
-        {data.changes.some((c) => c.source === "auto") && <p className="cap">A = auto-scored stock (not in the ranked list), compared with the previous auto-score pass.</p>}
-      </>) : data.headline.length ? (
+        {list.some((c) => c.source === "auto") && <p className="cap">A = auto-scored stock (not in the ranked list), compared with the previous auto-score pass.</p>}
+      </>) : data.headline.length && filter === "all" ? (
         <div className="chips">
           {data.headline.slice(0, 8).map((h) => <Pill key={`${h.ticker}-${h.event_type}`}>{h.ticker} {h.event_type.replace(/_/g, " ").toLowerCase()}</Pill>)}
         </div>
-      ) : <p className="cap">{data.has_baseline ? "No major watchlist changes since the previous scan." : "Changes appear after two scans include this list."}</p>}
+      ) : <p className="cap">{filter === "all" ? empty : `No ${filter} changes since the previous scan.`}</p>}
     </Card>
   );
 }
