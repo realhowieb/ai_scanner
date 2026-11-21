@@ -262,6 +262,17 @@ class WatchlistIntelligenceTests(IntelBase):
              mock.patch("db.watchlist_autoscore.load_setups", side_effect=lambda i: passes[i]):
             d = self.client.get(f"/v1/watchlists/{wid}/changes", headers=self.prem).json()
             self.assertFalse(any(c["source"] == "auto" for c in d["changes"]))
+        # After-hours passes after the latest scan are not compared with each other: the
+        # baseline is the newest pass before the latest scan (13:50, for the 13:35 scan).
+        today.clear_cache()
+        late = [{"id": 3, "created_at": at + dt.timedelta(hours=1), "session": "after", "symbols": 3}] + stamps
+        passes[3] = [{"ticker": "AAA", "score": 41}, {"ticker": "BBB", "score": 61}, {"ticker": "CCC", "score": 50}]
+        with mock.patch("db.watchlist_autoscore.recent_stamps", side_effect=lambda *a, **k: late), \
+             mock.patch("db.watchlist_autoscore.load_setups", side_effect=lambda i: passes[i]):
+            d = self.client.get(f"/v1/watchlists/{wid}/changes", headers=self.prem).json()
+            auto = {c["ticker"]: (c["previous_score"], c["current_score"]) for c in d["changes"] if c["source"] == "auto"}
+            self.assertEqual(auto, {"AAA": (52, 41), "BBB": (55, 61)})
+            self.assertTrue(d["previous_auto_scored_at"].startswith("2026-10-08T13:50"))
 
 
 class AlertRuleApiTests(IntelBase):

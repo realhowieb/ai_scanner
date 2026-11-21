@@ -235,29 +235,18 @@ def intelligence(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, b
 
 def _auto_changes(watch: set, obs: Dict[str, Any], entitlements: Dict[str, bool],
                   base: Dict[str, Any]) -> list:
-    """Premium: score moves for list stocks neither scan ranked, from the two newest
-    watchlist auto-score passes (same ±3 rule as the ranked list). A stock that entered
+    """Premium: score moves for list stocks neither scan ranked, from the newest watchlist
+    auto-score pass vs the newest pass before the latest scan (same ±3 rule as the ranked list). A stock that entered
     or left the ranked list is already covered by NEW_OPPORTUNITY / DROPPED."""
     from api.scans import _ticker_key, watchlist_autoscore_pair
     from ui.opportunities import MIN_SCORE_DELTA
 
     try:
-        pair = watchlist_autoscore_pair(entitlements)
+        pair = watchlist_autoscore_pair(entitlements, obs["scan_at"])
     except Exception as e:  # the ranked changes still answer
         log.warning(json.dumps({"event": "watchlist_auto_changes_failed", "error": type(e).__name__}))
         return []
     if not pair:
-        return []
-
-    def aware(v: Any) -> Optional[dt.datetime]:
-        if isinstance(v, str):
-            v = dt.datetime.fromisoformat(v)
-        return (v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)) if isinstance(v, dt.datetime) else None
-
-    # A new market scan can land before its auto-score pass finishes: don't pair the
-    # previous two passes with this scan (same rule as items[].auto on GET /v1/watchlists/{id}).
-    at, scan_at = aware(pair["at"]), aware(obs["scan_at"])
-    if at is None or (scan_at and at < scan_at):
         return []
     base["auto_scored_at"] = _iso(pair["at"])
     base["previous_auto_scored_at"] = _iso(pair["previous_at"])
