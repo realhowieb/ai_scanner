@@ -11915,6 +11915,11 @@ export interface components {
              * @description SIGNAL_ADDED/REMOVED: which signal (e.g. prebreakout)
              */
             signal?: string | null;
+            /**
+             * Source
+             * @description scan: the two latest market scans; auto (Premium): the two newest watchlist auto-score passes, for stocks neither scan ranked
+             */
+            source?: ("scan" | "auto") | null;
             /** Ticker */
             ticker: string;
         };
@@ -11926,6 +11931,11 @@ export interface components {
              * @default []
              */
             alerts: components["schemas"]["AlertEvent"][];
+            /**
+             * Auto Scored At
+             * @description Premium: the newest auto-score pass behind source=auto changes
+             */
+            auto_scored_at?: string | null;
             /**
              * Changes
              * @default []
@@ -11946,6 +11956,11 @@ export interface components {
             last_scan_at?: string | null;
             /** Name */
             name: string;
+            /**
+             * Previous Auto Scored At
+             * @description Premium: the auto-score pass it was compared with
+             */
+            previous_auto_scored_at?: string | null;
             /** Previous Scan At */
             previous_scan_at?: string | null;
             /**
