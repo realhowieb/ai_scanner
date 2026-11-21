@@ -233,6 +233,55 @@ def intelligence(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, b
     }
 
 
+def _auto_changes(watch: set, obs: Dict[str, Any], entitlements: Dict[str, bool],
+                  base: Dict[str, Any]) -> list:
+    """Premium: score moves for list stocks neither scan ranked, from the two newest
+    watchlist auto-score passes (same ±3 rule as the ranked list). A stock that entered
+    or left the ranked list is already covered by NEW_OPPORTUNITY / DROPPED."""
+    from api.scans import _ticker_key, watchlist_autoscore_pair
+    from ui.opportunities import MIN_SCORE_DELTA
+
+    try:
+        pair = watchlist_autoscore_pair(entitlements)
+    except Exception as e:  # the ranked changes still answer
+        log.warning(json.dumps({"event": "watchlist_auto_changes_failed", "error": type(e).__name__}))
+        return []
+    if not pair:
+        return []
+
+    def aware(v: Any) -> Optional[dt.datetime]:
+        if isinstance(v, str):
+            v = dt.datetime.fromisoformat(v)
+        return (v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)) if isinstance(v, dt.datetime) else None
+
+    # A new market scan can land before its auto-score pass finishes: don't pair the
+    # previous two passes with this scan (same rule as items[].auto on GET /v1/watchlists/{id}).
+    at, scan_at = aware(pair["at"]), aware(obs["scan_at"])
+    if at is None or (scan_at and at < scan_at):
+        return []
+    base["auto_scored_at"] = _iso(pair["at"])
+    base["previous_auto_scored_at"] = _iso(pair["previous_at"])
+    out = []
+    for t in sorted(watch):
+        if t in obs["ranked"] or t in obs["previous_ranked"]:
+            continue
+        k = _ticker_key(t)
+        cur, prev = pair["rows"].get(k), pair["previous_rows"].get(k)
+        a, b = (_num(cur.get("score")) if cur else None), (_num(prev.get("score")) if prev else None)
+        if a is None or b is None or abs(a - b) < MIN_SCORE_DELTA:
+            continue
+        out.append({
+            "ticker": t, "event_type": "RISING" if a > b else "FALLING", "severity": "LOW",
+            "previous_score": b, "current_score": a, "score_delta": a - b,
+            "previous_status": prev.get("status"), "current_status": cur.get("status"),
+            "setup": cur.get("primary_setup"), "signal": None,
+            "previous_rank": None, "rank": None, "rank_change": None, "source": "auto",
+        })
+    # Biggest moves first, so the chips the page shows are the ones that matter.
+    out.sort(key=lambda c: -abs(c["score_delta"]))
+    return out
+
+
 def changes(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, bool]) -> Dict[str, Any]:
     """GET /v1/watchlists/{id}/changes: what changed between the previous and the latest
     market scan for this list's symbols (the canonical opportunity events: new, dropped,
@@ -276,7 +325,10 @@ def changes(user: str, watchlist: Dict[str, Any], entitlements: Dict[str, bool])
             "setup": e.get("primary_setup"), "signal": e.get("signal"),
             "previous_rank": int(prev["rank"]) if prev else None, "rank": int(cur["rank"]) if cur else None,
             "rank_change": (int(prev["rank"]) - int(cur["rank"])) if prev and cur else None,
+            "source": "scan",
         })
+    if entitlements.get("can_watchlist_autoscore"):
+        out.extend(_auto_changes(watch, obs, entitlements, base))
     base["changes"] = out
     base["headline"] = [{"ticker": e["ticker"], "event_type": e["event_type"]}
                         for e in collapse_events(events)]

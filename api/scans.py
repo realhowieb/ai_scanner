@@ -436,16 +436,11 @@ def earnings_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
     return {"at": stamp.get("created_at"), "rows": rows}
 
 
-def watchlist_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
-    """{at, rows: {ticker key: scanner row}} from the newest scheduled pass over watchlist
-    stocks the market scan didn't rank (Premium auto-score), or {at: None, rows: {}}.
-    Cached like earnings_autoscore: stamp once a minute, rows once per pass."""
+def _autoscore_rows(stamp: Dict[str, Any], entitlements: Dict[str, bool]) -> Dict[str, Dict[str, Any]]:
+    """{ticker key: scanner row} for one watchlist auto-score pass, redacted below Premium."""
     from api.today import _cached
-    from db.watchlist_autoscore import latest_stamp, load_setups
+    from db.watchlist_autoscore import load_setups
 
-    stamp = _cached("watchlist_autoscore_stamp", lambda: latest_stamp(AUTOSCORE_MAX_AGE_S) or {})
-    if not stamp:
-        return {"at": None, "rows": {}}
     raw = _cached(("watchlist_autoscore", int(stamp["id"])), lambda: load_setups(int(stamp["id"])),
                   ttl_s=AUTOSCORE_ROWS_TTL_S)
     if not entitlements.get("can_early_breakout"):
@@ -457,7 +452,34 @@ def watchlist_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
         k = _ticker_key(r.get("ticker"))
         if k and k not in rows:
             rows[k] = r
-    return {"at": stamp.get("created_at"), "rows": rows}
+    return rows
+
+
+def watchlist_autoscore(entitlements: Dict[str, bool]) -> Dict[str, Any]:
+    """{at, rows: {ticker key: scanner row}} from the newest scheduled pass over watchlist
+    stocks the market scan didn't rank (Premium auto-score), or {at: None, rows: {}}.
+    Cached like earnings_autoscore: stamp once a minute, rows once per pass."""
+    from api.today import _cached
+    from db.watchlist_autoscore import latest_stamp
+
+    stamp = _cached("watchlist_autoscore_stamp", lambda: latest_stamp(AUTOSCORE_MAX_AGE_S) or {})
+    if not stamp:
+        return {"at": None, "rows": {}}
+    return {"at": stamp.get("created_at"), "rows": _autoscore_rows(stamp, entitlements)}
+
+
+def watchlist_autoscore_pair(entitlements: Dict[str, bool]) -> Optional[Dict[str, Any]]:
+    """The two newest auto-score passes ({at, rows, previous_at, previous_rows}) so the
+    Watchlists "Since last scan" can compare unranked stocks too; None without two passes."""
+    from api.today import _cached
+    from db.watchlist_autoscore import recent_stamps
+
+    stamps = _cached("watchlist_autoscore_stamps2", lambda: recent_stamps(AUTOSCORE_MAX_AGE_S, 2))
+    if len(stamps) < 2:
+        return None
+    cur, prev = stamps[0], stamps[1]
+    return {"at": cur.get("created_at"), "rows": _autoscore_rows(cur, entitlements),
+            "previous_at": prev.get("created_at"), "previous_rows": _autoscore_rows(prev, entitlements)}
 
 
 def _fill_quotes(rows: List[Dict[str, Any]]) -> None:

@@ -99,6 +99,24 @@ def latest_stamp(max_age_s: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def recent_stamps(max_age_s: int, n: int = 2) -> List[Dict[str, Any]]:
+    """The newest n passes younger than max_age_s, newest first ({id, created_at, session, symbols})."""
+    conn = get_neon_conn()
+    if conn is None:
+        return []
+    try:
+        ensure_schema(conn)
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, created_at, session, symbols FROM watchlist_autoscore "
+                        "WHERE created_at > NOW() - make_interval(secs => %s) ORDER BY id DESC LIMIT %s",
+                        (int(max_age_s), int(n)))
+            rows = cur.fetchall()
+        conn.commit()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def load_setups(autoscore_id: int) -> List[Dict[str, Any]]:
     conn = get_neon_conn()
     if conn is None:

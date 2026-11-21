@@ -795,6 +795,9 @@ class WatchlistChange(BaseModel):
     previous_rank: Optional[int] = None
     rank: Optional[int] = None
     rank_change: Optional[int] = None
+    source: Optional[Literal["scan", "auto"]] = Field(
+        default=None, description="scan: the two latest market scans; auto (Premium): the two newest "
+                                  "watchlist auto-score passes, for stocks neither scan ranked")
 
 
 class WatchlistHeadline(BaseModel):
@@ -812,6 +815,8 @@ class WatchlistChanges(BaseModel):
     headline: List[WatchlistHeadline] = Field(default=[], description="The strongest change per ticker")
     alerts: List[AlertEvent] = Field(default=[], description="Your rule alerts on these tickers since the previous scan")
     summary: Dict[str, Any] = Field(default={}, description="UI summary counts for changes and alerts since the previous scan")
+    auto_scored_at: Optional[str] = Field(default=None, description="Premium: the newest auto-score pass behind source=auto changes")
+    previous_auto_scored_at: Optional[str] = Field(default=None, description="Premium: the auto-score pass it was compared with")
 
 
 class AlertRule(BaseModel):

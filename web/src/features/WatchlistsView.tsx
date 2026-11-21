@@ -40,7 +40,16 @@ const NOTE_MAX = 500;
 /** Summary chip filters: each chip lists the tickers it counts. */
 type WlFilter = "all" | "scan" | "auto" | "attention" | "notes";
 
-/** Why a ticker counts as "needs attention": Fading in the scan, or its HSF Score fell since the previous scan. */
+/** On the Watchlists page a stock is Fading when today's change trails SPY's by this many points
+ * or more, so a market-wide drop doesn't flag the whole list. */
+export const FADE_VS_SPY = -2;
+/** Fading vs SPY when both day changes are known; otherwise the scan's own flag (down 2%+ on the day). */
+export function fadingVsSpy(chg: number | null | undefined, spyChg: number | null | undefined, scanFading: boolean | null | undefined): boolean {
+  if (chg != null && spyChg != null) return chg - spyChg <= FADE_VS_SPY;
+  return !!scanFading;
+}
+
+/** Why a ticker counts as "needs attention": Fading (vs SPY), or its HSF Score fell since the previous scan. */
 export function attentionReasons(fading: boolean | null | undefined, scoreChange: number | null | undefined): string[] {
   const out: string[] = [];
   if (fading) out.push("Fading");
@@ -312,12 +321,13 @@ function WatchlistChangesCard({ id }: { id: number }) {
         <span><strong>{metric(s.falling, 0)}</strong> falling</span>
         <span><strong>{metric(s.alerts, data.alerts.length)}</strong> alerts</span>
       </div>
-      {data.changes.length ? (
+      {data.changes.length ? (<>
         <div className="chips">
-          {data.changes.slice(0, 12).map((c, i) => <Pill key={`${c.ticker}-${c.event_type}-${i}`} tone={changeTone(c.event_type)}>{describeChange(c)}</Pill>)}
+          {data.changes.slice(0, 12).map((c, i) => <Pill key={`${c.ticker}-${c.event_type}-${i}`} tone={changeTone(c.event_type)}>{describeChange(c)}{c.source === "auto" && <span className="wl-auto" title="Auto-scored: not in the ranked list, so compared with the previous auto-score pass">A</span>}</Pill>)}
           {data.changes.length > 12 && <span className="cap">+{data.changes.length - 12} more</span>}
         </div>
-      ) : data.headline.length ? (
+        {data.changes.some((c) => c.source === "auto") && <p className="cap">A = auto-scored stock (not in the ranked list), compared with the previous auto-score pass.</p>}
+      </>) : data.headline.length ? (
         <div className="chips">
           {data.headline.slice(0, 8).map((h) => <Pill key={`${h.ticker}-${h.event_type}`}>{h.ticker} {h.event_type.replace(/_/g, " ").toLowerCase()}</Pill>)}
         </div>
@@ -513,6 +523,9 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
   const performance = useApi(`wl-perf:${id}`, (signal) => watchlists.performance(id, signal));
   const intel = useApi(`wl-intel:${id}`, (signal) => watchlists.intelligence(id, signal));
   const changes = useApi(`wl-changes:${id}`, (signal) => watchlists.changes(id, signal));
+  // Premium: score moves of auto-scored stocks between the two newest auto-score passes.
+  const autoChange = useMemo(() => new Map((changes.data?.changes ?? [])
+    .filter((c) => c.source === "auto" && c.score_delta != null).map((c) => [c.ticker, Math.round(c.score_delta!)])), [changes.data]);
   const intelBy = useMemo(() => new Map((intel.data?.items ?? []).map((i) => [i.ticker, i])), [intel.data]);
   const perfBy = useMemo(() => new Map((performance.data?.items ?? []).map((i) => [i.ticker, i])), [performance.data]);
   // Only an API that predates items[].latest (no scan_at key at all) needs the ranked rows.
@@ -547,7 +560,9 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
   }, [legacy, detail.data, scan.data]);
   const bars = useDailyBarsState((detail.data?.items ?? []).map((i) => i.ticker));
   const daily = bars.data;
-  const tickerKey = [...new Set((detail.data?.items ?? []).map((i) => i.ticker))].sort().join(",");
+  // SPY rides along with the list's quotes: Fading on this page means trailing SPY, not just a red day.
+  const listTickers = (detail.data?.items ?? []).map((i) => i.ticker);
+  const tickerKey = listTickers.length ? [...new Set([...listTickers, "SPY"])].sort().join(",") : "";
   const quotes = useApi(tickerKey ? `wl-quotes:${tickerKey}` : null, (signal) => watchlistQuotes(tickerKey.split(","), signal));
   const quoteBy = quotes.data?.quotes ?? {};
   // Refresh re-reads the list (with each ticker's latest scan row), its changes, the latest
@@ -564,7 +579,11 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
   const series = daily?.series ?? {};
   const scanAt = legacy ? scan.data?.scan_at : w.scan_at;
   const stale = legacy ? scan.data?.stale : w.stale;
-  const reasonsFor = (t: string) => attentionReasons(scores.get(t)?.fading, intelBy.get(t)?.score_change);
+  const spyChg = quoteBy.SPY?.chg_pct ?? null;
+  const chgOf = (t: string) => quoteBy[t]?.chg_pct ?? scores.get(t)?.chg_pct;
+  const fadingOf = (t: string) => { const sc = scores.get(t); return !!sc && fadingVsSpy(chgOf(t), spyChg, sc.fading); };
+  const scoreChangeOf = (t: string) => intelBy.get(t)?.score_change ?? autoChange.get(t) ?? null;
+  const reasonsFor = (t: string) => attentionReasons(fadingOf(t), scoreChangeOf(t));
   const matches: Record<WlFilter, (i: Item) => boolean> = {
     all: () => true,
     scan: (i) => legacy ? scores.has(i.ticker) : !!i.latest,
@@ -596,11 +615,11 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
     { f: "all", n: w.symbol_count, label: "tracked", tip: "Every ticker on this list. Click to show them all." },
     { f: "scan", n: count("scan"), label: "in latest scan", tip: "Made the latest market scan's ranked list. Their rank is shown on the row." },
     ...(!legacy && count("auto") > 0 ? [{ f: "auto" as const, n: count("auto"), label: "auto-scored", tip: "Not in the latest scan's ranked list, so Premium scored them after the scan (the A mark)." }] : []),
-    { f: "attention", n: count("attention"), label: "need attention", tip: "Fading, or the HSF Score fell since the previous scan. The reason is on each row." },
+    { f: "attention", n: count("attention"), label: "need attention", tip: "Fading (down 2 points or more vs SPY today), or the HSF Score fell since the previous scan. The reason is on each row." },
     { f: "notes", n: count("notes"), label: "with notes", tip: "Tickers you've written a note on." },
   ];
   const filterLabel = chips.find((c) => c.f === filter)?.label;
-  const hasQuotes = Object.keys(quoteBy).length > 0;
+  const hasQuotes = w.items.some((i) => quoteBy[i.ticker]);
   const feed = quotes.data?.feed === "iex" ? " Prices come from one exchange (IEX), so they can differ slightly from the consolidated price." : "";
   const view = narrow ? "rows" : prefs.view;
   const showChecks = !narrow || selecting;
@@ -621,7 +640,6 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
     if (bar) return <span className="mono" title="May be in progress; not live">{price(bar.close)} <span className="wl-src">daily bar {shortDate(bar.session)}</span></span>;
     return <span className="cap">—</span>;
   };
-  const chgOf = (t: string) => quoteBy[t]?.chg_pct ?? scores.get(t)?.chg_pct;
   const removeBtn = (t: string) => (
     <button type="button" className="icon-btn" aria-label={`Remove ${t} from ${w.name}`} onClick={() => { rm.clear(); setRemoving(t); }}>{X_ICON}</button>
   );
@@ -636,7 +654,7 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
       onClose={() => setNoteOpen(null)} onSaved={detail.reload} />
   );
   const scoreDelta = (t: string) => {
-    const sc = intelBy.get(t)?.score_change ?? 0;
+    const sc = scoreChangeOf(t) ?? 0;
     return sc !== 0 ? <span className={`wl-delta mono ${sc > 0 ? "up" : "down"}`} title="HSF Score change since the previous scan">{sc > 0 ? "▲" : "▼"}{Math.abs(sc)}</span> : null;
   };
   const th = (key: SortKey, label: ReactNode, cls = "") => (
@@ -683,7 +701,7 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
                 {s ? (
                   <>
                     <td className="wl-score"><ScoreBadge score={s.score} />{!it.latest && it.auto && <span className="wl-auto" title="Auto: not ranked in the latest scan, so Premium scored it after the scan">A</span>}{scoreDelta(it.ticker)}</td>
-                    <td><span className="wl-setup">{setupLabel(s.primary_setup)}</span>{s.fading && <> <Pill tone="warn">Fading</Pill></>}{x?.prebreakout && <> <Pill tone="gold">PB</Pill></>}</td>
+                    <td><span className="wl-setup">{setupLabel(s.primary_setup)}</span>{fadingOf(it.ticker) && <> <Pill tone="warn">Fading</Pill></>}{x?.prebreakout && <> <Pill tone="gold">PB</Pill></>}</td>
                   </>
                 ) : <td colSpan={2} className="cap wl-unranked">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</td>}
                 <td className="num">{priceCell(it)}</td>
@@ -710,13 +728,13 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
       {items.map((it) => {
         const s = scores.get(it.ticker);
         const since = sinceOf(it);
-        const sc = intelBy.get(it.ticker)?.score_change ?? 0;
+        const sc = scoreChangeOf(it.ticker) ?? 0;
         return (
           <li key={it.ticker} className={`wl-row${sel.includes(it.ticker) ? " sel" : ""}`}>
             {showChecks && <input type="checkbox" aria-label={`Select ${it.ticker}`} checked={sel.includes(it.ticker)} onChange={() => toggle(it.ticker)} />}
             <span className="wl-row-score">{s ? <ScoreBadge score={s.score} /> : <span className="score score-weak" title="Not ranked in the latest scan">—</span>}</span>
             <span className="wl-row-main"><TickerLink ticker={it.ticker} logo={false} /> <span className="cap">{s ? setupLabel(s.primary_setup) : "Not ranked"}</span>
-              {s && !it.latest && it.auto && <span className="wl-auto" title="Auto-scored after the scan (Premium)">A</span>}{s?.fading && <> <Pill tone="warn">Fading</Pill></>}</span>
+              {s && !it.latest && it.auto && <span className="wl-auto" title="Auto-scored after the scan (Premium)">A</span>}{fadingOf(it.ticker) && <> <Pill tone="warn">Fading</Pill></>}</span>
             <span className="wl-row-price">{priceCell(it)}</span>
             <span className={`wl-row-chg mono ${tone(chgOf(it.ticker))}`}>{pct(chgOf(it.ticker), 1)}</span>
             <span className="wl-row-sub">
@@ -739,7 +757,7 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
         const bar = daily?.last_bar?.[it.ticker];
         const q = quoteBy[it.ticker];
         const rank = !legacy ? it.latest?.rank : undefined;
-        const why = reasonsFor(it.ticker).filter((r) => r !== "Fading" || !s?.fading); // Fading already has its own tag
+        const why = reasonsFor(it.ticker).filter((r) => r !== "Fading"); // Fading already has its own tag
         return (
           <li key={it.ticker} className="wl-item">
             <div className="wl-main">
@@ -750,7 +768,7 @@ function Detail({ id, lists, onChanged, onDeleted, onMerge }: {
                   <ScoreBadge score={s.score} />
                   <Pill>{setupLabel(s.primary_setup)}</Pill>
                   {!it.latest && it.auto && <AutoTag />}
-                  {s.fading && <Pill tone="warn">Fading</Pill>}
+                  {fadingOf(it.ticker) && <Pill tone="warn">Fading</Pill>}
                 </>
               ) : <span className="cap wl-unranked">{legacy ? "Not among your plan's ranked rows in the latest scan" : "Not ranked in the latest scan"}</span>}
               {why.map((r) => <Pill key={r} tone="warn">{r}</Pill>)}

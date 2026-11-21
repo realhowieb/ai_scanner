@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WatchlistsView, attentionReasons } from "@/features/WatchlistsView";
+import { WatchlistsView, attentionReasons, fadingVsSpy } from "@/features/WatchlistsView";
 import { SessionProvider } from "@/session/SessionProvider";
 
 import { fakeApi } from "./fakeApi";
@@ -30,6 +30,14 @@ describe("watchlist summary chips", () => {
     expect(attentionReasons(undefined, null)).toEqual([]);
   });
 
+  it("Fading means trailing SPY by 2 points or more; the scan's flag only without SPY", () => {
+    expect(fadingVsSpy(-3.5, -3.1, true)).toBe(false); // red with the market: not fading
+    expect(fadingVsSpy(-5.2, -3.1, false)).toBe(true);
+    expect(fadingVsSpy(-1.5, 0.6, false)).toBe(true);
+    expect(fadingVsSpy(-3, null, true)).toBe(true);
+    expect(fadingVsSpy(null, -1, false)).toBe(false);
+  });
+
   it("clicking a chip filters the list to the tickers it counts; clicking again shows all", async () => {
     const u = userEvent.setup();
     api.seedList("Main", ["AAPL", "MSFT"], true);
@@ -47,5 +55,14 @@ describe("watchlist summary chips", () => {
     await u.click(scanChip);
     expect(rows()).toHaveLength(2);
     expect(screen.getByRole("button", { name: /^0 with notes/ })).toBeDisabled();
+  });
+
+  it("need attention counts stocks trailing SPY, not every red stock on a down day", async () => {
+    const at = new Date().toISOString();
+    api = fakeApi({ scanState: true, scan: [{ ticker: "AAPL", score: 81, last: 201.5 }, { ticker: "NVDA", score: 70, last: 120 }],
+      quotes: { AAPL: { last: 199, chg_pct: -4, at }, NVDA: { last: 112, chg_pct: -6, at }, SPY: { last: 600, chg_pct: -3, at } } });
+    api.seedList("Main", ["AAPL", "NVDA"], true);
+    render(<SessionProvider initialMe={me("pro")}><WatchlistsView /></SessionProvider>);
+    expect(await screen.findByRole("button", { name: /^1 need attention/ })).toBeInTheDocument();
   });
 });
