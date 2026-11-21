@@ -21065,6 +21065,22 @@
       "description": "SIGNAL_ADDED/REMOVED: which signal (e.g. prebreakout)",
       "title": "Signal"
      },
+     "source": {
+      "anyOf": [
+       {
+        "enum": [
+         "scan",
+         "auto"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "scan: the two latest market scans; auto (Premium): the two newest watchlist auto-score passes, for stocks neither scan ranked",
+      "title": "Source"
+     },
      "ticker": {
       "title": "Ticker",
       "type": "string"
@@ -21087,6 +21103,18 @@
       },
       "title": "Alerts",
       "type": "array"
+     },
+     "auto_scored_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: the newest auto-score pass behind source=auto changes",
+      "title": "Auto Scored At"
      },
      "changes": {
       "default": [],
@@ -21124,6 +21152,18 @@
      "name": {
       "title": "Name",
       "type": "string"
+     },
+     "previous_auto_scored_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Premium: the auto-score pass it was compared with",
+      "title": "Previous Auto Scored At"
      },
      "previous_scan_at": {
       "anyOf": [

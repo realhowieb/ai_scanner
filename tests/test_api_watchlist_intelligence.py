@@ -228,6 +228,41 @@ class WatchlistIntelligenceTests(IntelBase):
         d2 = self.client.get(f"/v1/watchlists/{wid2}/changes", headers=self.h).json()
         self.assertFalse(any(c.get("signal") == "prebreakout" for c in d2["changes"]))
 
+    def test_changes_include_auto_scored_moves_for_premium(self):
+        """Stocks neither scan ranked get score moves from the two newest auto-score passes
+        (Premium); a pass older than the latest scan is never used."""
+        at = dt.datetime(2026, 10, 8, 14, 50, tzinfo=UTC)
+        stamps = [{"id": 2, "created_at": at, "session": "regular", "symbols": 3},
+                  {"id": 1, "created_at": at - dt.timedelta(hours=1), "session": "regular", "symbols": 3}]
+        passes = {2: [{"ticker": "AAA", "score": 40}, {"ticker": "BBB", "score": 61}, {"ticker": "CCC", "score": 50}],
+                  1: [{"ticker": "AAA", "score": 52}, {"ticker": "BBB", "score": 55}, {"ticker": "CCC", "score": 49}]}
+        with mock.patch("db.watchlist_autoscore.recent_stamps", side_effect=lambda *a, **k: stamps), \
+             mock.patch("db.watchlist_autoscore.load_setups", side_effect=lambda i: passes[i]):
+            wid = self.watchlist(self.prem, ["AAA", "BBB", "CCC", "CIEN"])
+            d = self.client.get(f"/v1/watchlists/{wid}/changes", headers=self.prem).json()
+            auto = {c["ticker"]: c for c in d["changes"] if c["source"] == "auto"}
+            self.assertEqual(set(auto), {"AAA", "BBB"})  # CCC moved 1 (< canonical 3)
+            self.assertEqual([c["ticker"] for c in d["changes"] if c["source"] == "auto"], ["AAA", "BBB"])
+            self.assertEqual((auto["AAA"]["event_type"], auto["AAA"]["previous_score"], auto["AAA"]["current_score"]),
+                             ("FALLING", 52, 40))
+            self.assertEqual(auto["BBB"]["event_type"], "RISING")
+            self.assertIn(("CIEN", "DROPPED"), {(c["ticker"], c["event_type"]) for c in d["changes"]})
+            self.assertEqual((d["summary"]["rising"], d["summary"]["falling"]), (1, 1))
+            self.assertTrue(d["auto_scored_at"].startswith("2026-10-08T14:50"))
+            # below Premium: ranked changes only
+            wid2 = self.watchlist(self.h, ["AAA", "BBB"])
+            d2 = self.client.get(f"/v1/watchlists/{wid2}/changes", headers=self.h).json()
+            self.assertFalse(any(c["source"] == "auto" for c in d2["changes"]))
+        # The newest pass predates the latest scan (still running): no auto changes.
+        from api import today
+
+        today.clear_cache()
+        old = [{**s, "created_at": s["created_at"] - dt.timedelta(hours=2)} for s in stamps]
+        with mock.patch("db.watchlist_autoscore.recent_stamps", side_effect=lambda *a, **k: old), \
+             mock.patch("db.watchlist_autoscore.load_setups", side_effect=lambda i: passes[i]):
+            d = self.client.get(f"/v1/watchlists/{wid}/changes", headers=self.prem).json()
+            self.assertFalse(any(c["source"] == "auto" for c in d["changes"]))
+
 
 class AlertRuleApiTests(IntelBase):
     def create(self, h, **body):
