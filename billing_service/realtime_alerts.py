@@ -399,6 +399,13 @@ def _send_email(to_address: str, subject: str, body: str,
 _AVG_VOL: Dict[str, tuple] = {}
 
 
+def _prior_volumes(bars: List[Dict[str, Any]], today: str, n: int = 20) -> List[float]:
+    """Volumes of the last n completed sessions: today's partial bar (if any) is left
+    out by date, not by position, so a pre-market call keeps yesterday's session."""
+    done = [b for b in bars if _et_day(b.get("t")) != today]
+    return [float(b.get("v") or 0) for b in done[-n:]]
+
+
 def _avg_volume(ticker: str) -> Optional[float]:
     today = datetime.now(timezone.utc).date()
     cached = _AVG_VOL.get(ticker)
@@ -419,7 +426,10 @@ def _avg_volume(ticker: str) -> Optional[float]:
                 "symbols": ticker,
                 "timeframe": "1Day",
                 "start": (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%d"),
-                "limit": 30,
+                # Bars come oldest first and 45 days hold ~31 sessions: a limit of 30
+                # used to cut off the newest sessions, so the "20-day average" lagged
+                # by two or three days. 100 covers the window with room to spare.
+                "limit": 100,
                 "adjustment": "raw",
                 "feed": "iex",
             },
@@ -428,9 +438,7 @@ def _avg_volume(ticker: str) -> Optional[float]:
         )
         resp.raise_for_status()
         bars = ((resp.json() or {}).get("bars") or {}).get(ticker) or []
-        vols = [float(b.get("v") or 0) for b in bars[-21:-1]] or [
-            float(b.get("v") or 0) for b in bars
-        ]
+        vols = _prior_volumes(bars, _today_et())
         avg = sum(vols) / len(vols) if vols else None
         if avg and avg > 0:
             _AVG_VOL[ticker] = (today, avg)
