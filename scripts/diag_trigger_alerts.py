@@ -28,10 +28,10 @@ def mask(user: str) -> str:
 
 
 def alpaca(path: str, params: dict):
-    import httpx
+    import requests
 
     base = (os.getenv("ALPACA_DATA_URL", "").strip() or "https://data.alpaca.markets").rstrip("/")
-    resp = httpx.get(f"{base}{path}", params=params, timeout=20.0, headers={
+    resp = requests.get(f"{base}{path}", params=params, timeout=20.0, headers={
         "APCA-API-KEY-ID": os.environ["ALPACA_API_KEY_ID"],
         "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET_KEY"]})
     resp.raise_for_status()
@@ -111,9 +111,9 @@ def replay(ticker: str, threshold: float, since: dt.datetime):
 
 
 def main() -> None:
-    import psycopg2
+    import psycopg
 
-    conn = psycopg2.connect(os.environ["DATABASE_URL"], connect_timeout=15)
+    conn = psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=15, prepare_threshold=None)
     cur = conn.cursor()
 
     print("== realtime worker activity (events by day/type since 2026-11-17) ==")
