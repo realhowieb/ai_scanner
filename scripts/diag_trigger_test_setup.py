@@ -82,8 +82,10 @@ def main() -> None:
 
 def fire_test(h: dict, have: list) -> None:
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import subprocess
     from datetime import datetime, timezone
 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "httpx"])  # the worker's HTTP client
     from billing_service import realtime_alerts as ra
 
     scan = requests.get(f"{API}/v1/scans/latest", params={"limit": 100}, headers=h, timeout=60).json()
