@@ -313,3 +313,60 @@ class ViewTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DayMixTests(unittest.TestCase):
+    """Same-day comparison, busiest-day share and the day-clustered inversion check."""
+
+    def _day(self, day, rows_spec, start_id):
+        # rows_spec: [(score, excess)], SPY flat so excess == raw return
+        return [row(start_id + i, f"T{day}{i}", T(day), score=s, r1=0.0, r3=0.0, r5=e, b1=0.0, b3=0.0, b5=0.0)
+                for i, (s, e) in enumerate(rows_spec)]
+
+    def test_one_hot_day_inversion_does_not_hold_across_days(self):
+        rows, rid = [], 1
+        # One big day where 55-scored names all ran (+5%) ...
+        rows += self._day(1, [(55, 0.05)] * 12 + [(75, 0.0)] * 2, rid); rid += 100
+        # ... and many ordinary days where both ranges do the same.
+        for d in range(2, 14):
+            rows += self._day(d, [(55, 0.0), (55, 0.002), (75, 0.0), (75, 0.002)], rid); rid += 100
+        out = oi.by_score(oi.build_records(rows), oi.normalize_filters(), horizon=5,
+                          buckets=[(50, 59), (70, 79)])
+        b = {x["bucket"]: x for x in out["buckets"]}
+        self.assertEqual(b["50-59"]["top_day"], "2026-09-01")      # 12 of 36 signals
+        self.assertAlmostEqual(b["50-59"]["top_day_share"], 12 / 36, places=4)
+        self.assertIsNone(b["70-79"]["top_day"])                   # 2 of 26: under 25%
+        mono = out["calibration"]["metrics"]["median_excess_return"]
+        self.assertEqual(len(mono["inversions"]), 1)               # raw medians still invert
+        self.assertFalse(mono["inversions"][0]["holds_across_days"])
+        self.assertEqual(mono["confirmed_inversions"], 0)
+        self.assertIsNotNone(mono["inversions"][0]["gap_ci95"])
+
+    def test_steady_inversion_holds_across_days(self):
+        rows, rid = [], 1
+        for d in range(1, 16):
+            rows += self._day(d, [(55, 0.03), (55, 0.04), (75, -0.01), (75, 0.0)], rid); rid += 100
+        out = oi.by_score(oi.build_records(rows), oi.normalize_filters(), horizon=5,
+                          buckets=[(50, 59), (70, 79)])
+        mono = out["calibration"]["metrics"]["median_excess_return"]
+        self.assertTrue(mono["inversions"][0]["holds_across_days"])
+        self.assertEqual(mono["confirmed_inversions"], 1)
+        b = {x["bucket"]: x for x in out["buckets"]}
+        # Same-day median of [-0.01, 0, 0.03, 0.04] is 0.015
+        self.assertAlmostEqual(b["50-59"]["median_same_day_excess"], 0.02, places=6)
+        self.assertAlmostEqual(b["70-79"]["median_same_day_excess"], -0.02, places=6)
+        self.assertEqual(b["50-59"]["same_day_count"], 30)
+
+    def test_lone_signal_days_have_no_same_day_peers(self):
+        rows = self._day(1, [(55, 0.01)], 1) + self._day(2, [(55, 0.02), (75, 0.0)], 10)
+        out = oi.by_score(oi.build_records(rows), oi.normalize_filters(), horizon=5,
+                          buckets=[(50, 59), (70, 79)])
+        b = {x["bucket"]: x for x in out["buckets"]}
+        self.assertEqual(b["50-59"]["same_day_count"], 1)
+        self.assertAlmostEqual(b["50-59"]["median_same_day_excess"], 0.01, places=6)
+
+    def test_bootstrap_is_deterministic(self):
+        recs = oi.build_records(self._day(1, [(55, 0.01), (75, 0.0)], 1) + self._day(2, [(55, 0.03), (75, 0.02)], 10))
+        lo = [r for r in recs if r.hsf_score < 60]
+        hi = [r for r in recs if r.hsf_score >= 70]
+        self.assertEqual(oi.day_clustered_gap(lo, hi, 5), oi.day_clustered_gap(lo, hi, 5))

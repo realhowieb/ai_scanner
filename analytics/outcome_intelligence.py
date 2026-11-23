@@ -544,15 +544,113 @@ def by_score(records: Sequence[Dict[str, Any]], filters: Dict[str, Any], *, hori
     """Every bucket, always, in score order (empty and weak buckets included)."""
     bks = list(buckets or SCORE_BUCKETS)
     chosen = select(records, filters, unit=unit, horizon=horizon)
+    rel = same_day_relative(chosen, horizon)
     rows = []
     for lo, hi in bks:
         grp = [r for r in chosen if r.get("hsf_score") is not None and lo <= r["hsf_score"] <= hi]
-        rows.append({"bucket": f"{lo}-{hi}", "min_score": lo, "max_score": hi, **metrics(grp, horizon)})
+        rows.append({"bucket": f"{lo}-{hi}", "min_score": lo, "max_score": hi, **metrics(grp, horizon),
+                     **day_mix(grp, horizon, rel)})
     unbucketed = [r for r in chosen if score_bucket(r.get("hsf_score"), bks) is None]
+    calibration = calibration_view(rows)
+    _check_across_days(calibration["metrics"]["median_excess_return"], chosen, bks, horizon)
     return {**_envelope(records, chosen, filters, unit, horizon),
             "buckets": rows,
             "unbucketed_count": len(unbucketed),
-            "calibration": calibration_view(rows)}
+            "calibration": calibration}
+
+
+# A single day can make up most of a score range (a scan that ran on a strong or
+# weak market day). Above this share the range is flagged as day-heavy.
+TOP_DAY_WARN_SHARE = 0.25
+BOOTSTRAP_RESAMPLES = 1000
+
+
+def _excess_by_day(records: Sequence[Any], horizon: int) -> Dict[Any, List[Tuple[Any, float]]]:
+    """Matured, benchmarked records grouped by entry day: {day: [(record, excess)]}."""
+    out: Dict[Any, List[Tuple[Any, float]]] = {}
+    for r in records:
+        x = r.horizons[horizon]
+        if x.status == MATURED and x.excess_return is not None:
+            out.setdefault(r.entry_day, []).append((r, x.excess_return))
+    return out
+
+
+def same_day_relative(records: Sequence[Any], horizon: int) -> Dict[int, float]:
+    """Each signal's excess return minus the median excess of every signal that
+    entered on the same day, keyed by id(record). Takes out the market day, so what
+    remains is how the signal did against its same-day peers. Days with a single
+    signal have no peers and are left out."""
+    rel: Dict[int, float] = {}
+    for pairs in _excess_by_day(records, horizon).values():
+        if len(pairs) < 2:
+            continue
+        mid = statistics.median(v for _, v in pairs)
+        for r, v in pairs:
+            rel[id(r)] = v - mid
+    return rel
+
+
+def day_mix(group: Sequence[Any], horizon: int, rel: Dict[int, float]) -> Dict[str, Any]:
+    """How one bucket's matured signals spread over days, and its median result
+    against same-day peers."""
+    by_day = _excess_by_day(group, horizon)
+    n = sum(len(v) for v in by_day.values())
+    top_day, top_n = None, 0
+    for day, pairs in sorted(by_day.items(), key=lambda kv: (kv[0] is None, kv[0])):
+        if len(pairs) > top_n:
+            top_day, top_n = day, len(pairs)
+    vals = [rel[id(r)] for pairs in by_day.values() for r, _ in pairs if id(r) in rel]
+    share = top_n / n if n else None
+    return {
+        "same_day_count": len(vals),
+        "median_same_day_excess": _r(_median(vals)),
+        "top_day": top_day.isoformat() if top_day and share is not None and share > TOP_DAY_WARN_SHARE else None,
+        "top_day_share": _r(share, 4),
+    }
+
+
+def day_clustered_gap(lower: Sequence[Any], higher: Sequence[Any], horizon: int, *,
+                      resamples: int = BOOTSTRAP_RESAMPLES, seed: int = 0) -> Optional[Tuple[float, float]]:
+    """95% interval for median excess(lower) - median excess(higher), resampling
+    whole entry days (signals on one day move together, so they are not independent).
+    Deterministic for a given input."""
+    import random
+
+    lo_days = _excess_by_day(lower, horizon)
+    hi_days = _excess_by_day(higher, horizon)
+    days = sorted(set(lo_days) | set(hi_days), key=lambda d: (d is None, d))
+    if len(days) < 2:
+        return None
+    rng = random.Random(seed)
+    gaps: List[float] = []
+    for _ in range(resamples):
+        pick = [days[rng.randrange(len(days))] for _ in days]
+        a = [v for d in pick for _, v in lo_days.get(d, ())]
+        b = [v for d in pick for _, v in hi_days.get(d, ())]
+        if a and b:
+            gaps.append(statistics.median(a) - statistics.median(b))
+    if len(gaps) < resamples // 2:
+        return None
+    gaps.sort()
+    return gaps[int(0.025 * len(gaps))], gaps[min(len(gaps) - 1, int(0.975 * len(gaps)))]
+
+
+def _check_across_days(mono: Dict[str, Any], chosen: Sequence[Any], bks: Sequence[Tuple[int, int]],
+                       horizon: int) -> None:
+    """Mark each median-excess inversion with whether it holds when whole days are
+    resampled: holds_across_days is True only when the whole 95% interval of the gap
+    is above zero. Without that, the gap may come from which days signals fired."""
+    spans = {f"{lo}-{hi}": (lo, hi) for lo, hi in bks}
+
+    def grp(bucket: str) -> List[Any]:
+        lo, hi = spans[bucket]
+        return [r for r in chosen if r.hsf_score is not None and lo <= r.hsf_score <= hi]
+
+    for inv in mono["inversions"]:
+        ci = day_clustered_gap(grp(inv["lower_bucket"]), grp(inv["higher_bucket"]), horizon)
+        inv["gap_ci95"] = _ci(ci)
+        inv["holds_across_days"] = bool(ci and ci[0] > 0)
+    mono["confirmed_inversions"] = sum(1 for i in mono["inversions"] if i["holds_across_days"])
 
 
 # Metrics checked for monotonicity across score buckets (higher score -> better).
