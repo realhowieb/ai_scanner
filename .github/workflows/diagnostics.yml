@@ -37,4 +37,10 @@ jobs:
           ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
           ALPACA_DATA_URL: ${{ secrets.ALPACA_DATA_URL }}
           SCRIPT: ${{ inputs.script }}
+          # Live trigger-alert test (2026-11-23): test accounts sign in through the public API.
+          API_BASE_URL: ${{ vars.LIVE_API_URL || 'https://api.hsfinest.com' }}
+          ACC_PRO_EMAIL: ${{ secrets.ACC_PRO_EMAIL }}
+          ACC_PRO_PASSWORD: ${{ secrets.ACC_PRO_PASSWORD }}
+          ACC_PRO2_EMAIL: ${{ secrets.ACC_PRO2_EMAIL }}
+          ACC_PRO2_PASSWORD: ${{ secrets.ACC_PRO2_PASSWORD }}
         run: python "scripts/$SCRIPT"
