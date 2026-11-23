@@ -3,6 +3,10 @@ acceptance test account through the public API and creates up to 3 'trigger' ale
 scan names trading just under their trade-plan trigger (the 20-day high). Run through the
 Diagnostics workflow; logs are public, so no emails, tokens or ids beyond alert ids print.
 
+TRIGGER_TEST_MODE=fire picks one scan name that is already trading on a strong volume pace
+(>= 1.5x, IEX snapshot) and sets its trigger 1% under the live price, so the worker should
+fire it within a minute or two: an end-to-end check of the alert path.
+
 TRIGGER_TEST_MODE=cleanup deletes this test's trigger alerts again (all trigger alerts on
 the test account).
 """
@@ -48,6 +52,9 @@ def main() -> None:
     if room <= 0:
         print("no room for new trigger alerts; nothing created")
         return
+    if os.environ.get("TRIGGER_TEST_MODE") == "fire":
+        fire_test(h, [a.get("ticker") for a in mine])
+        return
     scan = requests.get(f"{API}/v1/scans/latest", params={"limit": 100}, headers=h, timeout=60).json()
     print(f"scan_at {scan.get('scan_at')}, {len(scan.get('setups') or [])} setups")
     picks = []
@@ -71,6 +78,35 @@ def main() -> None:
                           json={"type": "trigger", "ticker": t, "threshold": trig, "direction": "above"})
         print(f"created trigger alert {t} >= {trig} (live {live}): HTTP {r.status_code} "
               f"{r.json().get('id') if r.status_code == 201 else r.text[:200]}")
+
+
+def fire_test(h: dict, have: list) -> None:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from datetime import datetime, timezone
+
+    from billing_service import realtime_alerts as ra
+
+    scan = requests.get(f"{API}/v1/scans/latest", params={"limit": 100}, headers=h, timeout=60).json()
+    tickers = [s.get("ticker") for s in (scan.get("setups") or []) if s.get("ticker") and s.get("ticker") not in have][:60]
+    snaps = ra._latest_snapshots(tickers)
+    today = ra._today_et()
+    best = None
+    for t in tickers:
+        snap = snaps.get(t) or {}
+        if snap.get("daily_day") != today or not snap.get("last"):
+            continue
+        pace = ra.volume_pace(snap.get("volume"), ra._avg_volume(t), datetime.now(timezone.utc))
+        if pace and pace >= 1.5 and (best is None or pace > best[0]):
+            best = (pace, t, snap["last"])
+    if not best:
+        print("no scan name on a 1.5x volume pace right now; nothing created")
+        return
+    pace, t, last = best
+    trig = round(last * 0.99, 2)
+    r = requests.post(f"{API}/v1/alerts", headers=h, timeout=30,
+                      json={"type": "trigger", "ticker": t, "threshold": trig, "direction": "above"})
+    print(f"fire test: {t} last {last} pace {pace:.2f}x -> trigger {trig}: HTTP {r.status_code} "
+          f"{r.json().get('id') if r.status_code == 201 else r.text[:200]} at {datetime.now(timezone.utc):%H:%M:%S}Z")
 
 
 if __name__ == "__main__":
