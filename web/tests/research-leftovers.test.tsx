@@ -1,6 +1,7 @@
 // Research polish leftovers (2026-11-01): watchlist quotes cover every ticker, not the first 50.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { fetchDailyBars, SPARK_CHUNK } from "@/features/Sparks";
 import { QUOTE_CHUNK, watchlistQuotes } from "@/features/WatchlistsView";
 
 import { jsonResponse } from "./helpers";
@@ -33,6 +34,32 @@ describe("Watchlist quotes", () => {
 
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ detail: "busy" }, 503)));
     await expect(watchlistQuotes(tickers(60), new AbortController().signal)).rejects.toBeTruthy();
+  });
+});
+
+describe("Watchlist trend lines", () => {
+  it("asks for every ticker's daily closes in pieces of 50 (not just the first 50 A to Z)", async () => {
+    const fetch = vi.fn(async (input: Request) => jsonResponse({
+      series: Object.fromEntries(symbolsOf(input).map((t) => [t, [1, 2, 3]])),
+      last_bar: Object.fromEntries(symbolsOf(input).map((t) => [t, { close: 3, session: "2026-11-23" }])) }));
+    vi.stubGlobal("fetch", fetch);
+    const all = tickers(98);
+    const out = await fetchDailyBars(all, new AbortController().signal);
+    expect(fetch.mock.calls.map(([r]) => symbolsOf(r as Request).length)).toEqual([SPARK_CHUNK, 48]);
+    expect(Object.keys(out.series).sort()).toEqual(all);
+    expect(Object.keys(out.last_bar).sort()).toEqual(all);
+    expect(out.series.T097).toEqual([1, 2, 3]);
+  });
+
+  it("keeps the pieces that answered when one fails, and fails only when all do", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: Request) => symbolsOf(input).includes("T000")
+      ? jsonResponse({ detail: "busy" }, 503)
+      : jsonResponse({ series: Object.fromEntries(symbolsOf(input).map((t) => [t, [1, 2]])), last_bar: {} })));
+    const out = await fetchDailyBars(tickers(60), new AbortController().signal);
+    expect(Object.keys(out.series)).toHaveLength(10);
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ detail: "busy" }, 503)));
+    await expect(fetchDailyBars(tickers(60), new AbortController().signal)).rejects.toBeTruthy();
   });
 });
 

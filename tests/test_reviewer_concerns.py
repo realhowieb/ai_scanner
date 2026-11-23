@@ -179,3 +179,12 @@ def test_trigger_is_a_creatable_alert_type():
     assert "trigger" in ALERT_TYPES and "trigger" in user_data.ALERT_RULES
     spec = next(t for t in user_data.alert_types() if t["type"] == "trigger")
     assert spec["needs_ticker"] and spec["threshold"]["min_exclusive"]
+
+
+def test_prior_volumes_keeps_newest_sessions_and_drops_today():
+    days = [f"2026-11-{d:02d}" for d in range(1, 24)]
+    bars = [{"t": f"{d}T05:00:00Z", "v": i + 1} for i, d in enumerate(days)]
+    # During the session: today's partial bar is left out, the 20 before it kept.
+    assert ra._prior_volumes(bars, "2026-11-23") == [float(v) for v in range(3, 23)]
+    # Pre-market (no bar for today yet): the newest session counts.
+    assert ra._prior_volumes(bars[:-1], "2026-11-23") == [float(v) for v in range(3, 23)]

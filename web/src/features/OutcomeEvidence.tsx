@@ -39,10 +39,10 @@ function range(r: { start?: string | null; end?: string | null }): string {
 }
 
 /** One metrics row: values always shown with their own counts; thin samples are muted, never hidden. */
-function MetricCells({ m }: { m: OutcomeMetrics }) {
+function MetricCells({ m, days = false }: { m: OutcomeMetrics; days?: boolean }) {
   return (
     <>
-      <td className="num mono">{m.matured_count}</td>
+      <td className="num mono">{m.matured_count}{days && m.matured_count > 0 && <span className="cap"> · {m.distinct_days} {m.distinct_days === 1 ? "day" : "days"}</span>}</td>
       <td className={`num mono ${tone(m.median_return)}`}>{signed(m.median_return)}</td>
       <td className={`num mono ${tone(m.median_excess_return)}`}>{signed(m.median_excess_return)}</td>
       <td className="num mono">{share(m.benchmark_beat_rate)}<span className="cap"> of {m.benchmark_count}</span></td>
@@ -52,7 +52,7 @@ function MetricCells({ m }: { m: OutcomeMetrics }) {
   );
 }
 
-function MetricHead({ first }: { first: string }) {
+function MetricHead({ first, extra }: { first: string; extra?: string }) {
   return (
     <thead>
       <tr>
@@ -63,6 +63,7 @@ function MetricHead({ first }: { first: string }) {
         <th scope="col" className="num">Beat SPY</th>
         <th scope="col" className="num hide-narrow">Up</th>
         <th scope="col" className="num hide-narrow">Avg best / worst move</th>
+        {extra && <th scope="col" className="num">{extra}</th>}
       </tr>
     </thead>
   );
@@ -143,28 +144,46 @@ export function ScoreLadder({ buckets, horizon = 5 }: { buckets: OutcomeScores["
   );
 }
 
+/** The footnote under the score table. A raw inversion is only called "Not monotonic"
+ *  when it holds once whole days are resampled; otherwise it may just be which days
+ *  signals fired, and the card says so. */
+export function ScoreOrderNote({ d }: { d: OutcomeScores }) {
+  const mono = d.calibration.metrics["median_excess_return"];
+  const inv = mono?.inversions ?? [];
+  const held = inv.filter((i) => i.holds_across_days);
+  if (held.length > 0) {
+    return <p className="cap"><Pill tone="warn">Not monotonic</Pill> {held.map((i) => `HSF ${i.lower_bucket} beat ${i.higher_bucket} vs SPY`).join("; ")}, and the gap holds across days.</p>;
+  }
+  if (inv.length > 0) {
+    return <p className="cap"><Pill>No clear difference yet</Pill> Some lower ranges are ahead ({inv.map((i) => `${i.lower_bucket} over ${i.higher_bucket}`).join(", ")}), but the gaps don&apos;t hold up when whole days are resampled, so they may come from which days signals fired.</p>;
+  }
+  return null;
+}
+
 function ScoresCard({ d }: { d: OutcomeScores }) {
-  const inv = d.calibration.metrics["median_excess_return"]?.inversions ?? [];
+  const heavy = d.buckets.filter((b) => b.top_day && b.evidence_quality !== "INSUFFICIENT");
   return (
     <Card title="By HSF score" id="scores">
-      <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes.</p>
+      <p className="cap">Every score range, including weak ones, over {d.horizon} trading days. Ranges with fewer than {d.evidence_thresholds["LIMITED"]} matured signals are greyed: read them as anecdotes. &quot;vs same-day&quot; compares each signal with every signal that entered the same day, which takes out good and bad market days.</p>
       <ScoreLadder buckets={d.buckets} horizon={d.horizon ?? 5} />
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Results by HSF score table; scroll sideways for more columns">
         <table className="table">
-          <MetricHead first="HSF score" />
+          <MetricHead first="HSF score" extra="vs same-day" />
           <tbody>
             {d.buckets.map((b) => (
               <tr key={b.bucket} className={b.evidence_quality === "INSUFFICIENT" ? "row-muted" : undefined}>
                 <th scope="row" className="row-h">{b.bucket}</th>
-                <MetricCells m={b} />
+                <MetricCells m={b} days />
+                <td className={`num mono ${tone(b.median_same_day_excess)}`}>{signed(b.median_same_day_excess)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {inv.length > 0 && (
-        <p className="cap"><Pill tone="warn">Not monotonic</Pill> {inv.map((i) => `HSF ${i.lower_bucket} beat ${i.higher_bucket} vs SPY`).join("; ")}.</p>
+      {heavy.length > 0 && (
+        <p className="cap">{heavy.map((b) => `HSF ${b.bucket} is mostly from ${shortDate(b.top_day)} (${share(b.top_day_share)} of its signals)`).join("; ")}.</p>
       )}
+      <ScoreOrderNote d={d} />
     </Card>
   );
 }
