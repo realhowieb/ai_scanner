@@ -1699,6 +1699,11 @@ class OutcomeBucket(OutcomeMetrics):
     bucket: str
     min_score: int
     max_score: int
+    same_day_count: int = Field(0, description="Matured signals that had same-day peers (days with one signal are left out)")
+    median_same_day_excess: Optional[float] = Field(
+        None, description="Median of (excess return minus the median excess of all signals that entered the same day)")
+    top_day: Optional[str] = Field(None, description="Entry day holding more than 25% of this range's matured signals, if any")
+    top_day_share: Optional[float] = Field(None, description="Share of this range's matured signals from its busiest entry day")
 
 
 class OutcomeInversion(BaseModel):
@@ -1706,12 +1711,16 @@ class OutcomeInversion(BaseModel):
     higher_bucket: str
     lower_value: float
     higher_value: float
+    gap_ci95: Optional[OutcomeInterval] = Field(None, description="Day-clustered 95% interval of lower minus higher (median excess only)")
+    holds_across_days: Optional[bool] = Field(
+        None, description="True when the gap stays above zero when whole days are resampled (median excess only)")
 
 
 class OutcomeMonotonicity(BaseModel):
     buckets_compared: List[str]
     monotonic: Optional[bool] = Field(default=None, description="null when fewer than two buckets have enough evidence")
     inversions: List[OutcomeInversion] = []
+    confirmed_inversions: Optional[int] = Field(None, description="Inversions that hold across days (median excess only)")
 
 
 class OutcomeCalibration(BaseModel):

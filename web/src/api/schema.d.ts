@@ -8090,6 +8090,11 @@ export interface components {
             median_mfe?: number | null;
             /** Median Return */
             median_return?: number | null;
+            /**
+             * Median Same Day Excess
+             * @description Median of (excess return minus the median excess of all signals that entered the same day)
+             */
+            median_same_day_excess?: number | null;
             /** Mfe Count */
             mfe_count: number;
             /** Min Score */
@@ -8097,10 +8102,26 @@ export interface components {
             /** Pending Count */
             pending_count: number;
             /**
+             * Same Day Count
+             * @description Matured signals that had same-day peers (days with one signal are left out)
+             * @default 0
+             */
+            same_day_count: number;
+            /**
              * Sample Size
              * @description Records in the group, any maturity
              */
             sample_size: number;
+            /**
+             * Top Day
+             * @description Entry day holding more than 25% of this range's matured signals, if any
+             */
+            top_day?: string | null;
+            /**
+             * Top Day Share
+             * @description Share of this range's matured signals from its busiest entry day
+             */
+            top_day_share?: number | null;
             /**
              * Unavailable Count
              * @description Outcome computed but no price was available; excluded
@@ -8497,10 +8518,17 @@ export interface components {
         };
         /** OutcomeInversion */
         OutcomeInversion: {
+            /** @description Day-clustered 95% interval of lower minus higher (median excess only) */
+            gap_ci95?: components["schemas"]["OutcomeInterval"] | null;
             /** Higher Bucket */
             higher_bucket: string;
             /** Higher Value */
             higher_value: number;
+            /**
+             * Holds Across Days
+             * @description True when the gap stays above zero when whole days are resampled (median excess only)
+             */
+            holds_across_days?: boolean | null;
             /** Lower Bucket */
             lower_bucket: string;
             /** Lower Value */
@@ -8595,6 +8623,11 @@ export interface components {
         OutcomeMonotonicity: {
             /** Buckets Compared */
             buckets_compared: string[];
+            /**
+             * Confirmed Inversions
+             * @description Inversions that hold across days (median excess only)
+             */
+            confirmed_inversions?: number | null;
             /**
              * Inversions
              * @default []

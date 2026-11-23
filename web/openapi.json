@@ -11391,6 +11391,18 @@
       ],
       "title": "Median Return"
      },
+     "median_same_day_excess": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Median of (excess return minus the median excess of all signals that entered the same day)",
+      "title": "Median Same Day Excess"
+     },
      "mfe_count": {
       "title": "Mfe Count",
       "type": "integer"
@@ -11403,10 +11415,40 @@
       "title": "Pending Count",
       "type": "integer"
      },
+     "same_day_count": {
+      "default": 0,
+      "description": "Matured signals that had same-day peers (days with one signal are left out)",
+      "title": "Same Day Count",
+      "type": "integer"
+     },
      "sample_size": {
       "description": "Records in the group, any maturity",
       "title": "Sample Size",
       "type": "integer"
+     },
+     "top_day": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Entry day holding more than 25% of this range's matured signals, if any",
+      "title": "Top Day"
+     },
+     "top_day_share": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Share of this range's matured signals from its busiest entry day",
+      "title": "Top Day Share"
      },
      "unavailable_count": {
       "description": "Outcome computed but no price was available; excluded",
@@ -12530,6 +12572,17 @@
    },
    "OutcomeInversion": {
     "properties": {
+     "gap_ci95": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OutcomeInterval"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Day-clustered 95% interval of lower minus higher (median excess only)"
+     },
      "higher_bucket": {
       "title": "Higher Bucket",
       "type": "string"
@@ -12537,6 +12590,18 @@
      "higher_value": {
       "title": "Higher Value",
       "type": "number"
+     },
+     "holds_across_days": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "True when the gap stays above zero when whole days are resampled (median excess only)",
+      "title": "Holds Across Days"
      },
      "lower_bucket": {
       "title": "Lower Bucket",
@@ -12815,6 +12880,18 @@
       },
       "title": "Buckets Compared",
       "type": "array"
+     },
+     "confirmed_inversions": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Inversions that hold across days (median excess only)",
+      "title": "Confirmed Inversions"
      },
      "inversions": {
       "default": [],
