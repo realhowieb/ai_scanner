@@ -1,15 +1,35 @@
 "use client";
 
-import { api, unwrap } from "@/api/client";
+import { api, unwrap, type Schemas } from "@/api/client";
 import { useApi } from "@/hooks/useApi";
 import { num, price } from "@/lib/format";
 
-/** Daily closes per ticker (up to 21, oldest first) from /v1/sparklines; one request per ticker set. */
-/** The daily-bars request with its load state, so a page can refresh it on demand. */
+/** The API answers at most this many tickers per /v1/sparklines call (SPARK_MAX). */
+export const SPARK_CHUNK = 50;
+
+type DailyBars = Schemas["Sparklines"];
+
+/** Daily closes for any number of tickers: one /v1/sparklines call per 50, merged. A chunk
+ * that fails just leaves its tickers without a line, unless every chunk fails. */
+export async function fetchDailyBars(syms: string[], signal: AbortSignal): Promise<DailyBars> {
+  const pieces: string[][] = [];
+  for (let i = 0; i < syms.length; i += SPARK_CHUNK) pieces.push(syms.slice(i, i + SPARK_CHUNK));
+  const results = await Promise.allSettled(pieces.map((p) =>
+    unwrap(api.GET("/v1/sparklines", { params: { query: { symbols: p.join(",") } }, signal }))));
+  const ok = results.filter((r): r is PromiseFulfilledResult<DailyBars> => r.status === "fulfilled");
+  if (!ok.length) throw (results[0] as PromiseRejectedResult).reason;
+  return {
+    series: Object.assign({}, ...ok.map((r) => r.value.series ?? {})),
+    last_bar: Object.assign({}, ...ok.map((r) => r.value.last_bar ?? {})),
+  };
+}
+
+/** Daily closes per ticker (up to 21, oldest first) from /v1/sparklines; one request per ticker set.
+ * The daily-bars request with its load state, so a page can refresh it on demand. */
 export function useDailyBarsState(tickers: string[]) {
-  const syms = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))].sort().slice(0, 50).join(",");
-  return useApi(syms ? `spark-daily:${syms}` : null, (signal) =>
-    unwrap(api.GET("/v1/sparklines", { params: { query: { symbols: syms } }, signal })));
+  const syms = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))].sort();
+  const key = syms.join(",");
+  return useApi(key ? `spark-daily:${key}` : null, (signal) => fetchDailyBars(syms, signal));
 }
 
 export function useDailyBars(tickers: string[]) {
