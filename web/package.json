@@ -27,7 +27,7 @@
     "lightweight-charts": "^5.2.1",
     "next": "16.4.2",
     "openapi-fetch": "0.17.0",
-    "posthog-js": "^1.438.13",
+    "posthog-js": "^1.453.2",
     "radix-ui": "1.6.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
